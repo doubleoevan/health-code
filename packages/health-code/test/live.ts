@@ -24,6 +24,10 @@ for (const [url, commit] of [
 		assert.equal(card.repository.commit, commit)
 		assert.ok("name" in card.packageManager, JSON.stringify(card.packageManager))
 		assert.ok(card.baseline.install.evidence.length, "Missing Baseline installation evidence")
+		if (url === fixtureUrl) {
+			// Exercise oxlint's sparse allocator through Nano ID's pinned test script.
+			assert.equal(card.baseline.tests.status, "passed", JSON.stringify(card.baseline.tests))
+		}
 		assert.ok(card.timeline.some((e) => e.type === "sandbox.event" && e.action === "deleted"))
 		console.log(
 			JSON.stringify({

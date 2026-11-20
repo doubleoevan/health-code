@@ -51,6 +51,8 @@ export function provision(): string {
 	return [
 		"set -eu",
 		'test "$(uname -m)" = x86_64',
+		// Allow tools to reserve sparse address space within the VM's physical memory limit.
+		"echo 1 > /proc/sys/vm/overcommit_memory",
 		"mkdir -p /opt/health-code/bin /var/lib/health-code",
 		"export DEBIAN_FRONTEND=noninteractive",
 		"apt-get -qq update",

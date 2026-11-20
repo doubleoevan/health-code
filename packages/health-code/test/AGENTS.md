@@ -1,6 +1,6 @@
 # Inspection tests
 
-`providerContract.ts` defines the checks shared by the fake and production providers. `live.ts` adds two public projects at fixed commit IDs. Run the credentialed suite through the root `bun run test:provider` command.
+`providerContract.ts` defines the checks shared by the fake and production providers. `live.ts` adds two public projects at fixed commit IDs. The Nano ID Baseline must pass its test script, which exercises oxlint's sparse virtual memory allocation. Run the credentialed suite through the root `bun run test:provider` command.
 
 `fixtures/recorded/` holds inert npm, pnpm, Bun, and Yarn project inputs and transcripts. Unit tests read fixtures locally and execute the fake provider. The root test command covers the library alongside the repository checks.
 
