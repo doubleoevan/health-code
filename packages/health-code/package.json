@@ -1,0 +1,6 @@
+{
+	"name": "health-code",
+	"private": true,
+	"type": "module",
+	"exports": {}
+}

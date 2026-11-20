@@ -1,0 +1,29 @@
+{
+	"name": "health-code-workspace",
+	"private": true,
+	"type": "module",
+	"packageManager": "bun@1.4.3",
+	"workspaces": [
+		"packages/*",
+		"apps/*"
+	],
+	"scripts": {
+		"check": "bash scripts/preflight.sh",
+		"check:style": "biome check .",
+		"check:structure": "bash scripts/check-structure.sh",
+		"check:boundaries": "bun scripts/check-package-boundaries.ts",
+		"check:pins": "bun scripts/check-dependency-pins.ts",
+		"check:unused": "knip",
+		"check:advisories": "bun scripts/check-dependency-advisories.ts",
+		"typecheck": "tsc -b --force",
+		"test": "bun test ./scripts ./packages ./apps"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.6.5",
+		"@types/bun": "1.4.3",
+		"@types/node": "24.19.2",
+		"knip": "6.44.1",
+		"typescript": "5.9.3",
+		"zod": "4.6.7"
+	}
+}

@@ -1,0 +1,12 @@
+{
+	"$schema": "./node_modules/knip/schema-jsonc.json",
+	"treatConfigHintsAsErrors": true,
+	"workspaces": {
+		".": {
+			"project": ["scripts/**/*.ts"],
+			"entry": ["scripts/**/*.test.ts"]
+		},
+		"packages/*": {},
+		"apps/*": {}
+	}
+}

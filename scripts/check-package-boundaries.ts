@@ -1,0 +1,151 @@
+import { readFileSync } from "node:fs"
+import { isBuiltin } from "node:module"
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path"
+import ts from "typescript"
+import { readImports } from "./readImports.ts"
+import { readWorkspace, type Workspace } from "./readWorkspace.ts"
+
+const workspaces = [...new Bun.Glob("{apps,packages}/*/package.json").scanSync()]
+	.sort()
+	.map((path) => readWorkspace(resolve(dirname(path))))
+const byName = new Map(workspaces.map((workspace) => [workspace.name, workspace]))
+const extensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]
+const excluded = ["node_modules", "dist", "build", ".tsbuild", ".next", "**/fixtures/recorded"]
+const violations: string[] = []
+let fileCount = 0
+
+for (const workspace of workspaces) {
+	const dependencies = new Set([...workspace.runtime, ...workspace.development])
+	for (const target of workspaces) {
+		if (workspace === target) {
+			continue
+		}
+		if (dependencies.has(target.name) && isApp(target)) {
+			violations.push(`${relative(".", workspace.folder)}/package.json: ${target.name} is an app`)
+		}
+		if (dependencies.has(target.name) !== workspace.references.includes(target.folder)) {
+			violations.push(
+				`${relative(".", workspace.folder)}/tsconfig.json: align the reference to ${target.name} with package.json`,
+			)
+		}
+	}
+
+	for (const filePath of ts.sys.readDirectory(workspace.folder, extensions, excluded)) {
+		fileCount++
+		for (const imported of readImports(filePath, readFileSync(filePath, "utf8"))) {
+			const violation = toImportViolation({
+				workspace,
+				filePath,
+				importPath: imported.path,
+				typeOnly: imported.typeOnly,
+			})
+			if (violation) {
+				violations.push(`${relative(".", filePath)}:${imported.line} imports ${imported.path}: ${violation}`)
+			}
+		}
+	}
+}
+if (violations.length > 0) {
+	console.error(violations.join("\n"))
+	process.exit(1)
+}
+console.log(`package boundaries: ${workspaces.length} workspaces, ${fileCount} source files`)
+
+function isApp(workspace: Workspace): boolean {
+	return relative(".", workspace.folder).startsWith(`apps${sep}`)
+}
+
+function contains(folder: string, path: string): boolean {
+	return path === folder || path.startsWith(folder + sep)
+}
+
+type ImportOptions = { workspace: Workspace; filePath: string; importPath: string; typeOnly: boolean }
+
+function toImportViolation({ workspace, filePath, importPath, typeOnly }: ImportOptions): string | undefined {
+	const path = importPath.replace(/\?.*$/, "")
+	if (isBuiltin(path) || path === "bun" || path.startsWith("bun:")) {
+		return
+	}
+	const packageName = path.match(/^(?:@[^/]+\/)?[^/]+/)?.[0] ?? path
+	const violation = toNamedWorkspaceViolation({ workspace, path, packageName })
+	if (violation) {
+		return violation
+	}
+
+	const local = path.startsWith(".") || isAbsolute(path)
+	if (local && !contains(workspace.folder, resolve(dirname(filePath), path))) {
+		return "relative and absolute file imports must stay inside their workspace"
+	}
+	const resolved = resolveWorkspaceImport({ workspace, filePath, path })
+	if (resolved && resolved.workspace !== workspace && (path !== resolved.workspace.name || !resolved.external)) {
+		return `cross-workspace imports must use a public package name. Found ${relative(".", resolved.workspace.folder)}`
+	}
+	if (local || resolved?.workspace === workspace || packageName === workspace.name) {
+		return
+	}
+	return toDependencyViolation({ workspace, packageName, filePath, typeOnly })
+}
+
+function toNamedWorkspaceViolation({
+	workspace,
+	path,
+	packageName,
+}: {
+	workspace: Workspace
+	path: string
+	packageName: string
+}): string | undefined {
+	const target = byName.get(packageName)
+	if (!target || target === workspace) {
+		return
+	}
+	if (isApp(target)) {
+		return "apps are private to their workspace"
+	}
+	if (path !== packageName) {
+		return `use the public entry '${packageName}'`
+	}
+}
+
+function resolveWorkspaceImport({
+	workspace,
+	filePath,
+	path,
+}: {
+	workspace: Workspace
+	filePath: string
+	path: string
+}): { workspace: Workspace; external: boolean } | undefined {
+	// Follow aliases and workspace symlinks to the source file the compiler sees.
+	const result = ts.resolveModuleName(path, filePath, workspace.options, ts.sys).resolvedModule
+	if (!result) {
+		return
+	}
+	const targetPath = ts.sys.realpath?.(result.resolvedFileName) ?? result.resolvedFileName
+	const target = workspaces.find((candidate) => contains(candidate.folder, targetPath))
+	if (target) {
+		return { workspace: target, external: result.isExternalLibraryImport === true }
+	}
+}
+
+function toDependencyViolation({
+	workspace,
+	packageName,
+	filePath,
+	typeOnly,
+}: Omit<ImportOptions, "importPath"> & { packageName: string }): string | undefined {
+	if (workspace.runtime.has(packageName)) {
+		return
+	}
+	const typePackage = `@types/${packageName.replace(/^@/, "").replace("/", "__")}`
+	if (typeOnly && (workspace.development.has(typePackage) || workspace.runtime.has(typePackage))) {
+		return
+	}
+	if (workspace.development.has(packageName)) {
+		if (typeOnly || /\.(?:test|spec|config)\.[cm]?[jt]sx?$/.test(filePath)) {
+			return
+		}
+		return "declare runtime imports in dependencies"
+	}
+	return `declare ${packageName} in this workspace's package.json`
+}

@@ -1,0 +1,35 @@
+{
+	"compilerOptions": {
+		"lib": ["ESNext"],
+		"target": "ES2022",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"moduleDetection": "force",
+		"types": ["node"],
+		"allowImportingTsExtensions": true,
+		"verbatimModuleSyntax": true,
+		"resolveJsonModule": true,
+		"composite": true,
+		"emitDeclarationOnly": true,
+		"outDir": "${configDir}/.tsbuild",
+		"strict": true,
+		"skipLibCheck": true,
+		"noFallthroughCasesInSwitch": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true
+	},
+	"include": [
+		"${configDir}/package.json",
+		"${configDir}/**/*.ts",
+		"${configDir}/**/*.tsx",
+		"${configDir}/**/*.mts",
+		"${configDir}/**/*.cts"
+	],
+	"exclude": [
+		"${configDir}/node_modules",
+		"${configDir}/.tsbuild",
+		"${configDir}/dist",
+		"${configDir}/build",
+		"${configDir}/**/fixtures/recorded"
+	]
+}

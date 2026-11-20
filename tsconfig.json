@@ -1,0 +1,17 @@
+{
+	"files": [],
+	"references": [
+		{
+			"path": "scripts"
+		},
+		{
+			"path": "packages/health-code"
+		},
+		{
+			"path": "apps/site"
+		},
+		{
+			"path": "apps/mcp"
+		}
+	]
+}

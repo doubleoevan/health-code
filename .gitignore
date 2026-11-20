@@ -1,5 +1,5 @@
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -34,8 +34,8 @@ bower_components
 # node-waf configuration
 .lock-wscript
 
-# Compiled binary addons (https://nodejs.org/api/addons.html)
-build/Release
+# Build output
+build/
 
 # Dependency directories
 node_modules/
@@ -46,6 +46,7 @@ web_modules/
 
 # TypeScript cache
 *.tsbuildinfo
+.tsbuild/
 
 # Optional npm cache directory
 .npm
@@ -127,6 +128,57 @@ dist
 
 # Stores Visual Studio Code versions used for testing Visual Studio Code extensions
 .vscode-test
+
+# JetBrains IDEs (IntelliJ IDEA, WebStorm, and others)
+.idea/
+.fleet/
+*.iml
+*.ipr
+*.iws
+
+# Editor workspaces and local history
+.cursor/
+.vscode/
+.vs/
+.zed/
+.history/
+*.code-workspace
+*.sublime-workspace
+.classpath
+.project
+.settings/
+
+# Editor backups, swap files, and patch leftovers
+*~
+*.swp
+*.swo
+*.bak
+*.tmp
+*.orig
+*.rej
+.\#*
+\#*#
+
+# macOS Finder, archives, and volume metadata
+.DS_Store
+.AppleDouble/
+.LSOverride
+._*
+__MACOSX/
+.DocumentRevisions-V100/
+.fseventsd/
+.Spotlight-V100/
+.TemporaryItems/
+.Trashes/
+.VolumeIcon.icns
+
+# Windows Explorer and Linux desktop metadata
+[Tt]humbs.db
+[Dd]esktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+.directory
+.Trash-*/
 
 # pnpm
 .pnpm-store
