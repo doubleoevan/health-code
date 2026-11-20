@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "skills": {
+    "code-style": {
+      "source": "doubleoevan/skills",
+      "commit": "267b0f41d0465e9ac237f3af29936922e58898f3",
+      "sourceType": "github",
+      "skillPath": "skills/code-style/SKILL.md",
+      "computedHash": "ea5618ef252a2a45228d85df39cdfb602f05d996fc0389a0a9a597c4e42e75ae"
+    },
+    "git-discipline": {
+      "source": "doubleoevan/skills",
+      "commit": "267b0f41d0465e9ac237f3af29936922e58898f3",
+      "sourceType": "github",
+      "skillPath": "skills/git-discipline/SKILL.md",
+      "computedHash": "c452c2d2d2d057a80c975a270fef7b2e6365d7f6cf0b07c9d289bbe62891bc08"
+    }
+  }
+}
