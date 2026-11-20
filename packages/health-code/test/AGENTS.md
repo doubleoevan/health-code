@@ -5,3 +5,5 @@
 `fixtures/recorded/` holds inert npm, pnpm, Bun, and Yarn project inputs and transcripts. Unit tests read fixtures locally and execute the fake provider. The root test command covers the library alongside the repository checks.
 
 The legacy Bun fixture stores its exact lockfile bytes as Base64. The adapter test decodes them in a temporary project before invoking Bun.
+
+`controls.test.ts` covers filesystem attribution through pnpm symlinks and the guest’s read-only system mount.

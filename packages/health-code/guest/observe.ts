@@ -2,11 +2,12 @@ import { readFileSync, statSync } from "node:fs"
 import { isIP } from "node:net"
 import { posix } from "node:path"
 import type { InstallationFinding, Observation } from "../src/contracts.ts"
+import { type FileLinks, isProjectPath, trackFileLinks } from "./trackFileLinks.ts"
 
 type InstallationObservations = { connections: Observation; files: Observation }
-function markIncomplete(result: Observation): void {
+function markIncomplete(result: Observation, reason = "Incomplete installation observation"): void {
 	result.complete = false
-	result.reason = "Incomplete installation observation"
+	result.reason ??= reason
 }
 function addFinding(result: Observation, finding: InstallationFinding): void {
 	if (result.findings.length >= 256) {
@@ -81,7 +82,17 @@ function network(line: string, hosts: DnsHistory, timestamp: number, allowed: st
 	markIncomplete(result)
 	addFinding(result, { kind: "connection", destination: address, outcome: "unknown" })
 }
-function mutationPaths(call: string, line: string, result: Observation): string[] {
+function mutationPaths({
+	call,
+	line,
+	result,
+	links,
+}: {
+	call: string
+	line: string
+	result: Observation
+	links: FileLinks
+}): string[] {
 	const paths: string[] = []
 	const quoted = [...line.matchAll(/(?:([\w-]+)<([^>]+)>, )?"((?:[^"\\]|\\.)*)"/g)]
 	const relevant = call.startsWith("symlink") ? quoted.slice(-1) : quoted
@@ -98,6 +109,9 @@ function mutationPaths(call: string, line: string, result: Observation): string[
 			markIncomplete(result)
 		}
 	}
+	if (!trackFileLinks({ call, line, paths, links })) {
+		markIncomplete(result, "Could not resolve a filesystem change through a symbolic link")
+	}
 	return paths
 }
 function transferTargets(line: string, call: string): string[] {
@@ -108,50 +122,17 @@ function transferTargets(line: string, call: string): string[] {
 	}
 	return []
 }
-function hasLinkedParent(path: string, links: Set<string>): boolean {
-	let parent = posix.dirname(path)
-	while (parent !== "/") {
-		if (links.has(parent)) {
-			return true
-		}
-		parent = posix.dirname(parent)
-	}
-	return false
-}
-function trackLinks(call: string, paths: string[], links: Set<string>, result: Observation): void {
-	const followsLink = /^(?:chmod|chown|truncate|utime|fchmodat|fchownat)/.test(call)
-	if (paths.some((path) => hasLinkedParent(path, links) || (followsLink && links.has(posix.normalize(path))))) {
-		markIncomplete(result)
-	}
-	if (call.startsWith("symlink")) {
-		for (const path of paths) {
-			links.add(posix.normalize(path))
-		}
-	}
-	if (/^(?:rename|link)/.test(call) && paths[0] && paths[1]) {
-		const oldPath = posix.normalize(paths[0])
-		const newPath = posix.normalize(paths[1])
-		for (const link of [...links]) {
-			if (link === oldPath || link.startsWith(`${oldPath}/`)) {
-				links.add(newPath + link.slice(oldPath.length))
-			}
-		}
-	}
-}
-type FileState = { links: Set<string>; sharedOutsideMapping: boolean }
-function projectPath(path: string): boolean {
-	const normalized = posix.normalize(path)
-	return normalized === "/project" || normalized.startsWith("/project/")
-}
+type FileState = { links: FileLinks; sharedOutsideMapping: boolean }
 function observeMappings(call: string, line: string, state: FileState, result: Observation): void {
 	if (call === "mmap" && line.includes("MAP_SHARED") && !line.includes("PROT_WRITE")) {
 		const descriptor = line.match(/\d+<([^>]+)>/)?.[1]
-		if (descriptor?.startsWith("/") && !projectPath(descriptor)) {
+		// The guest mounts /usr read-only, so these mappings cannot write back to a system file.
+		if (descriptor?.startsWith("/") && !descriptor.startsWith("/usr/") && !isProjectPath(descriptor)) {
 			state.sharedOutsideMapping = true
 		}
 	}
 	if (state.sharedOutsideMapping && /^(?:pkey_)?mprotect$/.test(call) && line.includes("PROT_WRITE")) {
-		markIncomplete(result)
+		markIncomplete(result, "Could not attribute a writable memory protection change to a file")
 	}
 }
 function descriptorTargets(line: string, result: Observation): string[] {
@@ -200,12 +181,11 @@ function filesystem(line: string, result: Observation, state: FileState): void {
 			call,
 		)
 	) {
-		paths = mutationPaths(call, line, result)
-		trackLinks(call, paths, state.links, result)
+		paths = mutationPaths({ call, line, result, links: state.links })
 	}
 	for (const path of paths) {
 		const normalized = posix.normalize(path)
-		if (!projectPath(normalized) && !["/dev/null", "/dev/tty", "/dev/zero"].includes(normalized)) {
+		if (!isProjectPath(normalized) && !["/dev/null", "/dev/tty", "/dev/zero"].includes(normalized)) {
 			addFinding(result, { kind: "write", path: normalized })
 		}
 	}
@@ -258,7 +238,7 @@ export function inspectTrace(
 	const files: Observation = { complete: true, findings: [] }
 	const hosts = dnsAnswers(dns)
 	const pending = new Map<string, TraceCall>()
-	const state = { links: new Set(initialLinks), sharedOutsideMapping: false }
+	const state = { links: new Map(initialLinks.map((path) => [path, undefined])), sharedOutsideMapping: false }
 	let started = false
 	for (const row of syscalls.split("\n")) {
 		const entry = assembled(row, pending)

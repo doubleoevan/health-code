@@ -152,3 +152,42 @@ test("normalizes renamed link ancestors and reads descriptor-only timestamp chan
 	assert.equal(result.files.complete, false)
 	assert.deepEqual(result.files.findings, [{ kind: "write", path: "/tmp/outside" }])
 })
+
+test("observes pnpm permission changes through project links alongside read-only system mappings", () => {
+	const trace = [
+		'1 execve("/usr/bin/env", [], []) = 0',
+		"1 mmap(NULL, 4096, PROT_READ, MAP_SHARED, 3</usr/lib/gconv/gconv-modules.cache>, 0) = 0x1000",
+		"2 mprotect(0x4000, 4096, PROT_READ|PROT_WRITE) = 0",
+		'2 symlink("../acorn@8/node_modules/acorn", "/project/.pnpm/node_modules/acorn") = 0',
+		'2 symlinkat(".pnpm/node_modules/acorn", AT_FDCWD</project>, "acorn") = 0',
+		'2 chmod("/project/acorn/bin/acorn", 0755) = 0',
+		'2 openat(AT_FDCWD</project>, "/tmp/log", O_CREAT|O_WRONLY, 0600) = 4</tmp/log>',
+	].join("\n")
+	const args = guestArguments({ argv: ["true"], timeoutMs: 1000 }, undefined)
+	const mount = args.indexOf("/usr")
+	assert.deepEqual(args.slice(mount - 1, mount + 2), ["--ro-bind", "/usr", "/usr"])
+	assert.deepEqual(inspectTrace(trace, "", "0 packets dropped by kernel", []).files, {
+		complete: true,
+		findings: [{ kind: "write", path: "/tmp/log" }],
+	})
+})
+
+test("keeps coverage incomplete for escaping, cyclic, or replaced link targets", () => {
+	const start = '1 execve("/usr/bin/env", [], []) = 0'
+	for (const links of [
+		['1 symlink("../outside", "/project/link") = 0'],
+		['1 symlink("link", "/project/link") = 0'],
+		['1 symlink("/tmp", "/project/alias") = 0', '1 symlink("alias/../project", "/project/link") = 0'],
+		[
+			'1 symlink("/tmp", "/project/link") = 0',
+			'1 unlink("/project/link") = 0',
+			'1 symlink("pkg", "/project/link") = 0',
+		],
+		['1 symlink("pkg", "/project/link") = 0', '1 rename("/project/replacement", "/project/link") = 0'],
+	]) {
+		const trace = [start, ...links, '1 chmod("/project/link/bin", 0755) = 0'].join("\n")
+		const files = inspectTrace(trace, "", "0 packets dropped by kernel", []).files
+		assert.equal(files.complete, false)
+		assert.match(files.reason ?? "", /symbolic link/)
+	}
+})
