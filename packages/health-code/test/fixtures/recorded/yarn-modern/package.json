@@ -1,0 +1,11 @@
+{
+  "name": "example-project",
+  "private": true,
+  "packageManager": "yarn@4.9.2",
+  "scripts": {
+    "test": "node tests.js"
+  },
+  "dependencies": {
+    "widget": "1.2.0"
+  }
+}

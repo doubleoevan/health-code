@@ -1,0 +1,11 @@
+{
+  "name": "example-project",
+  "private": true,
+  "packageManager": "npm@11.11.0",
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "widget": "1.2.0"
+  }
+}

@@ -10,12 +10,12 @@ The TypeScript library owns inspections. The site and MCP server expose the libr
 | `packages/health-code/` | Library workspace. Owns inspection behavior and the public package entry. Read its AGENTS.md for the boundary. |
 | `apps/site/` | Site workspace. Owns browser presentation and interactions. |
 | `apps/mcp/` | MCP server workspace. Owns tool definitions and protocol translation. |
-| `scripts/` | Repository checks, their tests, and the preflight entry point. |
+| `scripts/` | Repository checks, preflight, and the developer inspection CLI. Use `bun run inspect <repo-url> [--fake]` for a rolling log and a local JSON Report Card. |
 | `.github/` | CI, CodeQL, weekly dependency updates, and shared Bun setup. |
 | `openspec/` | Specifications and change artifacts. |
 | `.agents/` | Project skills and commands. Claude Code uses the links under `.claude/`. |
 
-The three product workspaces contain manifests, TypeScript configuration, and module guides. A workspace imports a sibling package by its public name. Apps never import another app. Packages never depend on an app.
+The library ships the inspection engine. The site and MCP workspaces reserve their consumer entry points. A workspace imports a sibling package by its public name. Apps never import another app. Packages never depend on an app.
 
 ## Route work
 
@@ -46,13 +46,13 @@ The independent CI advisories job runs `bun run check:advisories` against the re
 - **Comments.** Use imperative voice for inline comments and third person for JSDoc. Keep a short why for a non-obvious choice. Delete restatements, decision history, NOT-X notes, trailing “since” or “because” justifications, definitions by negation, and notes about other modules. Rewrite a comment when its claim changes.
 - **Code style.** Follow code-style. Use verb-plus-noun names for modules that perform an action and a `to` prefix for cheap synchronous transforms. Write explicit return types. Use an options object for three or more parameters. Use only abbreviations on the skill's whitelist. Write multi-line `if` blocks with braces. Give a second copy one shared home. Review any file past about 400 lines and split distinct responsibilities.
 - **Vocabulary.** Follow domain-model in code, comments, and specs. Add a new domain noun to the skill in the same change. Use descriptive identifiers and keep branding in customer copy. Highlight and pin Sandbox Events in the live log and timeline.
-- **Documentation.** Describe current behavior. Omit project history and debugging narratives. Update the module AGENTS.md and any affected root map or routing entries when a folder or entry point changes. Update the README Development section and the owning module guide when a package script changes.
+- **Documentation.** Give every module its own `AGENTS.md` when you create it. Keep it current alongside the README in the same change. Document ownership, folders, public entry points, commands, and verification. Update the root map and routing entries when ownership changes.
 - **Git.** Work on `main` only. Suggest a Conventional Commit message that makes sense without project context. Get explicit approval before committing and separate explicit approval before pushing.
 - **Agent prompts.** State the task and reference the relevant skills in one line. Leave conventions in the skills and omit commit instructions.
 - **Secrets.** Use Doppler for the app and GitHub secrets for CI only. Never put secrets in the repository, a dotenv file, a log, a tool result, a prompt, or a report card.
 - **Tests.** Unit tests use a fake Sandbox Provider and recorded evidence. They never call Runta or a model. Contract tests that need Runta skip when `RUNTA_TOKEN` is absent. Model evaluations run separately and report results without gating preflight.
 - **Untrusted text.** Fence release notes, repository files, and command output in every model prompt with a fresh per-call nonce. Follow prompt-authoring for interpolation, bounds, and tests.
-- **Shipping.** Use /ship for an OpenSpec change. Its verification workflow, repository checks, and handoff are defined in `.agents/commands/ship.md`. Archive approved changes with the OpenSpec CLI.
+- **Shipping order.** Implement the approved design and update its module guides and README. Run `/ship` and complete its review. Archive the change with the OpenSpec CLI, commit the implementation and archive together on `main`, then push to `origin/main` with authorization. Follow `.agents/commands/ship.md` for the checks and handoff.
 
 ## Skills
 

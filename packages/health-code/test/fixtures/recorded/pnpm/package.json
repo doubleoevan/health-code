@@ -1,0 +1,11 @@
+{
+  "name": "example-project",
+  "private": true,
+  "packageManager": "pnpm@10.19.0",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "widget": "1.2.0"
+  }
+}

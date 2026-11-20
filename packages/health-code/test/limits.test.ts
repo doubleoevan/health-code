@@ -1,0 +1,206 @@
+import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+import { test } from "node:test"
+import {
+	createFakeSandboxProvider,
+	createSandboxProvider,
+	InspectionError,
+	type InspectionEvent,
+	inspectRepository,
+} from "../src/index.ts"
+import { fixtureCommit, fixtureUrl } from "./providerContract.ts"
+
+function offline(
+	output = "TOKEN=private-sample",
+	commit = fixtureCommit,
+): ReturnType<typeof createFakeSandboxProvider> {
+	return createFakeSandboxProvider({
+		commit,
+		commands: [
+			{
+				argv: ["node", "/opt/health-code/project.mjs", "detect"],
+				result: {
+					stdout: JSON.stringify({
+						manager: "npm",
+						version: "11",
+						sources: {},
+						skipped: [],
+						typecheck: "none",
+						environment: [],
+					}),
+				},
+			},
+			{ argv: ["node", "/opt/health-code/project.mjs", "install"], result: { stdout: output } },
+		],
+	})
+}
+test("independent inspections share a provider without sharing event delivery", async () => {
+	const sandboxProvider = offline()
+	const inspect = async (): Promise<string> => {
+		const events: InspectionEvent[] = []
+		const card = await inspectRepository({
+			repositoryUrl: fixtureUrl,
+			sandboxProvider,
+			onEvent: (e) => {
+				events.push(e)
+			},
+			models: { future: "unused" },
+		})
+		assert.deepEqual(card.timeline, events)
+		assert.deepEqual(
+			events.map((e) => e.sequence),
+			events.map((_, i) => i + 1),
+		)
+		assert.doesNotMatch(JSON.stringify(card), /private-sample/)
+		assert.equal(card.baseline.tests.status, "untested")
+		return card.inspectionId
+	}
+	const [a, b] = await Promise.all([inspect(), inspect()])
+	assert.notEqual(a, b)
+})
+test("budget admission, abort and cleanup failures retain ownership", async () => {
+	const sandboxProvider = offline()
+	sandboxProvider.estimateMaxCost = () => 2
+	let allocated = false
+	sandboxProvider.createSandbox = async () => {
+		allocated = true
+		return { id: "unexpected" }
+	}
+	await assert.rejects(inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider, limits: { maxCostUsd: 1 } }), {
+		code: "deadline",
+	})
+	assert.equal(allocated, false)
+	await assert.rejects(
+		inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider: offline(), signal: AbortSignal.abort() }),
+		{ code: "cancelled" },
+	)
+	const failing = offline()
+	failing.destroySandbox = async () => {
+		throw Error("lost reply")
+	}
+	await assert.rejects(inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider: failing }), (error: unknown) => {
+		assert.ok(error instanceof InspectionError)
+		assert.ok(error.cleanupId)
+		assert.equal(error.timeline.at(-1)?.type, "inspection.failed")
+		return true
+	})
+})
+for (const [status, reason] of [
+	[401, "authentication"],
+	[403, "permission"],
+	[503, "unavailable"],
+] as const) {
+	test(`maps availability status ${status}`, async () => {
+		let calls = 0
+		const provider = createSandboxProvider({
+			token: "example",
+			fetch: async (input) => {
+				calls++
+				assert.match(String(input), /runtimes\?limit=1$/)
+				return new Response(null, { status })
+			},
+		})
+		await assert.rejects(provider.checkAvailability(), { code: "sandbox-unavailable", reason })
+		assert.equal(calls, 1)
+	})
+}
+test("unused credentials are never required by module import or fake callers", async () => {
+	const missing = createSandboxProvider({
+		token: "",
+		fetch: async () => {
+			throw Error("unexpected request")
+		},
+	})
+	await assert.rejects(missing.checkAvailability(), { reason: "authentication" })
+})
+
+test("version one report can be replayed by a reader that ignores new fields", async () => {
+	const golden = JSON.parse(readFileSync(new URL("./fixtures/recorded/npm/report-card.json", import.meta.url), "utf8"))
+	const sandboxProvider = offline("", "a".repeat(40))
+	const card = await inspectRepository({ repositoryUrl: "https://github.com/example/project", sandboxProvider })
+	const stable: Record<string, string | number> = {
+		durationMs: 0,
+		timestamp: "2026-01-01T00:00:00.000Z",
+		inspectionId: "inspection",
+		sandboxId: "sandbox",
+	}
+	assert.deepEqual(JSON.parse(JSON.stringify(card, (key, value) => stable[key] ?? value)), golden)
+	const reader = ({ version, timeline }: typeof card): unknown => ({ version, timeline })
+	assert.deepEqual(reader(Object.assign({}, golden, { additional: "new" })), reader(golden))
+})
+
+test("caller cancellation during a callback reaches the caller as cancellation", async () => {
+	const controller = new AbortController()
+	await assert.rejects(
+		inspectRepository({
+			repositoryUrl: fixtureUrl,
+			sandboxProvider: offline(),
+			signal: controller.signal,
+			onEvent: async (event) => {
+				if (event.type === "step.started") {
+					controller.abort()
+					await new Promise<void>(() => {})
+				}
+			},
+		}),
+		{ code: "cancelled" },
+	)
+})
+
+test("cleanup still starts when the host resumes past the admitted deadline", async () => {
+	const sandboxProvider = offline()
+	const destroy = sandboxProvider.destroySandbox
+	let deleted = false
+	sandboxProvider.destroySandbox = async (...args) => {
+		await destroy(...args)
+		deleted = true
+	}
+	await assert.rejects(
+		inspectRepository({
+			repositoryUrl: fixtureUrl,
+			sandboxProvider,
+			limits: { maxDurationMs: 120 },
+			onEvent(event) {
+				if (event.type === "sandbox.event" && event.action === "created") {
+					Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150)
+				}
+			},
+		}),
+	)
+	assert.ok(deleted)
+})
+
+test("structured credential values are scrubbed from detail events and the report", async () => {
+	const events: InspectionEvent[] = []
+	const card = await inspectRepository({
+		repositoryUrl: fixtureUrl,
+		sandboxProvider: offline(JSON.stringify({ password: "sample value with spaces" })),
+		onEvent(event) {
+			events.push(event)
+		},
+	})
+	assert.doesNotMatch(JSON.stringify(events), /sample value/)
+	assert.doesNotMatch(JSON.stringify(card), /sample value/)
+	assert.ok(card.baseline.install.evidence[0]?.stdout.includes("[redacted]"))
+})
+test("throwing callbacks leave exactly one finish for each recorded step start", async () => {
+	for (const type of ["step.started", "step.finished"]) {
+		await assert.rejects(
+			inspectRepository({
+				repositoryUrl: fixtureUrl,
+				sandboxProvider: offline(),
+				onEvent(event) {
+					if (event.type === type) {
+						throw Error("callback")
+					}
+				},
+			}),
+			(error: unknown) => {
+				assert.ok(error instanceof InspectionError)
+				assert.equal(error.timeline.filter((e) => e.type === "step.started").length, 1)
+				assert.equal(error.timeline.filter((e) => e.type === "step.finished").length, 1)
+				return true
+			},
+		)
+	}
+})

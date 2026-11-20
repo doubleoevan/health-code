@@ -1,0 +1,261 @@
+import { confirm, NodeAdapter, ProjectEvidenceError, pending, skippedUpgrade, untested } from "./checkProject.ts"
+import { bounded, InspectionContext, redactEvidence } from "./collectEvents.ts"
+import {
+	type Baseline,
+	type CheckResult,
+	type EcosystemAdapter,
+	InspectionError,
+	type InspectionOptions,
+	type Observation,
+	type ReportCard,
+	type Sandbox,
+	type UpgradeReport,
+} from "./contracts.ts"
+import { registryHosts } from "./networkPolicy.ts"
+import { toRepositoryUrl } from "./toRepositoryUrl.ts"
+
+/** Inspects a pinned repository and releases its sandbox before returning the card. */
+export async function inspectRepository(options: InspectionOptions): Promise<ReportCard> {
+	const repositoryUrl = toRepositoryUrl(options.repositoryUrl)
+	const context = new InspectionContext(options)
+	const provider = options.sandboxProvider
+	let allocation: Sandbox | undefined
+	let card: ReportCard | undefined
+	let failure: InspectionError | undefined
+	try {
+		await context.emit({ type: "inspection.started", repositoryUrl })
+		await context.step("setup", "Check sandbox availability", (config) =>
+			provider.checkAvailability({ ...config, timeoutMs: Math.min(10000, config.timeoutMs) }),
+		)
+		const sandbox = await context.step("setup", "Create sandbox", async (config) => {
+			allocation = { id: `health-code-${context.id}` }
+			const created = await provider.createSandbox(allocation.id, config)
+			allocation = created
+			return created
+		})
+		for (const action of ["created", "credentials-withheld"] as const) {
+			await context.emit({ type: "sandbox.event", sandboxId: sandbox.id, action })
+		}
+		const commit = await context.step("setup", "Prepare pinned checkout", (config) =>
+			provider.prepareRepository(sandbox, repositoryUrl, config),
+		)
+		if (!/^[0-9a-f]{40}$/.test(commit)) {
+			throw new InspectionError("repository-unavailable", "Unable to verify pinned repository")
+		}
+		await context.step("setup", "Lock network to registries", (config) =>
+			provider.setNetworkPolicy(sandbox, registryHosts, { ...config, timeoutMs: Math.min(10000, config.timeoutMs) }),
+		)
+		await context.emit({ type: "sandbox.event", sandboxId: sandbox.id, action: "network-locked" })
+		context.setupComplete = true
+		card = await inspectProject(context, sandbox, { url: repositoryUrl, commit })
+	} catch (error) {
+		failure = asFailure(error)
+	} finally {
+		context.cleaningUp = true
+		if (allocation) {
+			failure = await release(context, allocation, failure)
+		}
+	}
+	if (failure || !card) {
+		const error = failure ?? new InspectionError("inspection-failed", "Inspection did not return a report")
+		try {
+			await context.emit({
+				type: "inspection.failed",
+				code: error.code,
+				message: redactEvidence(error.message),
+				...(error.cleanupId ? { cleanupId: error.cleanupId } : {}),
+			})
+		} catch {
+			// Preserve the inspection error when terminal delivery also fails.
+		}
+		error.message = redactEvidence(error.message)
+		error.timeline = context.timeline
+		throw error
+	}
+	try {
+		await context.emit({
+			type: "inspection.finished",
+			inspected: card.upgrades.length,
+			durationMs: Date.now() - context.started,
+		})
+	} catch (error) {
+		const failed = asFailure(error)
+		failed.timeline = context.timeline
+		throw failed
+	}
+	return redactEvidence(card)
+}
+async function release(
+	context: InspectionContext,
+	allocation: Sandbox,
+	failure?: InspectionError,
+): Promise<InspectionError | undefined> {
+	const provider = context.options.sandboxProvider
+	try {
+		// Give cleanup its reserved window if the host resumed after the inspection deadline.
+		const remaining = context.end - Date.now()
+		const timeoutMs = remaining > 0 ? Math.min(context.cleanupMs, remaining) : context.cleanupMs
+		await bounded((signal) => provider.destroySandbox(allocation, { timeoutMs, signal }), { timeoutMs })
+	} catch {
+		failure ??= new InspectionError("cleanup-failed", "Sandbox deletion could not be confirmed")
+		failure.cleanupId = allocation.id
+	}
+	if (!failure?.cleanupId) {
+		try {
+			await context.emit({ type: "sandbox.event", sandboxId: allocation.id, action: "deleted" })
+		} catch (error) {
+			failure ??= asFailure(error)
+		}
+	}
+
+	return failure
+}
+function asFailure(error: unknown): InspectionError {
+	return error instanceof InspectionError
+		? error
+		: new InspectionError("inspection-failed", "Inspection could not complete")
+}
+async function inspectProject(
+	context: InspectionContext,
+	sandbox: Sandbox,
+	repository: ReportCard["repository"],
+): Promise<ReportCard> {
+	const adapter = new NodeAdapter(context, sandbox)
+	const card: ReportCard = {
+		version: 1,
+		inspectionId: context.id,
+		repository,
+		packageManager: { reason: "project-not-detected" },
+		baseline: pending("baseline-unavailable"),
+		selection: { limit: context.maximum, selected: [], eligible: [], omitted: [], skipped: [] },
+		upgrades: [],
+		timeline: context.timeline,
+	}
+	try {
+		await adapter.resetProject()
+		const project = await adapter.detectProject()
+		card.packageManager = { name: project.manager, version: project.version }
+		Object.assign(card.selection, await adapter.listUpgrades(project, context.maximum))
+		card.baseline.install = await adapter.install()
+		if (card.baseline.install.status === "passed") {
+			card.baseline.typecheck = await adapter.typecheck()
+			card.baseline.tests = await adapter.test()
+		}
+		await inspectSelected(context, adapter, card)
+	} catch (error) {
+		let reason: string
+		if (error instanceof ProjectEvidenceError) {
+			reason = error.message
+		} else if (error instanceof InspectionError && error.code === "deadline") {
+			reason = "inspection-deadline"
+		} else {
+			throw error
+		}
+		if ("reason" in card.packageManager) {
+			card.packageManager = { reason }
+		}
+		card.selection.skipped.push(reason)
+		card.upgrades.push(...card.selection.selected.slice(card.upgrades.length).map((u) => skippedUpgrade(u, reason)))
+	} finally {
+		context.upgradeId = undefined
+	}
+	return card
+}
+async function inspectSelected(context: InspectionContext, adapter: EcosystemAdapter, card: ReportCard): Promise<void> {
+	for (const upgrade of card.selection.selected) {
+		context.upgradeId = `${upgrade.dependency}@${upgrade.to}`
+		const blocked =
+			card.baseline.install.status !== "passed" ||
+			(adapter.project?.typecheck !== "none" && card.baseline.typecheck.status !== "passed")
+		const report = skippedUpgrade(upgrade, blocked ? "baseline-unavailable" : "inspection-deadline")
+		card.upgrades.push(report)
+		if (!blocked) {
+			await inspectUpgrade(adapter, report, card.baseline)
+		}
+	}
+}
+
+function installationReason(observation: Observation): string | undefined {
+	if (observation.findings.length) {
+		return "installation-finding"
+	}
+	return observation.complete ? undefined : "incomplete-observation"
+}
+
+async function inspectUpgrade(adapter: EcosystemAdapter, report: UpgradeReport, baseline: Baseline): Promise<void> {
+	await adapter.resetProject()
+	const first = await adapter.bumpDependency(report)
+	report.install = first.check
+	report.observation = first.observation
+	if (!installationReason(report.observation)) {
+		report.install = await confirm(first.check, baseline.install, async () => {
+			await adapter.resetProject()
+			const second = await adapter.bumpDependency(report)
+			report.observation = second.observation
+			return second.check
+		})
+	}
+	const reason = installationReason(report.observation)
+	if (reason || report.install.status !== "passed") {
+		report.result = reason ? untested(reason, report.install.evidence) : report.install
+		report.tests = report.typecheck = untested(reason ?? "install-failed")
+		return
+	}
+	if (!(await checkStages(adapter, report, baseline))) {
+		return
+	}
+	const applicable = [
+		report.install,
+		...(adapter.project?.typecheck === "none" ? [] : [report.typecheck]),
+		report.tests,
+	]
+	report.result = applicable.find((r) => r.status === "failed") ??
+		applicable.find((r) => r.status === "untested") ?? {
+			status: "passed",
+			evidence: applicable.flatMap((r) => r.evidence),
+		}
+}
+
+async function checkStages(adapter: EcosystemAdapter, report: UpgradeReport, baseline: Baseline): Promise<boolean> {
+	for (const stage of ["typecheck", "tests"] as const) {
+		const firstCheck = stage === "tests" ? await adapter.test() : await adapter.typecheck()
+		report[stage] = await confirm(firstCheck, baseline[stage], () => repeatCheck(adapter, report, stage))
+		const checked = report[stage]
+		const interrupted =
+			checked.status === "untested" &&
+			["inspection-deadline", "confirmation-install-unavailable"].includes(checked.reason)
+		const reason = installationReason(report.observation) ?? (interrupted ? checked.reason : undefined)
+		if (reason) {
+			report.result = untested(reason, checked.evidence)
+			if (stage === "typecheck") {
+				report.tests = untested(reason)
+			}
+			return false
+		}
+	}
+	return true
+}
+
+async function repeatCheck(
+	adapter: EcosystemAdapter,
+	report: UpgradeReport,
+	stage: "typecheck" | "tests",
+): Promise<CheckResult> {
+	await adapter.resetProject()
+	const install = await adapter.bumpDependency(report)
+	report.observation = install.observation
+	report.install.evidence = [...report.install.evidence, ...install.check.evidence]
+	if (install.check.status !== "passed" || installationReason(install.observation)) {
+		return untested("confirmation-install-unavailable", install.check.evidence)
+	}
+	if (stage === "typecheck") {
+		return adapter.typecheck()
+	}
+	if (adapter.project?.typecheck !== "none") {
+		const typecheck = await adapter.typecheck()
+		if (typecheck.status !== "passed") {
+			return untested("confirmation-build-unavailable", typecheck.evidence)
+		}
+	}
+	return adapter.test()
+}

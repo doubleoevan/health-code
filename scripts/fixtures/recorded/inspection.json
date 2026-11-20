@@ -1,0 +1,80 @@
+{
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "commands": [
+    {
+      "argv": [
+        "node",
+        "/opt/health-code/project.mjs",
+        "detect"
+      ],
+      "result": {
+        "stdout": "{\"manager\":\"npm\",\"version\":\"11\",\"sources\":{\"widget\":{\".\":\"1.2.0\"}},\"skipped\":[],\"environment\":[],\"typecheck\":\"none\",\"testScript\":\"jest\"}"
+      }
+    },
+    {
+      "argv": [
+        "node",
+        "/opt/health-code/project.mjs",
+        "registry",
+        "widget"
+      ],
+      "result": {
+        "stdout": "{\"widget\":[\"1.3.0\"]}"
+      }
+    },
+    {
+      "argv": [
+        "node",
+        "/opt/health-code/project.mjs",
+        "install"
+      ],
+      "result": {}
+    },
+    {
+      "argv": [
+        "node",
+        "/opt/health-code/project.mjs",
+        "tests"
+      ],
+      "result": {}
+    },
+    {
+      "argv": [
+        "node",
+        "/opt/health-code/project.mjs",
+        "report"
+      ],
+      "result": {
+        "stdout": "{\"complete\":true,\"granularity\":\"case\",\"failures\":[]}"
+      }
+    },
+    {
+      "argv": [
+        "node",
+        "/opt/health-code/project.mjs",
+        "install",
+        "widget",
+        "1.3.0"
+      ],
+      "result": {}
+    },
+    {
+      "argv": [
+        "node",
+        "/opt/health-code/project.mjs",
+        "tests"
+      ],
+      "result": {}
+    },
+    {
+      "argv": [
+        "node",
+        "/opt/health-code/project.mjs",
+        "report"
+      ],
+      "result": {
+        "stdout": "{\"complete\":true,\"granularity\":\"case\",\"failures\":[]}"
+      }
+    }
+  ]
+}

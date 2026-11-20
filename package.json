@@ -15,14 +15,18 @@
 		"check:pins": "bun scripts/check-dependency-pins.ts",
 		"check:unused": "knip",
 		"check:advisories": "bun scripts/check-dependency-advisories.ts",
-		"typecheck": "tsc -b --force",
-		"test": "bun test ./scripts ./packages ./apps"
+		"typecheck": "bun run --cwd packages/health-code build && tsc -b --force",
+		"test": "bun run --cwd packages/health-code build && bun test ./scripts ./packages ./apps",
+		"check:package": "bash scripts/check-packed-library.sh",
+		"test:provider": "bun run --cwd packages/health-code build && bun test --timeout 600000 ./packages/health-code/test/live.ts",
+		"inspect": "bun run --cwd packages/health-code build && bun scripts/inspect.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.6.8",
 		"@types/bun": "1.4.4",
 		"@types/node": "26.6.6",
 		"get-tsconfig": "4.14.3",
+		"health-code": "workspace:*",
 		"knip": "6.45.1",
 		"oxc-parser": "0.156.0",
 		"oxc-resolver": "11.24.2",

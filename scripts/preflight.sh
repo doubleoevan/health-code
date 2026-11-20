@@ -8,5 +8,6 @@ bun run check:pins
 bun run check:unused
 bun run typecheck
 bun run test
+bun run check:package
 
 echo "preflight green"

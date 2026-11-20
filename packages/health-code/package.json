@@ -1,6 +1,32 @@
 {
 	"name": "health-code",
-	"private": true,
 	"type": "module",
-	"exports": {}
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"dependencies": {
+		"@runta/runta-sdk": "0.2.0",
+		"@yarnpkg/lockfile": "1.1.0",
+		"fast-xml-parser": "5.12.1",
+		"jsonc-parser": "3.3.1",
+		"semver": "7.8.6",
+		"yaml": "2.9.1",
+		"zod": "4.6.7"
+	},
+	"devDependencies": {
+		"@types/semver": "7.8.0",
+		"@types/yarnpkg__lockfile": "1.1.9"
+	},
+	"version": "0.1.0",
+	"license": "MIT",
+	"files": [
+		"dist"
+	],
+	"types": "./dist/index.d.ts",
+	"scripts": {
+		"build": "tsc -p tsconfig.build.json && bun build guest/project.ts --target=node --format=esm --outfile=dist/guest.mjs && bun build guest/observe.ts --target=node --format=esm --outfile=dist/observe.mjs"
+	}
 }

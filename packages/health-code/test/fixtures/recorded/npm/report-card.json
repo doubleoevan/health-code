@@ -1,0 +1,242 @@
+{
+  "version": 1,
+  "inspectionId": "inspection",
+  "repository": {
+    "url": "https://github.com/example/project",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "packageManager": {
+    "name": "npm",
+    "version": "11"
+  },
+  "baseline": {
+    "install": {
+      "status": "passed",
+      "evidence": [
+        {
+          "stdout": "",
+          "stderr": "",
+          "exitCode": 0,
+          "durationMs": 0,
+          "stdoutTruncated": false,
+          "stderrTruncated": false
+        }
+      ]
+    },
+    "typecheck": {
+      "status": "untested",
+      "reason": "no-tsconfig",
+      "evidence": [],
+      "detail": "The project has no TypeScript configuration."
+    },
+    "tests": {
+      "status": "untested",
+      "reason": "missing-test-script",
+      "evidence": [],
+      "detail": "The project has no test script."
+    }
+  },
+  "selection": {
+    "eligible": [],
+    "selected": [],
+    "omitted": [],
+    "skipped": [],
+    "limit": 6
+  },
+  "upgrades": [],
+  "timeline": [
+    {
+      "type": "inspection.started",
+      "repositoryUrl": "https://github.com/example/project",
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 1,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "2",
+      "label": "Check sandbox availability",
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 2,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "2",
+      "status": "passed",
+      "summary": "Check sandbox availability",
+      "durationMs": 0,
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 3,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "4",
+      "label": "Create sandbox",
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 4,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "4",
+      "status": "passed",
+      "summary": "Create sandbox",
+      "durationMs": 0,
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 5,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "sandbox.event",
+      "sandboxId": "sandbox",
+      "action": "created",
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 6,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "sandbox.event",
+      "sandboxId": "sandbox",
+      "action": "credentials-withheld",
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 7,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "8",
+      "label": "Prepare pinned checkout",
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 8,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "8",
+      "status": "passed",
+      "summary": "Prepare pinned checkout",
+      "durationMs": 0,
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 9,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "10",
+      "label": "Lock network to registries",
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 10,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "10",
+      "status": "passed",
+      "summary": "Lock network to registries",
+      "durationMs": 0,
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 11,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "sandbox.event",
+      "sandboxId": "sandbox",
+      "action": "network-locked",
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 12,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "13",
+      "label": "Restore pinned project",
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 13,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "13",
+      "status": "passed",
+      "summary": "Restore pinned project",
+      "durationMs": 0,
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 14,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "15",
+      "label": "detect",
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 15,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "15",
+      "status": "passed",
+      "summary": "detect",
+      "durationMs": 0,
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 16,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "17",
+      "label": "install",
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 17,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "17",
+      "status": "passed",
+      "summary": "install",
+      "durationMs": 0,
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 18,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "sandbox.event",
+      "sandboxId": "sandbox",
+      "action": "deleted",
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 19,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "type": "inspection.finished",
+      "inspected": 0,
+      "durationMs": 0,
+      "version": 1,
+      "inspectionId": "inspection",
+      "sequence": 20,
+      "timestamp": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

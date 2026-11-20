@@ -14,6 +14,7 @@ An **Inspection** targets a **Repository** at a pinned commit. An **Ecosystem Ad
 | Baseline | The install, typecheck, and tests on the Repository before any change. | Exclude tests that fail here when attributing failures to an Upgrade. |
 | Upgrade | Moving one dependency from its current version to a newer one. | Identify the dependency and both versions. |
 | Install Check | Installation of an Upgrade with the network locked to package registries. | Record attempted connections and files written outside the project. |
+| Installation Finding | One observed connection attempt or filesystem change attributed to an Install Check. | Record its source and coverage. |
 | Upgrade Check | Bumping, installing, typechecking, and testing one Upgrade. | Count a new failure only if it fails again on a rerun. |
 | Check Result | The result of a check. | Passed, failed with the failing tests, or untested with the reason. |
 | Feature Match | A new feature in an Upgrade's release notes matched to code it could replace in the Repository. | Cite the release notes and the code. |

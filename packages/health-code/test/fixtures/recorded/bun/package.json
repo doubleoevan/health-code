@@ -1,0 +1,11 @@
+{
+  "name": "example-project",
+  "private": true,
+  "packageManager": "bun@1.4.3",
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "widget": "1.2.0"
+  }
+}

@@ -9,8 +9,9 @@ Stop and report at the first failure. Never skip a step.
 
 ## 1. Module docs match the tree
 
-Always runs. AGENTS.md says structure changes update the docs in the same
-change; this is where that gets checked, in both directions.
+Check every new or changed module for its own AGENTS.md. Review the guide and
+README alongside the implementation. Create a missing guide and correct any
+stale paths, responsibilities, entry points, commands, or verification steps.
 
 Forward, from the diff: `git diff --name-status <origin/main sha>` (after
 `git fetch origin main`, since a local main goes stale) plus
@@ -125,9 +126,9 @@ Run step 5 before step 6.
 
 ## 7. AI review: CodeRabbit + Gemini
 
-Health Code is a public repository. Before sending the diff to CodeRabbit and
-Gemini, check for a standing review authorization in this section; without one,
-ask once per session.
+The repository owner authorizes sending Health Code change diffs to CodeRabbit
+and Gemini for every /ship review. Review the repository diff only. Keep
+credentials, local environment files, and unrelated workspace data private.
 
 The agent shell has no Doppler-injected secrets, so check for the key without
 printing it: doppler run -- bash -c 'test -n "$CODERABBIT_API_KEY"'.
@@ -213,7 +214,9 @@ Write the long report to `logs/ship-report.md` (git-ignored) and give its path
 in the handoff. The report holds the reports from steps 4, 5, 6, 9, and 10,
 every reviewer's findings with the ones dismissed and why, and
 recommendations. A recommendation is only work that needs the user's decision.
-Then STOP, show the suggested commit message, and wait for explicit approval.
+Show the suggested commit message. If approval to archive and commit is pending,
+stop here for human review. An explicit instruction to archive and commit after
+a successful /ship authorizes those steps for this change.
 
 ## 12. Archive the change
 
@@ -227,5 +230,9 @@ code.
 
 Confirm `git status --short` shows no unstaged modifications. Always show the
 suggested commit message first (git-discipline skill, Conventional Commits).
-Then ask before running `git commit`, unless commits were pre-approved at
-session start. Work happens on main. Never push unless explicitly asked to.
+Commit on main once the user has authorized this change.
+
+## 14. Push main
+
+After the archive and implementation are committed together, push to origin/main
+when the user has explicitly authorized the push. Verify the remote commit.

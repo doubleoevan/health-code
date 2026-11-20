@@ -7,6 +7,10 @@
 			"entry": ["scripts/**/*.test.ts"]
 		},
 		"packages/*": {},
-		"apps/*": {}
+		"apps/*": {},
+		"packages/health-code": {
+			"entry": ["src/index.ts", "guest/project.ts", "guest/observe.ts", "test/**/*.test.ts"],
+			"project": ["src/**/*.ts", "guest/**/*.ts", "test/**/*.ts"]
+		}
 	}
 }

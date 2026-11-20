@@ -1,7 +1,14 @@
 # Inspection library
 
-This workspace owns inspections, the Sandbox Provider, Ecosystem Adapter, prompts, and the evidence an Inspection produces. Use domain-model when naming library concepts.
+The public ESM package `health-code` owns Repository inspections. Its single entry exports `inspectRepository`, provider factories, errors, and the Report Card and Inspection Event types. The site, MCP server, and scheduled consumers import by package name.
 
-`package.json` reserves the public name `health-code`. It exposes no modules yet. Add the public entry to its exports map with the first implementation. Both apps import the bare package name. Keep check implementations and provider-specific details inside the library.
+| Module | Responsibility |
+| --- | --- |
+| `src/` | Public contract, inspection orchestration, checks, and fake provider. |
+| `src/sandbox/` | Production sandbox lifecycle and guest controls. |
+| `guest/` | Node Ecosystem Adapter commands and installation evidence collection inside the sandbox. |
+| `test/` | Offline tests, shared provider contract, and live fixture harness. |
 
-`tsconfig.json` extends the shared strict Node-compatible configuration. Keep Bun-specific tooling in the root scripts. Unit tests use the fake provider. Store recorded evidence under a `fixtures/recorded` directory alongside its tests.
+Run `bun run --cwd packages/health-code build` from the root. The package emits JavaScript and declarations into `dist/` and builds two standalone guest modules. Verify the published shape with `bun run check:package` and verify production operations with `bun run test:provider`. Each module maintains its own AGENTS.md alongside the root README.
+
+The Node adapter supports npm, pnpm, Yarn, and Bun. Recognized Bun, Vitest, and Jest scripts produce per-test evidence. Other scripts report their exit status. The optional live suite requires `RUNTA_TOKEN` and verifies registry access, installation observation, timeouts, and deletion. See the root README for the public call, event delivery, partial Report Cards, and typed errors.

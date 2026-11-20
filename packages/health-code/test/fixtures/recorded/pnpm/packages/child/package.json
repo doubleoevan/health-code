@@ -1,0 +1,6 @@
+{
+  "name": "child",
+  "dependencies": {
+    "widget": "1.1.0"
+  }
+}
