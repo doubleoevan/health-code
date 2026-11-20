@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import ts from "typescript"
+import { createPathsMatcher, type PathsMatcher, parseTsconfig } from "get-tsconfig"
 
 type Manifest = {
 	name: string
@@ -16,18 +16,14 @@ export type Workspace = {
 	runtime: Set<string>
 	development: Set<string>
 	references: string[]
-	options: ts.CompilerOptions
+	matchPaths: PathsMatcher | null
 }
 
 /** Reads the workspace's dependency declarations and TypeScript resolution settings. */
 export function readWorkspace(folder: string): Workspace {
 	const manifest: Manifest = JSON.parse(readFileSync(resolve(folder, "package.json"), "utf8"))
 	const configPath = resolve(folder, "tsconfig.json")
-	const config = ts.readConfigFile(configPath, ts.sys.readFile)
-	if (config.error) {
-		throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, "\n"))
-	}
-	const project = ts.parseJsonConfigFileContent(config.config, ts.sys, folder, {}, configPath)
+	const config = parseTsconfig(configPath)
 	return {
 		folder,
 		name: manifest.name,
@@ -35,7 +31,7 @@ export function readWorkspace(folder: string): Workspace {
 			Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies, ...manifest.optionalDependencies }),
 		),
 		development: new Set(Object.keys(manifest.devDependencies ?? {})),
-		references: (project.projectReferences ?? []).map((reference) => resolve(reference.path)),
-		options: project.options,
+		references: (config.references ?? []).map((reference) => resolve(folder, reference.path)),
+		matchPaths: createPathsMatcher({ path: configPath, config }),
 	}
 }

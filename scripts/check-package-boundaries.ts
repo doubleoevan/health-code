@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs"
 import { isBuiltin } from "node:module"
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path"
-import ts from "typescript"
+import { ResolverFactory } from "oxc-resolver"
+import { globSync } from "tinyglobby"
 import { readImports } from "./readImports.ts"
 import { readWorkspace, type Workspace } from "./readWorkspace.ts"
 
@@ -10,7 +11,19 @@ const workspaces = [...new Bun.Glob("{apps,packages}/*/package.json").scanSync()
 	.map((path) => readWorkspace(resolve(dirname(path))))
 const byName = new Map(workspaces.map((workspace) => [workspace.name, workspace]))
 const extensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]
-const excluded = ["node_modules", "dist", "build", ".tsbuild", ".next", "**/fixtures/recorded"]
+const sourcePattern = `**/*{${extensions.join(",")}}`
+const excluded = ["**/{node_modules,dist,build,.tsbuild,.next}/**", "**/fixtures/recorded/**"]
+const resolver = new ResolverFactory({
+	extensions: [...extensions, ".json"],
+	extensionAlias: {
+		".js": [".ts", ".tsx", ".d.ts", ".js", ".jsx"],
+		".jsx": [".tsx", ".d.ts", ".jsx"],
+		".mjs": [".mts", ".d.mts", ".mjs"],
+		".cjs": [".cts", ".d.cts", ".cjs"],
+	},
+	mainFields: ["types", "typings", "main"],
+	conditionNames: ["types", "node", "import", "require"],
+})
 const violations: string[] = []
 let fileCount = 0
 
@@ -30,7 +43,12 @@ for (const workspace of workspaces) {
 		}
 	}
 
-	for (const filePath of ts.sys.readDirectory(workspace.folder, extensions, excluded)) {
+	for (const filePath of globSync(sourcePattern, {
+		cwd: workspace.folder,
+		absolute: true,
+		dot: true,
+		ignore: excluded,
+	})) {
 		fileCount++
 		for (const imported of readImports(filePath, readFileSync(filePath, "utf8"))) {
 			const violation = toImportViolation({
@@ -116,15 +134,14 @@ function resolveWorkspaceImport({
 	filePath: string
 	path: string
 }): { workspace: Workspace; external: boolean } | undefined {
-	// Follow aliases and workspace symlinks to the source file the compiler sees.
-	const result = ts.resolveModuleName(path, filePath, workspace.options, ts.sys).resolvedModule
-	if (!result) {
-		return
-	}
-	const targetPath = ts.sys.realpath?.(result.resolvedFileName) ?? result.resolvedFileName
-	const target = workspaces.find((candidate) => contains(candidate.folder, targetPath))
-	if (target) {
-		return { workspace: target, external: result.isExternalLibraryImport === true }
+	// Try mapped files first so an alias cannot impersonate a package's public entry.
+	const aliases = workspace.matchPaths?.(path) ?? []
+	for (const candidate of [...aliases, path]) {
+		const targetPath = resolver.sync(dirname(filePath), candidate).path
+		if (targetPath) {
+			const owner = workspaces.find((workspace) => contains(workspace.folder, targetPath))
+			return owner && { workspace: owner, external: candidate === path }
+		}
 	}
 }
 

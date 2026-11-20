@@ -10,6 +10,6 @@ Run these commands from the repository root. The root package manifest names the
 | `check-dependency-pins.ts` | Compares the package manager with the Bun version file. Verifies each patched dependency exists at the specified version in the lockfile. |
 | `check-dependency-advisories.ts` | Validates Bun's registry response and the reviewed advisory exceptions. Runs in its own CI job. |
 
-`readImports.ts` reads module specifiers from the TypeScript syntax tree, including type imports, re-exports, dynamic imports, and literal require calls. `readWorkspace.ts` reads manifests and compiler resolution settings.
+`readImports.ts` uses Oxc to read literal imports, re-exports, type imports, and require calls. `readWorkspace.ts` uses get-tsconfig to read JSONC, follow `extends`, and resolve inherited path mappings. Project references belong to the workspace that declares them.
 
 Keep check tests beside their entry points. Use temporary workspaces or saved inputs for negative cases. `tsconfig.json` enables Bun types for these scripts. The root scripts for Biome, Knip, TypeScript, and tests invoke their tools directly.

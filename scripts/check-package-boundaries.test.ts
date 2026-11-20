@@ -118,3 +118,59 @@ test("an alias cannot redirect the public package name to an internal file", () 
 	expect(result.status).toBe(1)
 	expect(result.output).toContain("public package name")
 })
+
+test("inherited JSONC paths resolve relative to the declaring config", () => {
+	write(
+		"configs/base.json",
+		`{
+		// Check the second mapping when the first has no matching file.
+		"compilerOptions": { "paths": { "#library/*": ["./missing/*", "../packages/health-code/*"], }, },
+		"references": [{ "path": "../apps/mcp" }],
+	}`,
+	)
+	write("configs/site.json", '{"extends":"./base"}')
+	write(
+		"apps/site/tsconfig.json",
+		`{
+		"extends": "../../configs/site.json",
+		"references": [{ "path": "../../packages/health-code" },],
+	}`,
+	)
+	write("apps/site/index.ts", 'import "#library/private.js"')
+	const result = check()
+	expect(result.status).toBe(1)
+	expect(result.output.trim()).toBe(
+		"apps/site/index.ts:1 imports #library/private.js: cross-workspace imports must use a public package name. Found packages/health-code",
+	)
+})
+
+test("a child config overrides inherited aliases", () => {
+	write("base.json", '{"compilerOptions":{"paths":{"#selected":["./packages/health-code/private.ts"]}}}')
+	write(
+		"apps/site/tsconfig.json",
+		JSON.stringify({
+			extends: "../../base.json",
+			references: [{ path: "../../packages/health-code" }],
+			compilerOptions: { paths: { "#selected": ["./own.ts"] } },
+		}),
+	)
+	write("apps/site/own.ts", "export const value = 1")
+	write("apps/site/index.ts", 'import "#selected"')
+	expect(check()).toEqual({ status: 0, output: "" })
+})
+
+test("mixed imports count as runtime dependencies and type-only forms stay erased", () => {
+	write(
+		"apps/site/index.ts",
+		[
+			'import { type Options } from "test-tool"',
+			'export { type MoreOptions } from "test-tool"',
+			'import type Tool = require("test-tool")',
+			'export type T = import("test-tool").Options',
+			'import { type Config, create } from "test-tool"',
+		].join("\r\n"),
+	)
+	const result = check()
+	expect(result.status).toBe(1)
+	expect(result.output.trim()).toBe("apps/site/index.ts:5 imports test-tool: declare runtime imports in dependencies")
+})
