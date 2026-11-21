@@ -164,6 +164,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 		},
 		deleted,
 		effectiveLimits: card.limits,
+		promptVersions: card.promptVersions,
 		commit: card.repository.commit,
 		verdict: report.verdict,
 		confirmed: repeated,

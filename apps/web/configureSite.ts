@@ -7,6 +7,7 @@ import {
 	reconcileSandboxes,
 } from "health-code"
 import type { InspectionSource } from "./executeInspection.ts"
+
 import { createRepositoryLookup } from "./verifyRepository.ts"
 
 function toInspectionLimit(value: string | undefined, fallback: number): number {
@@ -69,24 +70,42 @@ export function createLiveSource(
 	// configure per-inspection spend, duration and upgrade limits
 	const sandboxProvider = createSandboxProvider({ deployment, token })
 	const limits = {
-		maxUpgrades: toInspectionLimit(environment.HEALTH_CODE_MAX_UPGRADES, 6),
+		maxUpgrades: toInspectionLimit(environment.HEALTH_CODE_MAX_UPGRADES, 2),
 		maxDurationMs: toInspectionLimit(environment.HEALTH_CODE_MAX_DURATION_MS, 1800000),
 		maxCostUsd: toInspectionLimit(environment.HEALTH_CODE_MAX_COST_USD, 5),
+		agent: { repair: { maxCostUsd: 2 }, featureAdoption: { maxCostUsd: 1 } },
 	}
 	if (!Number.isSafeInteger(limits.maxUpgrades)) {
 		throw new Error("Expected a whole-number upgrade limit")
 	}
 	// bind github lookup and sandbox recovery to the hosted deployment
 	const githubToken = environment.GITHUB_TOKEN
+	const firstSeen = new Map<string, number>()
 	return {
 		...createRepositoryLookup(githubToken),
-		recover: () => reconcileSandboxes({ deployment, token, liveInspectionIds: new Set() }),
-		async inspect(repositoryUrl, onEvent): Promise<{ report: ReportCardV2 }> {
+		maxDurationMs: limits.maxDurationMs,
+		async recover(options): Promise<number> {
+			await reconcileSandboxes({ deployment, token, liveInspectionIds: new Set(), firstSeen, ...options })
+			return firstSeen.size
+		},
+		async inspect(repositoryUrl, onEvent, { revision, settings, signal } = {}): Promise<{ report: ReportCardV2 }> {
 			const report = await inspect({
 				repositoryUrl,
 				sandboxProvider,
 				githubToken,
-				limits,
+				signal,
+				revision,
+				limits: settings
+					? {
+							...limits,
+							maxUpgrades: settings.maxUpgrades,
+							maxCostUsd: settings.maxCostUsd,
+							agent: {
+								repair: { maxCostUsd: settings.repairUsd },
+								featureAdoption: { maxCostUsd: settings.adoptionUsd },
+							},
+						}
+					: limits,
 				onEvent,
 				models: { releaseSummary: host, featureMatch: host, repair: guest, featureAdoption: guest },
 			})

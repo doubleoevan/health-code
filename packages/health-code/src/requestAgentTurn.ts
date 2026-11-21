@@ -41,11 +41,12 @@ export async function requestAgentTurn({
 		// reserve a single-token credential probe before announcing startup
 		await paidRequest({
 			ledger: engine.ledger,
+			context,
 			role,
 			step: "verify credential",
 			modelId: route.modelId,
 			pricing: route.pricing,
-			prompt: "Reply OK.",
+			prompt: context.prompts.template("verifyCredential").body,
 			output: 1,
 			signal: operation.signal,
 			send: (op) => session.verify(op),
@@ -59,6 +60,7 @@ export async function requestAgentTurn({
 		return await context.step("setup", agentRoleLabels[role], (step) =>
 			paidRequest({
 				ledger: engine.ledger,
+				context,
 				attempt: budget,
 				role,
 				step: role,

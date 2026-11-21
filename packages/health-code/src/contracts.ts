@@ -101,7 +101,7 @@ export type Command = {
 }
 // attach capture metadata to a command's evidence
 export type CommandResult = Evidence & { observationId?: string; timedOut?: boolean }
-export type Operation = { timeoutMs: number; signal?: AbortSignal }
+export type Operation = { timeoutMs: number; signal?: AbortSignal; modelCallId?: string }
 export interface SandboxProvider {
 	modelRequestSandbox?: import("./modelRequestSandbox.ts").ModelRequestSandbox
 	openCredentialSession?: AgentCapability
@@ -110,7 +110,11 @@ export interface SandboxProvider {
 	estimateMaxCost(durationMs: number): number
 	// bind repository and policy operations to an allocated sandbox
 	createSandbox(name: string, options: Operation): Promise<Sandbox>
-	prepareRepository(sandbox: Sandbox, repositoryUrl: string, options: Operation): Promise<string>
+	prepareRepository(
+		sandbox: Sandbox,
+		repositoryUrl: string,
+		options: Operation & { revision?: string },
+	): Promise<string>
 	setNetworkPolicy(sandbox: Sandbox, hosts: readonly string[], options: Operation): Promise<void>
 	resetProject(sandbox: Sandbox, options: Operation): Promise<void>
 	executeCommand(sandbox: Sandbox, command: Command): Promise<CommandResult>
@@ -133,7 +137,11 @@ export type InspectionOptions = {
 	callerModelExecution?: "local"
 	// select a public repository and its execution provider
 	repositoryUrl: string
+	revision?: string
+	prompts?: import("./readPrompt.ts").PromptOverrides
+	telemetry?: import("@opentelemetry/api").Tracer
 	sandboxProvider: SandboxProvider
+	// Caller-supplied presentation and execution settings.
 	limits?: InspectionLimits
 	onEvent?: (event: InspectionEvent) => void | Promise<void>
 	includeTestInventory?: boolean
@@ -167,7 +175,12 @@ export interface EcosystemAdapter {
 }
 // identify the pinned repository and its baseline
 export type ReportCard = {
+	promptVersions?: {
+		model: import("./readPrompt.ts").PromptReference[]
+		handoff: import("./readPrompt.ts").PromptReference[]
+	}
 	version: 1
+	// Identify the revision associated with the Report Card.
 	inspectionId: string
 	repository: { url: string; commit: string }
 	packageManager: { name: PackageManager; version: string } | { reason: string }
@@ -179,6 +192,7 @@ export type ReportCard = {
 }
 
 export class InspectionError extends Error {
+	promptVersions?: ReportCard["promptVersions"]
 	timeline: InspectionEvent[] | import("./modelRequestSandbox.ts").ModelRequestSandboxEvent[] = []
 	// preserve cleanup state on typed inspection failures
 	cleanupId?: string

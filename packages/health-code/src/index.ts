@@ -1,3 +1,12 @@
+export type { PromptName, PromptOverrides, PromptReference } from "./readPrompt.ts"
+
+import { readFileSync } from "node:fs"
+
+// Include the installed release in hosted inspection cache keys.
+export const libraryVersion: string = JSON.parse(
+	readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version
+
 export type {
 	/** @deprecated Use InspectionEventV2. */
 	InspectionEventV2 as EnrichedInspectionEvent,

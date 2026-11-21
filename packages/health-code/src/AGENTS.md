@@ -24,4 +24,6 @@ A confirmed install failure can enter repair after a clean observation. The supe
 
 `modelRequestSandbox.ts` defines model request sandbox options and serializes lazy allocation. `runtimeUsage.ts` measures each allocation through acknowledged deletion and combines runtime upper bounds with model receipts. Incomplete cleanup retains every unresolved identity on the Inspection error.
 
+`readPrompt.ts` validates each Inspection’s bundled or caller-supplied Markdown and identifies effective templates by name, version and SHA-256. `buildPrompt.ts` fences bounded, redacted evidence at call time. `traceGeneration.ts` adapts an optional caller-owned tracer to the SDK’s per-call interface.
+
 `inspectUpgrade.ts` runs the Install Check, confirms new failures and compares each Upgrade Check against the Baseline.

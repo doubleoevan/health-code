@@ -2,7 +2,7 @@ import { z } from "zod"
 import { InspectionError } from "../contracts.ts"
 
 const runtimePage = z.object({
-	data: z.array(z.object({ id: z.uuid(), display_name: z.string() })),
+	data: z.array(z.object({ id: z.uuid(), display_name: z.string(), created_at: z.string().optional() })),
 	pagination: z.object({ has_more: z.boolean(), next_cursor: z.string().nullable() }),
 })
 
@@ -18,8 +18,14 @@ export async function reconcileSandboxes(options: {
 	deployment: string
 	token: string
 	liveInspectionIds: ReadonlySet<string>
+	createdBefore?: number
+	firstSeen?: Map<string, number>
 	fetch?: typeof globalThis.fetch
 }): Promise<void> {
+	// Age undated allocations against observations retained between scheduled sweeps.
+	if (options.createdBefore !== undefined && !options.firstSeen) {
+		throw new InspectionError("cleanup-inventory", "Scheduled cleanup requires a persistent firstSeen map")
+	}
 	// restrict runtime inventory to the selected deployment
 	const prefix = toSandboxPrefix(options.deployment)
 	const origin = "https://api.runta.com/v2/runtimes"
@@ -30,6 +36,7 @@ export async function reconcileSandboxes(options: {
 	url.searchParams.set("limit", "100")
 	const cursors = new Set<string>()
 	const orphanIds = new Set<string>()
+	const observed = new Map<string, number>()
 
 	// Finish inventory before deletions alter page boundaries.
 	while (true) {
@@ -40,7 +47,7 @@ export async function reconcileSandboxes(options: {
 		}
 		// separate abandoned deployment runtimes from live inspections
 		const page = runtimePage.parse(await response.json())
-		for (const id of orphanedRuntimeIds(page.data, prefix, options.liveInspectionIds)) {
+		for (const id of orphanedRuntimeIds(page.data, { prefix, observed, ...options })) {
 			orphanIds.add(id)
 		}
 		if (!page.pagination.has_more) {
@@ -55,7 +62,22 @@ export async function reconcileSandboxes(options: {
 		url.searchParams.set("after", cursor)
 	}
 
+	updateObservedTimes(options.firstSeen, observed)
 	await deleteOrphans({ orphanIds, request, headers, origin })
+	// Remove allocations only after deletion has been confirmed.
+	for (const id of orphanIds) {
+		options.firstSeen?.delete(id)
+	}
+}
+
+function updateObservedTimes(firstSeen: Map<string, number> | undefined, observed: ReadonlyMap<string, number>): void {
+	// Retain only live inventory entries for the next age check.
+	if (firstSeen) {
+		firstSeen.clear()
+		for (const [id, time] of observed) {
+			firstSeen.set(id, time)
+		}
+	}
 }
 
 async function deleteOrphans({
@@ -96,19 +118,32 @@ async function deleteOrphans({
 
 function* orphanedRuntimeIds(
 	runtimes: z.infer<typeof runtimePage>["data"],
-	prefix: string,
-	liveInspectionIds: ReadonlySet<string>,
+	options: {
+		prefix: string
+		liveInspectionIds: ReadonlySet<string>
+		createdBefore?: number
+		firstSeen?: Map<string, number>
+		observed: Map<string, number>
+	},
 ): Generator<string> {
 	for (const runtime of runtimes) {
-		const suffix = runtime.display_name.slice(prefix.length).replace(/-relay$/, "")
-		// match the exact deployment prefix and an inactive inspection uuid
-		if (
-			runtime.display_name.startsWith(prefix) &&
-			z.uuid().safeParse(suffix).success &&
-			!liveInspectionIds.has(suffix)
-		) {
-			// yield the provider runtime id for deletion
-			yield runtime.id
+		const suffix = runtime.display_name.slice(options.prefix.length).replace(/-relay$/, "")
+		if (!runtime.display_name.startsWith(options.prefix) || !z.uuid().safeParse(suffix).success) {
+			continue
 		}
+		// Use observation time as a conservative lower bound if inventory omits creation time.
+		// Remember only unleased allocations that may need a later age check.
+		if (options.liveInspectionIds.has(suffix)) {
+			continue
+		}
+		// Use first observation when the provider omits creation time.
+		const timestamp = Date.parse(runtime.created_at ?? "")
+		const observed = Number.isFinite(timestamp) ? timestamp : (options.firstSeen?.get(runtime.id) ?? Date.now())
+		options.observed.set(runtime.id, observed)
+		// Leave younger unleased runtimes visible to the next sweep.
+		if (options.createdBefore !== undefined && observed >= options.createdBefore) {
+			continue
+		}
+		yield runtime.id
 	}
 }

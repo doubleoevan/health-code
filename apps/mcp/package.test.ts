@@ -10,6 +10,7 @@ import { Client } from "@modelcontextprotocol/client"
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio"
 import { toHash } from "./storeInspection.ts"
 
+const expectedTools = ["get_tested_patch", "read_inspection", "report_patch_result", "start_inspection"]
 const releaseWorkspace = fileURLToPath(new URL("../../packages/health-code", import.meta.url))
 function checkStderr(key: string): (chunk: Buffer | string) => void {
 	let suffix = ""
@@ -148,27 +149,36 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		}
 	}
 
-	try {
-		// Extract the exact archive npm delivers and resolve only its declared dependencies.
-		execFileSync("npm", ["pack", "--silent", "--pack-destination", scratch], {
-			cwd: releaseWorkspace,
-			encoding: "utf8",
-			env: settings,
-		})
-		const archives = (await readdir(scratch)).filter((name) => name.endsWith(".tgz"))
+	async function archivePath(workspace: string, name: string): Promise<string> {
+		const artifacts = process.env.HEALTH_CODE_RELEASE_ARTIFACTS
+		// Exercise the exact files being staged when invoked by the release workflow.
+		if (artifacts) {
+			const manifest = JSON.parse(await readFile(join(artifacts, name + ".json"), "utf8"))
+			return join(artifacts, manifest[0].filename)
+		}
+		const directory = join(scratch, name + "-archive")
+		await mkdir(directory)
+		execFileSync("npm", ["pack", "--silent", "--pack-destination", directory], { cwd: workspace, env: settings })
+		// Lifecycle scripts may also write to npm's output stream.
+		const archives = (await readdir(directory)).filter((file) => file.endsWith(".tgz"))
 		assert.equal(archives.length, 1)
 		const [archive] = archives
 		assert.ok(archive)
+		return join(directory, archive)
+	}
+
+	try {
+		const archive = await archivePath(releaseWorkspace, "health-code")
 		// unpack the tarball under its public package name
 		await mkdir(installed, { recursive: true })
-		execFileSync("tar", ["-xf", join(scratch, archive), "-C", installed, "--strip-components=1"])
+		execFileSync("tar", ["-xf", archive, "-C", installed, "--strip-components=1"])
 		const packed = JSON.parse(await readFile(join(installed, "package.json"), "utf8"))
 		assert.equal(packed.name, "health-code")
 		assert.equal(packed.bin["health-code"], "dist/mcp/cli.js")
 		// compare the release manifest with the private app's runtime pins
 		const workspace = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"))
 		const { [packed.name]: selfReference, ...runtime } = workspace.dependencies
-		assert.equal(selfReference, "workspace:*")
+		assert.equal(selfReference, packed.version)
 		for (const [name, version] of Object.entries(runtime)) {
 			assert.equal(packed.dependencies[name], version, `Missing runtime dependency or version mismatch: ${name}`)
 		}
@@ -183,6 +193,30 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			await symlink(await realpath(join(releaseWorkspace, "node_modules", name)), path)
 		}
 		execFileSync("npm", ["rebuild", "--ignore-scripts", "health-code"], { cwd: home, env: settings })
+		// Install the scoped release beside the exact library used by the original command.
+		const directory = fileURLToPath(new URL(".", import.meta.url))
+		const scopedArchive = await archivePath(directory, "mcp")
+		const scoped = join(home, "node_modules", "@health-code", "mcp")
+		await mkdir(scoped, { recursive: true })
+		execFileSync("tar", ["-xf", scopedArchive, "-C", scoped, "--strip-components=1"])
+		const manifest = JSON.parse(await readFile(join(scoped, "package.json"), "utf8"))
+		assert.equal(manifest.dependencies["health-code"], packed.version)
+		// Start stdio through the scoped executable in an account-free consumer.
+		const transport = new StdioClientTransport({
+			command: "node",
+			args: [join(scoped, manifest.bin["health-code-mcp"])],
+			cwd: home,
+			env: { PATH: settings.PATH, HOME: home },
+		})
+		const scopedClient = new Client({ name: "scoped-package-test", version: "1" })
+		try {
+			// Verify the scoped command exposes the same tool inventory.
+			await scopedClient.connect(transport)
+			assert.equal(scopedClient.getServerVersion()?.version, packed.version)
+			assert.deepEqual((await scopedClient.listTools()).tools.map((tool) => tool.name).sort(), expectedTools)
+		} finally {
+			await scopedClient.close()
+		}
 		// Exercise the pinned SDK against a local fetch double at the executable boundary.
 		const intercept = join(scratch, "setup-transport.mjs")
 		await writeFile(
@@ -277,7 +311,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		try {
 			// verify discovery and read evidence written by another session
 			assert.equal(client.getServerVersion()?.version, packed.version)
-			assert.equal((await client.listTools()).tools.length, 4)
+			assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name).sort(), expectedTools)
 			const reportCard = await client.callTool({ name: "read_inspection", arguments: { inspectionId: id } })
 			assert.ok(!reportCard.isError)
 			const selected = await client.callTool({

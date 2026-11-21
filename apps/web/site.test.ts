@@ -120,6 +120,7 @@ test("startup marks interruptions before cleanup, retries failures and resumes q
 				if (++attempts === 1) {
 					throw new Error("temporary")
 				}
+				return 0
 			},
 		}
 		// verify recovery retries before the queue resumes

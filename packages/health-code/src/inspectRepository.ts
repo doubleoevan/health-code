@@ -22,6 +22,10 @@ export async function inspectRepository(
 	const engine = createEngine(input)
 	const options = toCheckOptions(input, engine)
 	const repositoryUrl = toRepositoryUrl(options.repositoryUrl)
+	// Validate the requested pin before allocating either runtime.
+	if (input.revision !== undefined && !/^[0-9a-f]{40}$/.test(input.revision)) {
+		throw new InspectionError("invalid-revision", "Expected a full commit SHA")
+	}
 	const context = new InspectionContext(
 		options,
 		engine && ((event) => engine.forward(event)),
@@ -63,9 +67,9 @@ export async function inspectRepository(
 			await context.emit({ type: "sandbox.event", sandboxId: sandbox.id, action })
 		}
 		const commit = await context.step("setup", "Prepare pinned checkout", (config) =>
-			provider.prepareRepository(sandbox, repositoryUrl, config),
+			provider.prepareRepository(sandbox, repositoryUrl, { ...config, revision: input.revision }),
 		)
-		if (!/^[0-9a-f]{40}$/.test(commit)) {
+		if (!/^[0-9a-f]{40}$/.test(commit) || (input.revision && input.revision !== commit)) {
 			throw new InspectionError("repository-unavailable", "Unable to verify pinned repository")
 		}
 		await context.step("setup", "Lock network to registries", (config) =>
@@ -98,6 +102,8 @@ export async function inspectRepository(
 		recordFailureEvidence({ error: failed, context, engine })
 		throw failed
 	}
+	// Include every prompt dispatched before cleanup completed.
+	card.promptVersions = context.prompts.references
 	return engine ? engine.card(redactEvidence(card)) : redactEvidence(card)
 }
 
@@ -187,6 +193,7 @@ function recordFailureEvidence({
 	if (engine) {
 		error.runtimeUsage = engine.meter.snapshot(engine.ledger.usage)
 	}
+	error.promptVersions = context.prompts.references
 	error.timeline = engine?.timeline ?? context.timeline
 }
 
@@ -223,6 +230,8 @@ function toCheckOptions(
 				repositoryUrl: input.repositoryUrl,
 				sandboxProvider: input.sandboxProvider,
 				signal: input.signal,
+				prompts: input.prompts,
+				telemetry: input.telemetry,
 				upgrade: input.upgrade,
 				applicationEnvironment: input.applicationEnvironment,
 				includeTestInventory: true,

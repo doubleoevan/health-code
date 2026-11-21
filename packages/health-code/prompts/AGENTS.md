@@ -1,3 +1,5 @@
 # Inspection prompts
 
-Each filename uses its public model role so the builder can load the matching task directly. These four Markdown templates belong to the inspection library and ship in its tarball. The host and guest roles share the single-pass builder in `../src/buildPrompt.ts`. Keep output shapes in sync with their validators, bump the template version for behavior changes and exercise the untrusted-data fence tests.
+The package ships six Markdown templates. Four filenames match the model roles. `verifyCredential.md` defines the one-token credential probe and `applyPatch.md` supplies instructions for the downstream coding agent.
+
+Use `../src/readPrompt.ts` for template validation and `../src/buildPrompt.ts` for bounded evidence and per-call delimiters. Bump the integer frontmatter version when a template’s behavior changes. Keep the role’s output contract aligned with its validator. Run the prompt tests and the packed consumer check after editing a template.

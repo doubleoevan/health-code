@@ -335,7 +335,11 @@ export function connectProvider(
 				await checked(runtime, ["chmod", "-R", "a+rX", "/opt/health-code"], remaining())
 				try {
 					return (
-						await checked(runtime, ["sh", "-c", checkout, "checkout", repositoryUrl, revision ?? ""], remaining())
+						await checked(
+							runtime,
+							["sh", "-c", checkout, "checkout", repositoryUrl, operation.revision ?? revision ?? ""],
+							remaining(),
+						)
 					).trim()
 				} catch (error) {
 					// report unavailable repositories separately from provider failures

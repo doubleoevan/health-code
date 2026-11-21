@@ -34,7 +34,7 @@ vite = await createServer({
 		port: options.port,
 		strictPort: true,
 		fs: { allow: [import.meta.dir, new URL("../../node_modules", import.meta.url).pathname] },
-		proxy: { "^/(?:$|\\?|r/|api/|patches/)": { target: backend.url.origin } },
+		proxy: { "^/(?:$|\\?|r/|api/|admin(?:$|\\?|/)|health/|patches/)": { target: backend.url.origin } },
 	},
 })
 await vite.listen()

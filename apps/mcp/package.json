@@ -4,7 +4,7 @@
 	"dependencies": {
 		"@modelcontextprotocol/server": "2.4.0",
 		"@runta/runta-sdk": "0.2.0",
-		"health-code": "workspace:*",
+		"health-code": "0.1.0",
 		"zod": "4.6.7"
 	},
 	"description": "Inspect public repositories from a local coding agent using your Runta account.",
@@ -15,5 +15,20 @@
 		"@modelcontextprotocol/client": "2.4.0",
 		"smol-toml": "1.9.1"
 	},
-	"private": true
+	"version": "0.1.0",
+	"license": "MIT",
+	"engines": {
+		"node": "^22.18.0 || >=24.11.0"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/doubleoevan/health-code.git",
+		"directory": "apps/mcp"
+	},
+	"files": [
+		"launch.mjs"
+	],
+	"bin": {
+		"health-code-mcp": "launch.mjs"
+	}
 }

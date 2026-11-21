@@ -1,5 +1,6 @@
 import { type ReactElement, type ReactNode, useState } from "react"
-import { type Citation, type PublishedCard, toSummary, type UpgradeCard } from "./report.ts"
+import { PromptVersions } from "./PromptVersions.tsx"
+import { type Citation, mcpSetupUrl, type PublishedCard, toSummary, type UpgradeCard } from "./report.ts"
 
 export function Link({ href, children }: { href?: string; children: ReactNode }): ReactElement {
 	// allow secure external links and root-relative paths
@@ -223,6 +224,11 @@ function Upgrade({ card, origin, commit }: { card: UpgradeCard; origin: string; 
 				→ {card.to}
 			</p>
 			{/* repair outcome and test changes */}
+			{card.verdict === "Untested" && card.untestedReason && (
+				<p>
+					<strong>Why this upgrade was untested</strong> · {card.untestedReason}
+				</p>
+			)}
 			{card.reason && (
 				<p>
 					<strong>Why repair stopped</strong> · {card.reason}
@@ -346,6 +352,7 @@ export function ReportView({ card, url }: { card: PublishedCard; url: string }):
 					<TestFileErrors errors={card.baselineTestFileErrors} />
 				</dl>
 			</details>
+			<PromptVersions versions={card.promptVersions} />
 			{/* agent turn limits */}
 			{card.turnLimits && (
 				<details>
@@ -380,7 +387,7 @@ export function ReportView({ card, url }: { card: PublishedCard; url: string }):
 			<section>
 				<h2>Continue in Claude Code or Codex</h2>
 				<p>
-					<Link href="https://github.com/doubleoevan/health-code#mcp-setup">Health Code MCP setup</Link> ·{" "}
+					<Link href={mcpSetupUrl}>Health Code MCP setup</Link> ·{" "}
 					<Link href="https://dashboard.runta.com/">Sign up for Runta</Link>
 				</p>
 			</section>

@@ -53,22 +53,26 @@ export async function attemptUpgrade(
 	while (budget.turns > 0 && Date.now() < budget.end) {
 		turn++
 		// include prior attempts and pinned source evidence in the request
-		const prompt = await buildPrompt(role, {
-			requestedTests: state.requestedTests,
-			diagnostics,
-			lastEvidence,
-			attempts: state.actions.slice(-4),
-			publishedVersions: Object.fromEntries(publishedVersions),
-			availableTests: [...testFiles].slice(0, 200),
-			declaredDependencies,
-			addedDependencies: state.dependencies.map(({ name, version }) => ({ name, version })),
-			dependency: report.dependency,
-			target: report.to,
-			summary: report.releaseSummary,
-			releaseNotes: evidence.releaseNotes?.map(({ source, text }) => ({ source, text: text.slice(0, 1600) })),
-			match,
-			files: Object.fromEntries([...state.files].filter(([file]) => !testFiles.has(file))),
-		})
+		const prompt = await buildPrompt(
+			role,
+			{
+				requestedTests: state.requestedTests,
+				diagnostics,
+				lastEvidence,
+				attempts: state.actions.slice(-4),
+				publishedVersions: Object.fromEntries(publishedVersions),
+				availableTests: [...testFiles].slice(0, 200),
+				declaredDependencies,
+				addedDependencies: state.dependencies.map(({ name, version }) => ({ name, version })),
+				dependency: report.dependency,
+				target: report.to,
+				summary: report.releaseSummary,
+				releaseNotes: evidence.releaseNotes?.map(({ source, text }) => ({ source, text: text.slice(0, 1600) })),
+				match,
+				files: Object.fromEntries([...state.files].filter(([file]) => !testFiles.has(file))),
+			},
+			evidence.context.prompts,
+		)
 		// request the next bounded model turn
 		const answer = await requestAgentTurn({ engine, evidence, role, prompt, started, budget })
 		started = true

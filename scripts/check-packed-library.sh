@@ -54,6 +54,7 @@ const modelRequestSandboxOptions = {repositoryUrl:"https://github.com/example/pr
   callerModelExecution:"modelRequestSandbox",models:{releaseSummary:route,featureMatch:route,repair:route,featureAdoption:route},limits:{maxUpgrades:0}}
 const modelRequestSandboxCard=await inspectRepository(modelRequestSandboxOptions)
 assert.equal(modelRequestSandboxCard.version,2)
+assert.deepEqual(modelRequestSandboxCard.promptVersions,{model:[],handoff:[]})
 assert.equal(modelRequestSandboxCard.runtimeUsage.runtimes.length,1)
 assert.deepEqual(modelRequestSandboxProvider.modelRequestSandboxEvents,[])
 await assert.rejects(inspectRepository({...modelRequestSandboxOptions,sandboxProvider:{...modelRequestSandboxProvider,modelRequestSandbox:undefined}}),/capability/)

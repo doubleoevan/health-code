@@ -120,6 +120,7 @@ async function preparePatch(evidence: PatchEvidence, state: State, match?: Featu
 	// bind patch identity to the exact exported bytes
 	const digest = createHash("sha256").update(mailbox, "utf8").digest("hex")
 	const role = match ? "feature" : "upgrade"
+	evidence.context.prompts.record("applyPatch")
 	return {
 		id: digest,
 		verification,
@@ -131,10 +132,7 @@ async function preparePatch(evidence: PatchEvidence, state: State, match?: Featu
 		digest,
 		filename: `${role}-${digest.slice(0, 12)}.patch`,
 		...(match ? { prerequisite: report.patches[0]?.id } : {}),
-		prompt:
-			"Create a branch at " +
-			state.base +
-			". Apply this mailbox with git am. For a feature series, reach this tested base by applying its prerequisite upgrade series at the upgrade's base. If the branch moved, adapt minimally and disclose the exact changes. Run typecheck and tests without editing tests. Fork first if needed, then open a pull request using the patch commit messages.",
+		prompt: evidence.context.prompts.template("applyPatch").body.replace("{{base}}", () => state.base),
 	}
 }
 

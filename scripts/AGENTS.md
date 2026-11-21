@@ -21,3 +21,5 @@ Keep check tests beside their entry points. Use temporary workspaces or saved in
 `evaluate.ts` dispatches pinned cases. `evaluateUpgrade.ts` grades the confirmed regression and final patch. `scoreBudget.ts` compares observed usage and reservations with the public defaults. `evaluateBaseline.ts` writes a complete Baseline atomically in record mode and compares reviewed measurements in score mode. `check-packed-library.sh` compiles both public return types and replays both event versions under Node and Bun.
 
 The development log displays Model Request Sandbox startup details. The cost grader uses both independently rounded runtime quotes when a Report Card contains runtime usage.
+
+`release-packages.sh --dry-run` builds and inspects the release tarballs. The GitHub tag workflow verifies registry integrity and signed provenance for already public siblings before staging missing versions. The verification job checks both public releases after maintainer approval. `inspectHosted.ts` runs the four hosted browser cases and checks Runta inventory through its read API.

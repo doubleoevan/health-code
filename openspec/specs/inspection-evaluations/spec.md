@@ -66,3 +66,12 @@ The CarlNotes seed SHALL inspect commit 2c229c8d44e957e93d5178a8664d5e2d5cbbe0f6
 
 - **WHEN** the evaluator reads a saved measurement with `exclusions`
 - **THEN** it compares the same file paths and reasons as `testFileErrors`. New case files use `testFileErrors`. A test file error belongs to a file and stays separate from a named case failure or a skipped case.
+
+### Requirement: Preserve effective prompt identities in evaluation output
+
+Evaluation output SHALL include the identities, versions and digests of the prompts used by the evaluated Inspection, including caller overrides. The evaluation SHALL distinguish an empty call list from unavailable provenance.
+
+#### Scenario: Compare two evaluations
+
+- **WHEN** repeated evaluations use different effective revisions of one prompt
+- **THEN** the output identifies which prompt changed and agrees with each Inspection’s own report

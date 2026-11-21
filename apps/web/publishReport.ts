@@ -88,6 +88,8 @@ export function publishReport(output: InspectionOutput, license: string | null):
 			observation: upgrade.observation,
 			verdict: upgradeV2?.verdict,
 			reason: upgradeV2?.diagnosis?.stopReason,
+			untestedReason:
+				upgrade.result.status === "untested" ? (upgrade.result.detail ?? upgrade.result.reason) : undefined,
 			testChanges: upgradeV2?.patches.flatMap((patch) =>
 				patch.commits.filter((commit) => commit.flag === "test").map((commit) => commit.reason ?? commit.subject),
 			),
@@ -123,6 +125,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 		blobs,
 		card: {
 			version: 1,
+			promptVersions: report.promptVersions,
 			repository: report.repository,
 			usageAsOf: report.version === 2 ? report.runtimeUsage?.usageAsOf : undefined,
 			baseline: toChecks(report.baseline),

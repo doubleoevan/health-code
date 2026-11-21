@@ -11,6 +11,7 @@ export function streamInspection(options: {
 	let cursor = options.after
 	let wake: (() => void) | undefined
 	let closed = false
+	let previousPosition: number | null | undefined
 	const notify = (): void => wake?.()
 	// wake idle subscribers periodically to send keepalives
 	const encoder = new TextEncoder()
@@ -21,6 +22,7 @@ export function streamInspection(options: {
 		closed = true
 		clearInterval(heartbeat)
 		inspections.changes.off(id, notify)
+		inspections.changes.off("queue", notify)
 		signal.removeEventListener("abort", close)
 		notify()
 	}
@@ -29,6 +31,28 @@ export function streamInspection(options: {
 	signal.addEventListener("abort", close, { once: true })
 	if (signal.aborted) {
 		close()
+	}
+	// Wake only waiting visitors on queue changes.
+	let waiting = false
+	function appendPosition(frames: string[], queued: boolean): void {
+		if (!inspections.launch) {
+			return
+		}
+		// Reattach if a worker returns an unstarted job to the queue.
+		if (queued !== waiting) {
+			waiting = queued
+			if (waiting) {
+				inspections.changes.on("queue", notify)
+			} else {
+				inspections.changes.off("queue", notify)
+			}
+		}
+		// Emit a final null position when the job starts.
+		const position = queued ? inspections.store.position(id) : null
+		if (position !== previousPosition) {
+			previousPosition = position
+			frames.push(`event: position\ndata: ${JSON.stringify(position)}\n\n`)
+		}
 	}
 	const body = new ReadableStream<Uint8Array>({
 		async pull(controller) {
@@ -48,8 +72,10 @@ export function streamInspection(options: {
 				cursor = events.at(-1)?.sequence ?? cursor
 				// Send the terminal signal only after publication is durable.
 				const state = inspections.store.state(id)
+				appendPosition(frames, state === "queued")
 				if (events.length < pageSize && state !== "queued" && state !== "running") {
 					frames.push(`event: terminal\ndata: ${state}\n\n`)
+					// Close after the final committed event page.
 					controller.enqueue(encoder.encode(frames.join("")))
 					controller.close()
 					close()

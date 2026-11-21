@@ -29,7 +29,12 @@ type ConfirmGatewayOptions = {
 type SendSandboxModelRequestOptions = { runtime: Runtime; request: SandboxModelRequest; operation: Operation }
 
 // Send request data to the trusted image’s HTTPS client on stdin.
-async function post({ runtime, route, body, operation }: PostOptions): Promise<{ status: number; text: string }> {
+async function post({
+	runtime,
+	route,
+	body,
+	operation,
+}: PostOptions): Promise<{ status: number; text: string; timing?: ModelReply["timing"] }> {
 	const seconds = Math.max(1, Math.ceil(operation.timeoutMs / 1000))
 	const header = route.credential.valueTemplate.replace(`\${credential}`, "runta-secret-stub")
 	const argv = [
@@ -46,7 +51,7 @@ async function post({ runtime, route, body, operation }: PostOptions): Promise<{
 		"--max-filesize",
 		"65536",
 		"--write-out",
-		"\n%{http_code}",
+		operation.modelCallId ? "\n%{time_total} %{http_code}" : "\n%{http_code}",
 		"--data-binary",
 		"@-",
 		"-H",
@@ -61,13 +66,22 @@ async function post({ runtime, route, body, operation }: PostOptions): Promise<{
 	const result = await runtime.exec([...argv, "--", credentialTarget(route).href], {
 		stdin: JSON.stringify(body),
 		timeoutSecs: seconds,
-		maxOutputBytes: 65542,
+		maxOutputBytes: 65536 + 32,
 	})
 	if (result.exitCode || result.stdoutTruncated) {
 		throw new InspectionError("model-request-sandbox", "Model request sandbox HTTPS request failed")
 	}
+	// Read the optional curl timing locally without passing trace headers to the model.
 	const boundary = result.stdoutText.lastIndexOf("\n")
-	return { status: Number(result.stdoutText.slice(boundary + 1)), text: result.stdoutText.slice(0, boundary) }
+	const trailer = result.stdoutText.slice(boundary + 1).split(" ")
+	const status = Number(trailer.pop())
+	// Accept a duration only when curl returned the timing field.
+	const secondsElapsed = Number(trailer[0])
+	const timing =
+		operation.modelCallId && Number.isFinite(secondsElapsed)
+			? { modelCallId: operation.modelCallId, durationMs: Math.round(secondsElapsed * 1000) }
+			: undefined
+	return { status, text: result.stdoutText.slice(0, boundary), timing }
 }
 
 /**
@@ -115,7 +129,7 @@ export async function sendSandboxModelRequest({
 		messages: [{ role: "user", content: prompt }],
 		...(route.protocol === "anthropic" && route.effort ? { output_config: { effort: route.effort } } : {}),
 	}
-	const { status, text } = await post({ runtime, route, body, operation })
+	const { status, text, timing } = await post({ runtime, route, body, operation })
 	if (status !== 200) {
 		throw new InspectionError("model-request-sandbox", `Model gateway returned HTTP ${status}`)
 	}
@@ -127,6 +141,7 @@ export async function sendSandboxModelRequest({
 				.filter((item) => item.type === "text")
 				.map((item) => item.text ?? "")
 				.join(""),
+			...(timing && { timing }),
 			modelId: route.modelId,
 			requestId: reply.id,
 			inputTokens: reply.usage.input_tokens,
@@ -136,6 +151,7 @@ export async function sendSandboxModelRequest({
 	const reply = compatible.parse(JSON.parse(text))
 	return {
 		text: reply.choices[0].message.content,
+		...(timing && { timing }),
 		modelId: route.modelId,
 		requestId: reply.id,
 		inputTokens: reply.usage.prompt_tokens,

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import type { ModelReply } from "../src/agentContracts.ts"
+import { InspectionContext } from "../src/collectEvents.ts"
+import { createFakeSandboxProvider, InspectionError } from "../src/index.ts"
 import { attemptBudget, type Ledger, paidRequest } from "../src/modelBudget.ts"
 
 test("budget admission considers turns, elapsed time, cancellation and both cost ceilings before dispatch", async () => {
@@ -43,4 +45,41 @@ test("budget admission considers turns, elapsed time, cancellation and both cost
 	await assert.rejects(paidRequest({ ...request, attempt: undefined, signal: AbortSignal.abort() }))
 	assert.equal(calls, 2)
 	assert.equal(ledger.remainingMicros, before)
+})
+
+test("prompt history distinguishes refused, failed, repeated and cancelled dispatches", async () => {
+	const context = new InspectionContext({
+		repositoryUrl: "https://github.com/example/project",
+		sandboxProvider: createFakeSandboxProvider({ commit: "", commands: [] }),
+	})
+	const request = {
+		context,
+		ledger: { end: Date.now() + 60000, remainingMicros: 100000, usage: [] },
+		role: "repair" as const,
+		modelId: "fixture",
+		step: "probe",
+		verification: true,
+		prompt: context.prompts.template("verifyCredential").body,
+		output: 1,
+		pricing: { inputUsdPerMillion: 1, outputUsdPerMillion: 2, maxInputTokens: 2048 },
+		send: async (): Promise<ModelReply> => {
+			throw Error("provider failed after dispatch")
+		},
+	}
+	// Pre-dispatch refusals and requests cancelled before admission consume no template.
+	await assert.rejects(paidRequest({ ...request, signal: AbortSignal.abort() }))
+	await assert.rejects(
+		paidRequest({
+			...request,
+			execution: "modelRequestSandbox",
+			send: async () => {
+				throw new InspectionError("credential-binding", "route refused")
+			},
+		}),
+	)
+	assert.deepEqual(context.prompts.references.model, [])
+	// Keep the failed probe once, even when the caller retries it.
+	await assert.rejects(paidRequest(request))
+	await assert.rejects(paidRequest(request))
+	assert.deepEqual(context.prompts.references.model, [context.prompts.template("verifyCredential").reference])
 })

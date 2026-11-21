@@ -1,11 +1,14 @@
 import { Database } from "bun:sqlite"
-import { randomBytes } from "node:crypto"
+import { randomBytes, randomUUID } from "node:crypto"
+import { InspectionError } from "health-code"
 import type { Publication } from "./publishReport.ts"
+import { AdmissionLedger, migrateAdmissions } from "./recordAdmissions.ts"
 import type { SiteEvent, Snapshot } from "./report.ts"
 
 type StoredRow = Pick<Snapshot, "id" | "state" | "repositoryUrl" | "message"> & { report: string | null }
 export class InspectionStore {
 	readonly database: Database
+	readonly admission: AdmissionLedger
 	constructor(
 		path: string,
 		private readonly makeId: () => string = () => randomBytes(12).toString("base64url"),
@@ -14,6 +17,10 @@ export class InspectionStore {
 		this.database = new Database(path, { create: true, strict: true })
 		this.database.run("PRAGMA journal_mode=WAL")
 		const version = this.database.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version
+		// Capture committed pages and WAL contents before upgrading a persisted schema.
+		if ((version === 1 || version === 2) && path !== ":memory:") {
+			this.database.query("VACUUM INTO ?").run(`${path}.v${version}.${randomUUID()}.backup`)
+		}
 		// create the queue, event log and patch store in one transaction
 		if (version === 0) {
 			this.database.transaction(() =>
@@ -25,20 +32,42 @@ export class InspectionStore {
    PRAGMA user_version=1;
   `),
 			)()
-		} else if (version !== 1 && version !== 2) {
+		} else if (version !== 1 && version !== 2 && version !== 3) {
 			throw new Error("Unsupported inspection database version")
 		}
 		// add storage for the original library report
-		if (version !== 2) {
+		if (version === 0 || version === 1) {
 			this.database.transaction(() =>
 				this.database.exec(
 					"CREATE TABLE source_reports(id TEXT PRIMARY KEY,payload TEXT NOT NULL); PRAGMA user_version=2",
 				),
 			)()
 		}
+		if (version !== 3) {
+			migrateAdmissions(this.database)
+		}
+		// Attach the admission ledger to this same SQLite connection.
+		this.admission = new AdmissionLedger(this.database)
 	}
-
-	queueFull(): boolean {
+	position(id: string): number | null {
+		// Expose a one-based queue position for durable rows.
+		return (
+			this.database
+				.query<{ position: number }, [string]>(
+					`SELECT (SELECT count(*) FROM inspections q WHERE q.state='queued' AND q.rowid<=i.rowid) position FROM inspections i WHERE id=? AND state='queued'`,
+				)
+				.get(id)?.position ?? null
+		)
+	}
+	// Recover the pinned revision after a worker restart.
+	checkout(id: string): { revision: string; repositoryId: string } | null {
+		return this.database
+			.query<{ revision: string; repositoryId: string }, [string]>(
+				"SELECT revision,json_extract(cacheKey,'$[0]') repositoryId FROM admissions WHERE id=?",
+			)
+			.get(id)
+	}
+	private queueFull(): boolean {
 		// check whether the waiting queue has reached its limit
 		const maximumQueued = 32
 		return (
@@ -47,6 +76,10 @@ export class InspectionStore {
 		)
 	}
 	enqueue(repositoryUrl: string): string {
+		// Apply the queue bound to every fresh insertion.
+		if (this.queueFull()) {
+			throw new InspectionError("queue-full", "The inspection queue is full. Try again after an inspection starts.")
+		}
 		// retry id collisions without replacing another inspection
 		for (;;) {
 			const id = this.makeId()
@@ -68,12 +101,31 @@ export class InspectionStore {
 			)
 			.get()
 	}
-	// mark jobs left running by a previous process
-	interrupt(): void {
+	// Preserve FIFO order and the hold when dispatch needs a fresh admission check.
+	requeue(id: string): void {
 		this.database
-			.query("UPDATE inspections SET state='interrupted',message=?,updated=CURRENT_TIMESTAMP WHERE state='running'")
-			.run("This inspection was interrupted when the server restarted. You can start a new inspection.")
+			.query("UPDATE inspections SET state='queued',updated=CURRENT_TIMESTAMP WHERE state='running' AND id=?")
+			.run(id)
 	}
+
+	// mark jobs left running by a previous process
+	interrupt(): { id: string; repositoryUrl: string; durationMs: number }[] {
+		return this.database
+			.transaction(() => {
+				const abandoned = this.database
+					.query<{ id: string; repositoryUrl: string; durationMs: number }, []>(
+						"SELECT id,repositoryUrl,max(0,unixepoch('now')-unixepoch(updated))*1000 durationMs FROM inspections WHERE state='running'",
+					)
+					.all()
+				// Mark and report exactly the inspections claimed by the previous process.
+				this.database
+					.query("UPDATE inspections SET state='interrupted',message=?,updated=CURRENT_TIMESTAMP WHERE state='running'")
+					.run("This inspection was interrupted when the server restarted. You can start a new inspection.")
+				return abandoned
+			})
+			.immediate()
+	}
+
 	append(id: string, event: SiteEvent): void {
 		// store each event once for the public inspection id
 		this.database.transaction(() => {
@@ -100,6 +152,7 @@ export class InspectionStore {
 			return {
 				id: row.id,
 				state: row.state,
+				position: this.position(id),
 				message: row.message,
 				repositoryUrl: row.repositoryUrl,
 				events: this.publicEvents(id, 0),
@@ -141,6 +194,11 @@ export class InspectionStore {
 	finish(id: string, publication: Publication): void {
 		// publish the original report, patch bytes and public card atomically
 		this.database.transaction(() => {
+			const report = publication.original
+			if (report.version === 2) {
+				this.admission.settle(id, report.runtimeUsage)
+			}
+			// Store immutable patch bytes alongside their source report.
 			this.database.query("INSERT INTO source_reports VALUES(?,?)").run(id, JSON.stringify(publication.original))
 			for (const [digest, bytes] of publication.blobs) {
 				this.database.query("INSERT INTO patches VALUES(?,?) ON CONFLICT DO NOTHING").run(digest, bytes)
@@ -152,10 +210,25 @@ export class InspectionStore {
 		})()
 	}
 	// record the terminal failure message for reconnecting clients
-	fail(id: string, message: string): void {
-		this.database
-			.query("UPDATE inspections SET state='failed',message=?,updated=CURRENT_TIMESTAMP WHERE id=?")
-			.run(message, id)
+	fail(input: { id: string; message: string; dispatched: boolean; failure?: InspectionError }): void {
+		const { id, message, dispatched, failure } = input
+		// Commit accounting, missing events and the terminal state together for safe retries.
+		this.database.transaction(() => {
+			if (!dispatched) {
+				this.admission.release(id)
+			}
+
+			if (failure) {
+				this.admission.settle(id, failure.runtimeUsage)
+				for (const event of failure.timeline) {
+					this.append(id, event)
+				}
+			}
+			// Store only the message intended for public display.
+			this.database
+				.query("UPDATE inspections SET state='failed',message=?,updated=CURRENT_TIMESTAMP WHERE id=?")
+				.run(message, id)
+		})()
 	}
 	// look up the exact bytes for a verified patch digest
 	patch(digest: string): Uint8Array | null {

@@ -41,6 +41,10 @@ Use **Usage as of** (`usageAsOf`) for the timestamp through which the Report Car
 
 Separate **Model cost** from **Reserved upper bound** and label measured reply tokens **Output tokens**.
 
+Use **Prompt versions** on a Report Card. Each prompt reference identifies the effective template by name, version and SHA-256. Keep dispatched model prompts separate from generated Patch instructions.
+
+In the daily admin view, **share rate** is the fraction of completed Report Cards viewed by someone other than their creator. **Viewer to runner** is the fraction of those viewers who start their own Inspection within seven days of their first qualifying view.
+
 ## Rejected terms
 
 | Avoid | Use |

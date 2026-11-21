@@ -182,7 +182,11 @@ export function createModelRequestSandbox({
 							)
 						}
 						// Dispatch only after the active route has passed verification.
-						return sendSandboxModelRequest({ runtime, request: modelRequest, operation: remaining() })
+						return sendSandboxModelRequest({
+							runtime,
+							request: modelRequest,
+							operation: { ...remaining(), modelCallId: operation.modelCallId },
+						})
 					})
 					state.busy = work.catch(() => undefined)
 					return work

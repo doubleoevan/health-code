@@ -91,6 +91,7 @@ export type ModelUsage = {
 }
 // capture model output and provider usage identifiers
 export type ModelReply = {
+	timing?: { modelCallId: string; durationMs: number }
 	text: string
 	modelId: string
 	inputTokens?: number

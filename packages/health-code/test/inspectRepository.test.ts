@@ -283,3 +283,47 @@ test("a failed confirmation install prevents tests on the incomplete checkout", 
 	assert.equal(result?.status, "untested")
 	assert.equal(result.reason, "confirmation-install-unavailable")
 })
+
+test("a branch move cannot replace the requested checkout", async () => {
+	// Move the advertised branch while keeping the selected revision accessible.
+	const sandboxProvider = provider(scripts([], [], []))
+	const prepare = sandboxProvider.prepareRepository
+	sandboxProvider.prepareRepository = async (sandbox, url, options) => {
+		assert.equal(options.revision, fixtureCommit)
+		return prepare(sandbox, url, options)
+	}
+	const card = await inspectRepository({
+		repositoryUrl: fixtureUrl,
+		revision: fixtureCommit,
+		sandboxProvider,
+		limits: { maxUpgrades: 1 },
+	})
+	assert.equal(card.repository.commit, fixtureCommit)
+})
+
+test("rejects malformed revisions before allocation and reclaims failed checkouts", async () => {
+	const sandboxProvider = provider([])
+	const options = { repositoryUrl: fixtureUrl, revision: fixtureCommit, sandboxProvider }
+	const actions: string[] = []
+	// Record provisioning boundaries for each failed attempt.
+	const onEvent = (event: InspectionEvent): void => {
+		if (event.type === "sandbox.event") {
+			actions.push(event.action)
+		}
+	}
+	await assert.rejects(inspectRepository({ ...options, revision: "main", onEvent }), /full commit SHA/)
+	assert.equal(actions.length, 0)
+	// Verify cleanup whether GitHub rejects the pin or a provider returns another commit.
+	for (const result of ["mismatch", "inaccessible"]) {
+		sandboxProvider.prepareRepository = async () => {
+			if (result === "inaccessible") {
+				throw new Error("Commit inaccessible")
+			}
+			return "f".repeat(40)
+		}
+		// Require teardown before any project command can run.
+		await assert.rejects(inspectRepository({ ...options, onEvent }))
+		assert.equal(actions.at(-1), "deleted")
+		assert.ok(!actions.includes("network-locked"))
+	}
+})

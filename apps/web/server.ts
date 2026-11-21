@@ -3,23 +3,29 @@ import { serveStatic } from "hono/bun"
 import { createSite } from "./createSite.tsx"
 import { startInspections } from "./startInspections.ts"
 
-const { replay, port, origin, inspections } = await startInspections()
-// use the build manifest to locate the hashed client assets
+// Resolve the immutable asset manifest once for both startup and live requests.
 const build = resolve(import.meta.dir, "dist")
 const manifest = await Bun.file(resolve(build, ".vite/manifest.json")).json()
 const entry = manifest["client.tsx"]
-const app = createSite({
-	inspections,
-	origin,
-	replay,
-	assets: { script: `/${entry.file}`, styles: (entry.css ?? []).map((file: string) => `/${file}`) },
+const assets = { script: `/${entry.file}`, styles: (entry.css ?? []).map((file: string) => `/${file}`) }
+
+function application(runtime: Awaited<ReturnType<typeof startInspections>>): ReturnType<typeof createSite> {
+	const app = createSite({ ...runtime, assets })
+	app.get("/assets/*", serveStatic({ root: build }))
+	return app
+}
+
+const runtime = await startInspections({
+	onConfigured: (ready) => {
+		app = application(ready)
+	},
 })
-// serve the application and its assets from the same origin
-app.get("/assets/*", serveStatic({ root: build }))
+let app = application(runtime)
+// Resolve the active worker for each request while preserving open report streams.
 Bun.serve({
 	hostname: process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1",
-	port,
-	fetch: app.fetch,
+	port: runtime.port,
+	fetch: (request) => app.fetch(request),
 	idleTimeout: 60,
 })
-console.info(`Health Code listening on port ${port}`)
+console.info(`Health Code listening on port ${runtime.port}`)

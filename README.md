@@ -3,6 +3,21 @@
 Health Code inspects dependency upgrades in public GitHub repositories inside a Runta sandbox.
 Its TypeScript library is the shared engine for the site and MCP server. [Hosted site](https://runhealthcode.dev)
 
+## Try an inspection
+
+Open [Health Code](https://runhealthcode.dev), enter a public JavaScript or TypeScript GitHub repository and follow the inspection. Share its Report Card link to show the inspected commit, checks and sandbox timeline. For a local coding agent, run `npx @health-code/mcp setup` after configuring your Runta account as described under MCP setup.
+
+```mermaid
+flowchart LR
+  Browser --> Web["Web · Hono, React, SQLite"]
+  Agent["Claude Code or Codex"] --> MCP["MCP · stdio"]
+  Web --> Library["health-code"]
+  MCP --> Library
+  Library --> Runta["Runta sandbox"]
+```
+
+Live inspections create Runta runtimes, restrict installation traffic to registry hosts and give agents scoped secret stubs. Development replay reads a recording and works without credentials. The hosted service is anonymous. Health Code has no account or paid tier.
+
 ## Inspect a repository
 
 The `health-code` package exports the same ESM entry to Node and Bun. Supply a Sandbox Provider and consume the returned versioned JSON Report Card. Each caller owns storage and scheduling.
@@ -129,3 +144,14 @@ A **Final patch check** produces **Patch verification**. **Download patch** prov
 **Model cost** uses recorded token usage and the caller’s pricing. **Reserved upper bound** shows the amount retained for a request whose receipt is missing. **Output tokens** reports measured reply tokens.
 
 The **Test file errors** list (`testFileErrors`) records the file and reason for each load, setup or other runner error outside a named case. Named test failures and skips have their own counts.
+
+
+## Release and hosted verification
+
+Run `bash scripts/release-packages.sh --dry-run` to build and inspect both npm tarballs locally. Both packages trust `doubleoevan/health-code` and `release.yml` with staged publishing permission and no GitHub environment. A matching tag stages both tarballs with provenance. Approve the library and then the scoped MCP version on npmjs.com. Run the release workflow manually against the same tag to verify the public digests and signed provenance. If a stage is already pending, review it on npmjs.com before retrying the workflow.
+
+Run `bun x playwright install chromium` once for browser acceptance. Use `bun run test:hosted` with the deployment origin, its Runta namespace and its inventory credentials supplied through Doppler. The browser uses the public submission form, including Turnstile. Each completed case writes its report URL, revision, prompt versions and observed verdicts under `logs/hosted/`. The script reopens CarlNotes through the cache and checks provider inventory for leftover runtimes. A daily cap can require continuing the suite after midnight UTC.
+
+## License
+
+Health Code is available under the [MIT License](LICENSE).

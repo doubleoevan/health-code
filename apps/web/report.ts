@@ -8,6 +8,7 @@ import type {
 	Verdict,
 } from "health-code"
 
+export const mcpSetupUrl = "https://github.com/doubleoevan/health-code#mcp-setup"
 export const replayRepositoryUrl = "https://github.com/example/project"
 type StoredSandboxEvent = Omit<Extract<ModelRequestSandboxEvent, { type: "sandbox.event" }>, "action"> & {
 	action: "model-relay-started"
@@ -25,6 +26,7 @@ export type UpgradeCard = Pick<UpgradeReport, "dependency" | "from" | "to" | "ob
 	checks: Record<"install" | "typecheck" | "tests", string>
 	verdict?: Verdict
 	reason?: string
+	untestedReason?: string
 	testChanges?: string[]
 	summary?: string
 	// cite the release and repository locations supporting each match
@@ -45,6 +47,7 @@ export type UpgradeCard = Pick<UpgradeReport, "dependency" | "from" | "to" | "ob
 }
 // combine baseline and upgrade evidence for the public report
 export type PublishedCard = {
+	promptVersions?: ReportCard["promptVersions"]
 	usageAsOf?: string
 
 	version: 1
@@ -58,12 +61,15 @@ export type PublishedCard = {
 	upgrades: UpgradeCard[]
 	featureCount: number
 }
+
 type InspectionState = "queued" | "running" | "interrupted" | "failed" | "complete"
 // combine persisted state with the events and report visible to visitors
 export type Snapshot = {
 	id: string
 	repositoryUrl: string
+	position?: number | null
 	state: InspectionState
+	// Keep the server snapshot aligned with the resumable event cursor.
 	message: string | null
 	events: SiteEvent[]
 	card: PublishedCard | null

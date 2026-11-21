@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test"
-import type { ReportCard } from "health-code"
+import { createFakeSandboxProvider, inspectRepository, type ReportCard } from "health-code"
 import { createLiveSource } from "./configureSite.ts"
 import { createTestSite, replay } from "./fixtures/createTestSite.ts"
+import { toLaunchLimits } from "./launchLimits.ts"
 import { publishReport } from "./publishReport.ts"
 import { replayRepositoryUrl as repositoryUrl } from "./report.ts"
 import { InspectionStore } from "./storeInspections.ts"
@@ -26,7 +27,12 @@ test("live inspections forward all four model roles, limits, credentials and eve
 			called = true
 			expect(options.repositoryUrl).toBe(repositoryUrl)
 			expect(options.githubToken).toBe(githubToken)
-			expect(options.limits).toEqual({ maxUpgrades: 1, maxCostUsd: 3, maxDurationMs: 420000 })
+			expect(options.limits).toEqual({
+				maxUpgrades: 1,
+				maxCostUsd: 3,
+				maxDurationMs: 420000,
+				agent: { repair: { maxCostUsd: 2 }, featureAdoption: { maxCostUsd: 1 } },
+			})
 			// verify the same configured model reaches each role
 			const { releaseSummary, featureMatch, repair, featureAdoption } = options.models
 			expect([
@@ -67,6 +73,56 @@ test("live inspections forward all four model roles, limits, credentials and eve
 	expect(() => createLiveSource({ ...environment, HEALTH_CODE_STORED_CREDENTIAL: "" })).toThrow()
 })
 
+test("admitted workers forward the current ceilings and the immutable revision", async () => {
+	const output = await replay.inspect(repositoryUrl, () => {})
+	const environment = {
+		RUNTA_TOKEN: "fixture",
+		ANTHROPIC_API_KEY: "fixture",
+		HEALTH_CODE_STORED_CREDENTIAL: "fixture",
+		HEALTH_CODE_DEPLOYMENT: "fixture",
+	}
+	// Verify the public options at the point where the worker hands off to the library.
+	const settings = toLaunchLimits({
+		HEALTH_CODE_MAX_COST_USD: "4",
+		HEALTH_CODE_MAX_UPGRADES: "1",
+		HEALTH_CODE_REPAIR_COST_USD: "1.5",
+		HEALTH_CODE_ADOPTION_COST_USD: "0.5",
+	})
+
+	const source = createLiveSource(environment, async (options) => {
+		expect(options.revision).toBe(output.report.repository.commit)
+		expect(options.limits?.maxCostUsd).toBe(4)
+		expect(options.limits?.maxUpgrades).toBe(1)
+		expect(options.limits?.agent?.repair?.maxCostUsd).toBe(1.5)
+		expect(options.limits?.agent?.featureAdoption?.maxCostUsd).toBe(0.5)
+		return output.report
+	})
+
+	await source.inspect(repositoryUrl, () => {}, { settings, revision: output.report.repository.commit })
+})
+
+test("an unavailable sandbox quote stops an inspection before it allocates a runtime", async () => {
+	const sandboxProvider = createFakeSandboxProvider({ commit: "a".repeat(40), commands: [] })
+	sandboxProvider.estimateMaxCost = () => Number.NaN
+	let allocated = false
+	sandboxProvider.createSandbox = async () => {
+		allocated = true
+		throw new Error("Unexpected allocation")
+	}
+
+	const source = createLiveSource(
+		{
+			RUNTA_TOKEN: "fixture",
+			ANTHROPIC_API_KEY: "fixture",
+			HEALTH_CODE_STORED_CREDENTIAL: "fixture",
+			HEALTH_CODE_DEPLOYMENT: "fixture",
+		},
+		(options) => inspectRepository({ ...options, sandboxProvider }),
+	)
+	await expect(source.inspect(repositoryUrl, () => {})).rejects.toThrow(/price bound/)
+	expect(allocated).toBe(false)
+})
+
 test("stored version 1 and version 2 reports show agent startup only with explicit sandbox evidence", async () => {
 	// load both report versions into the same web application
 	const legacy: ReportCard = await Bun.file(new URL("./fixtures/recorded/inspection.json", import.meta.url)).json()
@@ -81,7 +137,7 @@ test("stored version 1 and version 2 reports show agent startup only with explic
 		}
 		store.finish(id, publishReport({ report }, "MPL-2.0"))
 		// check the visible startup and patch controls for each version
-		const html = await (await app.request("/r/" + id)).text()
+		const html = await (await app.request(`/r/${id}`)).text()
 		expect(html.includes("Agent started with its real key withheld")).toBe(report.version === 2)
 		expect(html.includes("Copy patch instructions")).toBe(report.version === 2)
 	}
@@ -149,7 +205,7 @@ test("large raw output is fetched only when the licensed detail is opened", asyn
 	expect((await app.request(path)).status).toBe(404)
 	// expose the licensed detail only through its dedicated endpoint
 	store.finish(id, publishReport({ report }, "MIT"))
-	expect(await (await app.request("/r/" + id)).text()).not.toContain(text)
+	expect(await (await app.request(`/r/${id}`)).text()).not.toContain(text)
 	expect(await (await app.request(`/api/inspections/${id}/events`)).text()).not.toContain(text)
 	expect(await (await app.request(path)).text()).toBe(text)
 	store.database.close()

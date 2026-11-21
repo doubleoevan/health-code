@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto"
-import { readFile } from "node:fs/promises"
 import type { ModelRole } from "./agentContracts.ts"
-
 import { redactEvidence } from "./collectEvents.ts"
+import { InspectionPrompts } from "./readPrompt.ts"
 
-export async function buildPrompt(role: ModelRole, evidence: unknown): Promise<string> {
-	// load the role's prompt and strip its metadata
-	const template = await readFile(new URL(`../prompts/${role}.md`, import.meta.url), "utf8")
-	const content = template.replace(/^---\n[\s\S]*?\n---\n/, "").trim()
+export async function buildPrompt(
+	role: ModelRole,
+	evidence: unknown,
+	prompts = new InspectionPrompts(),
+): Promise<string> {
+	// Resolve the effective source for this inspection.
+	const content = prompts.template(role).body
 	// remove embedded fence markers before serializing redacted evidence
 	const nonce = randomUUID()
 	const serialized = JSON.stringify(redactEvidence(evidence), (_key, value: unknown) =>

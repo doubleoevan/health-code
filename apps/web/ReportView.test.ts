@@ -79,11 +79,21 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 	// render the published report for each possible verdict
 	for (const verdict of ["Passes as is", "Fixed", "Fixed with test changes", "Can't fix", "Untested"] as const) {
 		upgrade.verdict = verdict
+		if (verdict === "Untested") {
+			upgrade.result = { status: "untested", reason: "The pinned project has no test script.", evidence: [] }
+		}
+		output.report.promptVersions = {
+			model: [{ name: "repair", version: 12, sha256: "e".repeat(64) }],
+			handoff: [{ name: "applyPatch", version: 1, sha256: "c".repeat(64) }],
+		}
 		const id = store.enqueue(repository)
 		store.finish(id, publishReport(output, "MPL-2.0"))
 		const html = (await (await app.request(`/r/${id}`)).text()).replaceAll("<!-- -->", "")
 		for (const expected of [
 			verdict.replace("'", "&#x27;"),
+			"repair v12",
+			"applyPatch v1",
+			...(verdict === "Untested" ? ["Why this upgrade was untested", "The pinned project has no test script."] : []),
 			"<h1>1 upgrade inspected, 1 feature patch, 1 connection blocked during install</h1>",
 			"Checks before the upgrade",
 			'Usage as of <time dateTime="2026-11-20T10:42:00.000Z">2026-11-20 10:42:00 UTC</time>',
@@ -108,6 +118,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			"Fixture setup failed",
 			"Adoption outcome",
 			"Why repair stopped",
+			"Turn limit reached",
 			"Added dependencies",
 			"options-helper@1.0.0",
 			"Model cost",

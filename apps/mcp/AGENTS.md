@@ -1,6 +1,6 @@
 # Local MCP server
 
-This private workspace owns the `health-code mcp` command, local setup, stdio tools and storage. Import inspection behavior from the public `health-code` entry.
+This workspace publishes the scoped launcher and owns the `health-code mcp` command, local setup, stdio tools and storage. Import inspection behavior from the public `health-code` entry.
 
 | Entry | Responsibility |
 | --- | --- |
@@ -15,3 +15,5 @@ This private workspace owns the `health-code mcp` command, local setup, stdio to
 Run `bun run --cwd apps/mcp build` after building the library. Run `bun test ./apps/mcp` for setup, tool behavior, package contents and Node stdio tests. The tests use temporary homes, a fake Sandbox Provider and recorded evidence. The package smoke test packs the public library, exercises `npx health-code mcp setup` with a fake account and connects to `npx health-code mcp` across process restarts. The app build emits JavaScript into `../../packages/health-code/dist/mcp/` for the shared release. See the root README for client configuration.
 
 The MCP sets `callerModelExecution` to `"modelRequestSandbox"`. A default client needs only `RUNTA_TOKEN` after setup.
+
+`launch.mjs` is the scoped npm entry. It resolves the matching library release and runs its declared CLI over stdio. The packed Node test exercises both entry points.

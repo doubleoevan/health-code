@@ -13,11 +13,14 @@ type Input = {
 	prompt: string
 	maxOutputTokens: number
 	stub: string
+	// Enable the edit tool only on full Agent Attempt turns.
 	editTool?: boolean
 	denyOnly?: boolean
+	modelCallId?: string
 }
 // report the gateway status and billed model usage
 type Receipt = {
+	timing?: { modelCallId: string; durationMs: number }
 	status: number
 	errorCode?: string
 	text?: string
@@ -28,7 +31,7 @@ type Receipt = {
 	requestId?: string
 }
 export async function infer(
-	{ route, url, prompt, maxOutputTokens, stub, denyOnly, editTool }: Input,
+	{ route, url, prompt, maxOutputTokens, stub, denyOnly, editTool, modelCallId }: Input,
 	send = requestModel,
 ): Promise<Receipt> {
 	// probe the gateway before sending the full prompt
@@ -64,7 +67,20 @@ export async function infer(
 	const provider =
 		route.protocol === "anthropic" ? createAnthropic(settings) : createOpenAICompatible({ ...settings, name: "caller" })
 	try {
+		let started: number | undefined
 		const reply = await generateText({
+			telemetry: modelCallId
+				? {
+						isEnabled: true,
+						recordInputs: false,
+						recordOutputs: false,
+						integrations: {
+							onStart: () => {
+								started = performance.now()
+							},
+						},
+					}
+				: undefined,
 			model: provider(route.modelId),
 			prompt,
 			maxRetries: 0,
@@ -90,6 +106,7 @@ export async function infer(
 			inputTokens: reply.usage.inputTokens,
 			outputTokens: reply.usage.outputTokens,
 			requestId: reply.response.id,
+			timing: toCallTiming(modelCallId, started),
 		}
 	} catch (error) {
 		// expose only a short transport code on failure
@@ -98,6 +115,13 @@ export async function infer(
 		return { status, errorCode: /^[A-Z_]{3,50}$/.test(code) ? code : errorCode }
 	}
 }
+// Return a local receipt only when the caller enabled tracing.
+function toCallTiming(modelCallId?: string, started?: number): Receipt["timing"] {
+	if (modelCallId && started !== undefined) {
+		return { modelCallId, durationMs: Math.round(performance.now() - started) }
+	}
+}
+
 // translate incomplete tool replies into retry decisions
 function encodeDecision(input: unknown, finish: string): string {
 	if (finish === "length") {

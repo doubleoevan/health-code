@@ -1,35 +1,59 @@
-import { type FormEvent, type ReactElement, useEffect, useState } from "react"
+import { type FormEvent, type ReactElement, useCallback, useEffect, useState } from "react"
+import { Challenge } from "./Challenge.tsx"
 import { Link, ReportView } from "./ReportView.tsx"
-import { replayRepositoryUrl, type SiteEvent, type Snapshot } from "./report.ts"
+import { mcpSetupUrl, replayRepositoryUrl, type SiteEvent, type Snapshot } from "./report.ts"
 import { Timeline } from "./Timeline.tsx"
 
-export type PageProps = { snapshot: Snapshot | null; url: string; replay: boolean }
-function Home({ replay }: { replay: boolean }): ReactElement {
+export type PageProps = { paused?: boolean; snapshot: Snapshot | null; url: string; replay: boolean }
+function Home({ replay, paused }: { replay: boolean; paused?: boolean }): ReactElement {
 	const [error, setError] = useState("")
+	const [verification, setVerification] = useState<{ siteKey: string; repositoryUrl: string } | null>(null)
 	const [pending, setPending] = useState(false)
-	async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-		// read the submitted repository and clear the previous error
-		event.preventDefault()
-		const input = new FormData(event.currentTarget).get("repositoryUrl")
+	const [offerMcp, setOfferMcp] = useState(false)
+	const submit = useCallback(async (repositoryUrl: string, challenge?: string): Promise<void> => {
 		setPending(true)
 		setError("")
+		setOfferMcp(false)
 		try {
-			// request an inspection and open its report page
 			const response = await fetch("/api/inspections", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ repositoryUrl: input }),
+				body: JSON.stringify({ repositoryUrl, challenge }),
 			})
 			const body = await response.json()
 			if (!response.ok) {
+				// Verify only a new submission and resume the same repository after success.
+				if (!challenge && body.siteKey) {
+					setVerification({ siteKey: body.siteKey, repositoryUrl })
+					return
+				}
+				setOfferMcp(Boolean(body.mcpSetupUrl || challenge))
 				throw new Error(body.message ?? "Could not start the inspection.")
 			}
 			window.location.assign(`/r/${body.id}`)
 		} catch (failure) {
-			// let the developer correct and resubmit the form
 			setError(failure instanceof Error ? failure.message : "Could not start the inspection.")
 			setPending(false)
 		}
+	}, [])
+	const verified = useCallback(
+		(token: string): void => {
+			if (verification) {
+				setVerification(null)
+				void submit(verification.repositoryUrl, token)
+			}
+		},
+		[submit, verification],
+	)
+	const retry = useCallback((): void => {
+		setVerification(null)
+		setPending(false)
+		setOfferMcp(true)
+		setError("Verification could not finish. Retry the inspection or use the MCP.")
+	}, [])
+	function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+		event.preventDefault()
+		void submit(String(new FormData(event.currentTarget).get("repositoryUrl")))
 	}
 	return (
 		<section className="home">
@@ -44,6 +68,12 @@ function Home({ replay }: { replay: boolean }): ReactElement {
 				and successful attempts return tested patches.
 			</p>
 			{/* public repository submission */}
+			{paused && (
+				<p role="status">
+					The hosted budget is reserved or temporarily unavailable. The daily allowance resets at 00:00 UTC. Cached
+					reports remain available. <Link href={mcpSetupUrl}>Use the MCP with your Runta account</Link>.
+				</p>
+			)}
 			<form onSubmit={handleSubmit}>
 				<label htmlFor="repository">Public GitHub repository</label>
 				<div className="field">
@@ -56,19 +86,36 @@ function Home({ replay }: { replay: boolean }): ReactElement {
 						autoComplete="off"
 						spellCheck={false}
 						placeholder="https://github.com/owner/repository"
+						readOnly={pending}
+						onChange={() => {
+							setVerification(null)
+							setError("")
+							setOfferMcp(false)
+						}}
 						defaultValue={replay ? replayRepositoryUrl : ""}
 					/>
 					<button type="submit" disabled={pending}>
-						{pending ? "Starting…" : "Inspect repository"}
+						{verification ? "Verifying…" : pending ? "Starting…" : error ? "Retry inspection" : "Inspect repository"}
 					</button>
 				</div>
+				{verification && <Challenge siteKey={verification.siteKey} onToken={verified} onFailure={retry} />}
 				{/* submission error */}
-				{error && <p role="alert">{error}</p>}
+				{error && (
+					<p role="alert">
+						{error} {offerMcp && <Link href={mcpSetupUrl}>MCP setup</Link>}
+					</p>
+				)}
 			</form>
 		</section>
 	)
 }
 function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): ReactElement {
+	const [position, setPosition] = useState(snapshot.position)
+	useEffect(() => {
+		if (snapshot.card) {
+			void fetch(`/api/inspections/${snapshot.id}/view`, { method: "POST" }).catch(() => {})
+		}
+	}, [snapshot.id, snapshot.card])
 	const [events, setEvents] = useState(snapshot.events)
 	const [disconnected, setDisconnected] = useState(false)
 	const live = snapshot.state === "running" || snapshot.state === "queued"
@@ -79,6 +126,7 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 		// resume after the last event in the server snapshot
 		const after = snapshot.events.at(-1)?.sequence ?? 0
 		const stream = new EventSource(`/api/inspections/${snapshot.id}/events?after=${after}`)
+		stream.addEventListener("position", (event) => setPosition(JSON.parse(event.data)))
 		stream.onopen = () => setDisconnected(false)
 		stream.onerror = () => setDisconnected(true)
 		// append only events newer than the displayed sequence
@@ -109,7 +157,12 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 					</h1>
 					<p className="mono">{snapshot.repositoryUrl}</p>
 					<p role="status">
-						{snapshot.message ?? (events.length === 0 ? "Queued for inspection" : "Inspection in progress")}
+						{snapshot.message ??
+							(position
+								? `Queue position: ${position}`
+								: events.length === 0
+									? "Queued for inspection"
+									: "Inspection in progress")}
 					</p>
 				</>
 			)}
@@ -119,7 +172,7 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 		</>
 	)
 }
-export function Page({ snapshot, url, replay }: PageProps): ReactElement {
+export function Page({ snapshot, url, replay, paused }: PageProps): ReactElement {
 	return (
 		<main>
 			{/* home link and replay indicator */}
@@ -133,7 +186,7 @@ export function Page({ snapshot, url, replay }: PageProps): ReactElement {
 				{replay && <small>Developer replay · example evidence</small>}
 			</div>
 			{/* repository form or inspection view */}
-			{snapshot ? <Inspection snapshot={snapshot} url={url} /> : <Home replay={replay} />}
+			{snapshot ? <Inspection snapshot={snapshot} url={url} /> : <Home replay={replay} paused={paused} />}
 		</main>
 	)
 }

@@ -7,6 +7,7 @@ import {
 	type Operation,
 	type Stage,
 } from "./contracts.ts"
+import { InspectionPrompts } from "./readPrompt.ts"
 
 const defaults = { setup: 300000, detect: 60000, install: 180000, typecheck: 120000, tests: 180000 }
 
@@ -86,6 +87,7 @@ export function cleanupAllowance(durationMs: number): number {
 export class InspectionContext {
 	readonly id = randomUUID()
 	readonly timeline: InspectionEvent[] = []
+	readonly prompts: InspectionPrompts
 	readonly started = Date.now()
 	readonly cleanupMs: number
 	readonly end: number
@@ -105,6 +107,7 @@ export class InspectionContext {
 		private readonly observe?: (event: InspectionEvent) => () => Promise<void>,
 		reserveCleanupGrace = false,
 	) {
+		this.prompts = new InspectionPrompts(options.prompts)
 		const limits = options.limits ?? {}
 		const duration = limits.maxDurationMs ?? 1800000
 		const cost = limits.maxCostUsd ?? 0.25

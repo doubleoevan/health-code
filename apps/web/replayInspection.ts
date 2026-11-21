@@ -1,5 +1,6 @@
 import type { ReportCardV2 } from "health-code"
 import { type InspectionSource, SiteError } from "./executeInspection.ts"
+import type { RepositoryHead } from "./recordAdmissions.ts"
 import { replayRepositoryUrl, type SiteEvent } from "./report.ts"
 
 // Use the fixture URL to prevent a recording being attributed to another repository.
@@ -9,11 +10,18 @@ export function createReplaySource(
 	sleep: (milliseconds: number) => Promise<void> = Bun.sleep,
 ): InspectionSource<{ report: ReportCardV2 }> {
 	return {
-		async recover(): Promise<void> {},
+		async recover(): Promise<number> {
+			return 0
+		},
 		async verify(url: string): Promise<void> {
 			if (url !== replayRepositoryUrl) {
 				throw new SiteError(`Replay uses ${replayRepositoryUrl}. Paste that URL to inspect the recording.`)
 			}
+		},
+		async resolve(url): Promise<RepositoryHead> {
+			await this.verify(url)
+			const report: ReportCardV2 = await Bun.file(recording).json()
+			return { repositoryId: "fixture", revision: report.repository.commit, sizeKiB: 1 }
 		},
 		async license(): Promise<string> {
 			return "MPL-2.0"

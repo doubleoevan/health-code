@@ -133,7 +133,9 @@ test("version one report can be replayed by a reader that ignores new fields", a
 		inspectionId: "inspection",
 		sandboxId: "sandbox",
 	}
-	assert.deepEqual(JSON.parse(JSON.stringify(card, (key, value) => stable[key] ?? value)), golden)
+	const { promptVersions, ...legacy } = card
+	assert.deepEqual(promptVersions, { model: [], handoff: [] })
+	assert.deepEqual(JSON.parse(JSON.stringify(legacy, (key, value) => stable[key] ?? value)), golden)
 	// read the same versioned fields when the report contains extra data
 	const reader = ({ version, timeline }: typeof card): unknown => ({ version, timeline })
 	assert.deepEqual(reader(Object.assign({}, golden, { additional: "new" })), reader(golden))

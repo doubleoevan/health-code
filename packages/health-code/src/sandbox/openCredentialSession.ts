@@ -5,6 +5,7 @@ import { bounded, checkOperation } from "../collectEvents.ts"
 import { InspectionError, type Operation } from "../contracts.ts"
 import { agentOutputTokens } from "../modelBudget.ts"
 import { confirmNetworkPolicy, registryHosts } from "../networkPolicy.ts"
+import { credentialProbePrompt } from "../readPrompt.ts"
 import { checked, providerRequest, type Runtime, remainingOperation } from "./requestRuntime.ts"
 import { credentialTarget, setCredentialBinding } from "./setCredentialBinding.ts"
 
@@ -27,12 +28,16 @@ const receipt = z.object({
 	inputTokens: z.number().int().nonnegative().optional(),
 	outputTokens: z.number().int().nonnegative().optional(),
 	requestId: z.string().optional(),
+	timing: z
+		.object({ modelCallId: z.uuid(), durationMs: z.number().int().min(0).max(3600000) })
+		.optional()
+		.catch(undefined),
 })
-const probePrompt = "Reply OK."
 
 /** Isolates trusted inference until removal and registry-only egress are verified. */
 export async function openCredentialSession(options: Options): Promise<CredentialSession> {
 	const { runtime, route } = options
+	const probePrompt = credentialProbePrompt()
 	const target = credentialTarget(route)
 	const guestRoute: ModelRoute = {
 		protocol: route.protocol,
@@ -93,6 +98,7 @@ export async function openCredentialSession(options: Options): Promise<Credentia
 						url: target.href,
 						prompt,
 						maxOutputTokens: output,
+						modelCallId: operation.modelCallId,
 						denyOnly,
 					}),
 					timeoutSecs: Math.max(1, Math.ceil(operation.timeoutMs / 1000)),

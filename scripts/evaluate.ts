@@ -45,6 +45,7 @@ async function evaluateBaseline(record: boolean, signal: AbortSignal): Promise<v
 			case: fixture.id,
 			commit: fixture.commit,
 			status: record ? "pending-review" : "passed",
+			promptVersions: card.promptVersions,
 			...observed,
 			verdict: null,
 			referenceDiff: null,

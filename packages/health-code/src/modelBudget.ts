@@ -1,8 +1,10 @@
 import type { AgentRole, InspectionOptionsV2, ModelReply, ModelRole, ModelUsage, Pricing } from "./agentContracts.ts"
-import { bounded, checkOperation } from "./collectEvents.ts"
+import { bounded, checkOperation, type InspectionContext } from "./collectEvents.ts"
 import { InspectionError, type Operation } from "./contracts.ts"
 
 import { sandboxModelCallTimeoutMs } from "./modelRequestSandbox.ts"
+
+import { type GenerationTelemetry, traceGeneration } from "./traceGeneration.ts"
 
 export const agentOutputTokens = 8192
 const defaults = {
@@ -38,6 +40,7 @@ export type Ledger = { remainingMicros: number; end: number; usage: ModelUsage[]
 // describe a priced request and its applicable budgets
 type Request = {
 	ledger: Ledger
+	context?: InspectionContext
 	execution?: "modelRequestSandbox"
 	verification?: boolean
 	toolBytes?: number
@@ -51,7 +54,7 @@ type Request = {
 	prompt: string
 	output: number
 	signal?: AbortSignal
-	send: (operation: Operation) => Promise<ModelReply>
+	send: (operation: Operation, telemetry?: GenerationTelemetry) => Promise<ModelReply>
 }
 
 export async function paidRequest(request: Request): Promise<string> {
@@ -90,27 +93,19 @@ export async function paidRequest(request: Request): Promise<string> {
 	}
 	ledger.usage.push(receipt)
 	try {
-		// send the request under the tightest applicable deadline
-		const reply = await bounded((signal) => request.send({ signal, timeoutMs: duration }), {
-			timeoutMs: duration,
-			signal: request.signal,
-		})
+		const reply = await dispatchRequest(request, duration)
 		settle({ request, reply, reserve, receipt })
 		return reply.text
 	} catch (error) {
-		releaseUnsentReservation({ request, error, reserve, receipt })
-		// stop the attempt when model charging cannot be confirmed
-		if (attempt) {
-			attempt.turns = 0
-		}
+		// Preserve the reservation until the transport proves the call was refused.
+		reconcileFailedRequest({ request, error, reserve, receipt })
 		throw error
 	} finally {
-		// Include time spent waiting for a missing receipt.
 		receipt.durationMs = Date.now() - started
 	}
 }
 
-function releaseUnsentReservation({
+function reconcileFailedRequest({
 	request,
 	error,
 	reserve,
@@ -121,15 +116,80 @@ function releaseUnsentReservation({
 	reserve: number
 	receipt: ModelUsage
 }): void {
-	const { ledger } = request
-	const deniedBeforeDispatch = error instanceof InspectionError && error.code === "credential-binding"
-	// Release the model reservation only after a verified pre-dispatch refusal.
-	if (request.execution === "modelRequestSandbox" && deniedBeforeDispatch) {
+	const { ledger, attempt } = request
+	// Return only money known to be unspent.
+	if (refusedBeforeDispatch(request, error)) {
 		ledger.remainingMicros += reserve
 		ledger.usage.splice(ledger.usage.indexOf(receipt), 1)
 	}
+	// Stop the attempt when charging cannot be confirmed.
+	if (attempt) {
+		attempt.turns = 0
+	}
 }
 
+function refusedBeforeDispatch(request: Request, error: unknown): boolean {
+	return (
+		request.execution === "modelRequestSandbox" &&
+		error instanceof InspectionError &&
+		error.code === "credential-binding"
+	)
+}
+
+async function dispatchRequest(request: Request, duration: number): Promise<ModelReply> {
+	// Attribute only calls admitted by the budget.
+	const name = request.verification ? "verifyCredential" : request.role
+	const prompts = request.context?.prompts
+	const tracer = request.context?.options.telemetry
+	const trace =
+		prompts && tracer
+			? traceGeneration({ tracer, role: request.role, prompt: prompts.template(name).reference })
+			: undefined
+	// A timeout after dispatch can leave a billable request without a receipt.
+	let dispatched = false
+	try {
+		// send the request under the tightest applicable deadline
+		const reply = await bounded(
+			(signal) => {
+				dispatched = true
+				trace?.start()
+				const telemetry = trace && {
+					isEnabled: true,
+					recordInputs: false,
+					recordOutputs: false,
+					integrations: trace.integration,
+				}
+				return request.send(
+					{ signal, timeoutMs: duration, ...(trace && { modelCallId: trace.modelCallId }) },
+					telemetry,
+				)
+			},
+			{
+				timeoutMs: duration,
+				signal: request.signal,
+			},
+		)
+		trace?.finish("complete", reply)
+		return reply
+	} catch (error) {
+		// Discard a request rejected during remote route verification.
+		if (refusedBeforeDispatch(request, error)) {
+			dispatched = false
+		}
+		trace?.finish(
+			request.signal?.aborted ||
+				(error instanceof InspectionError && ["deadline", "cancelled", "timeout"].includes(error.code))
+				? "cancelled"
+				: "failed",
+		)
+		throw error
+	} finally {
+		// Include failed calls whose provider may still have charged for dispatch.
+		if (dispatched) {
+			prompts?.record(name)
+		}
+	}
+}
 // calculate the worst-case charge from the route bounds
 export function reserveCost(request: Pick<Request, "pricing" | "prompt" | "toolBytes" | "output">): number {
 	const { pricing } = request

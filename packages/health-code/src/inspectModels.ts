@@ -125,7 +125,7 @@ export class ModelInspection {
 		const configured = this.options.models[role]
 		const { pricing } = configured
 		// build a bounded prompt for the selected host role
-		const prompt = await buildPrompt(role, evidence)
+		const prompt = await buildPrompt(role, evidence, context.prompts)
 		const output = callerOutputTokens
 		const reserve = reserveCost({ pricing, prompt, output })
 		if (this.modelRequestSandbox && "credential" in configured) {
@@ -166,6 +166,7 @@ export class ModelInspection {
 		const text = await context.step("setup", role, (operation) =>
 			paidRequest({
 				ledger: this.ledger,
+				context,
 				execution: this.modelRequestSandbox ? "modelRequestSandbox" : undefined,
 				role,
 				step: role,
@@ -174,7 +175,7 @@ export class ModelInspection {
 				prompt,
 				output,
 				signal: operation.signal,
-				send: async (budget) => {
+				send: async (budget, telemetry) => {
 					if ("credential" in configured && this.modelRequestSandbox) {
 						return this.modelRequestSandbox.send({ role, route: configured, prompt, output }, budget)
 					}
@@ -189,6 +190,7 @@ export class ModelInspection {
 						maxRetries: 0,
 						maxOutputTokens: 1024,
 						abortSignal: budget.signal,
+						telemetry,
 					})
 					return {
 						text: reply.text,
