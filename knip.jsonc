@@ -9,7 +9,16 @@
 		"packages/*": {},
 		"apps/*": {},
 		"packages/health-code": {
-			"entry": ["src/index.ts", "guest/project.ts", "guest/observe.ts", "test/**/*.test.ts"],
+			"entry": [
+				"src/index.ts",
+				"guest/project.ts",
+				"guest/observe.ts",
+				"guest/agent.ts",
+				"guest/managePatch.ts",
+				"test/**/*.test.ts"
+			],
+			// Include dependencies used by the shipped declarations.
+			"ignoreDependencies": ["@types/json-schema"],
 			"project": ["src/**/*.ts", "guest/**/*.ts", "test/**/*.ts"]
 		}
 	}

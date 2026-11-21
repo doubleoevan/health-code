@@ -1,0 +1,63 @@
+import { randomUUID } from "node:crypto"
+import { type Command, type CommandResult, InspectionError, type Observation, type Operation } from "../contracts.ts"
+import { buildTestCommand } from "./executeTests.ts"
+import { checked, exec, type Runtime, remainingOperation } from "./requestRuntime.ts"
+
+export type Instance = {
+	runtime: Runtime
+	locked: boolean
+	updating: boolean
+	commands: number
+	testCapture?: string
+	hosts: string[]
+	observations: Map<string, { connections: Observation; files: Observation }>
+}
+
+async function replaceTestCapture(
+	instance: Instance,
+	command: { argv: string[] },
+	capture: string | undefined,
+	remaining: () => Operation,
+): Promise<void> {
+	if (capture || (command.argv[1] === "/opt/health-code/project.mjs" && command.argv[2] === "tests")) {
+		const previous = instance.testCapture
+		instance.testCapture = capture
+		if (previous) {
+			await checked(instance.runtime, ["rm", "-rf", "--", previous], remaining())
+		}
+	}
+}
+export async function executeCommand(instance: Instance, command: Command): Promise<CommandResult> {
+	if (instance.commands) {
+		throw new InspectionError("sandbox-busy", "Repository command is active")
+	}
+	instance.commands++
+	try {
+		const remaining = remainingOperation(command)
+		const id = randomUUID()
+		const dir = command.observe ? `/var/lib/health-code/evidence-${id}` : undefined
+		const { argv, capture } = buildTestCommand({ command, dir, id, previous: instance.testCapture })
+		await replaceTestCapture(instance, command, capture, remaining)
+		const result = await exec(instance.runtime, argv, command)
+		if (dir) {
+			const missing: Observation = { complete: false, reason: "Installation observer unavailable", findings: [] }
+			let evidence = { connections: missing, files: missing }
+			try {
+				const budget = remaining()
+				const raw = await checked(
+					instance.runtime,
+					["/opt/health-code/bin/node", "/opt/health-code/observe.mjs", dir, ...instance.hosts],
+					{ ...budget, timeoutMs: Math.min(5000, budget.timeoutMs) },
+				)
+				evidence = JSON.parse(raw)
+			} catch {
+				// Keep the check untested when the supervisor cannot provide complete evidence.
+			}
+			instance.observations.set(id, evidence)
+			result.observationId = id
+		}
+		return result
+	} finally {
+		instance.commands--
+	}
+}

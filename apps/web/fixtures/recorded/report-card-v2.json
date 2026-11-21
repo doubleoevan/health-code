@@ -1,0 +1,1313 @@
+{
+  "version": 2,
+  "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+  "repository": {
+    "url": "https://github.com/example/project",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "packageManager": {
+    "name": "npm",
+    "version": "11"
+  },
+  "baseline": {
+    "install": {
+      "status": "passed",
+      "evidence": [
+        {
+          "stdout": "Installed locked dependencies.",
+          "stderr": "",
+          "exitCode": 0,
+          "durationMs": 10,
+          "stdoutTruncated": false,
+          "stderrTruncated": false
+        }
+      ]
+    },
+    "typecheck": {
+      "status": "passed",
+      "evidence": [
+        {
+          "stdout": "",
+          "stderr": "",
+          "exitCode": 0,
+          "durationMs": 10,
+          "stdoutTruncated": false,
+          "stderrTruncated": false
+        }
+      ]
+    },
+    "tests": {
+      "status": "passed",
+      "evidence": [
+        {
+          "stdout": "{\"counts\":{\"passed\":1,\"failed\":0,\"skipped\":0,\"todo\":0},\"testFileErrors\":[]}",
+          "stderr": "",
+          "exitCode": 0,
+          "durationMs": 10,
+          "stdoutTruncated": false,
+          "stderrTruncated": false
+        }
+      ],
+      "inventory": {
+        "counts": {
+          "passed": 1,
+          "failed": 0,
+          "skipped": 0,
+          "todo": 0
+        },
+        "testFileErrors": []
+      }
+    }
+  },
+  "selection": {
+    "limit": 1,
+    "selected": [
+      {
+        "dependency": "widget",
+        "from": {
+          ".": "1.2.0"
+        },
+        "to": "1.3.0",
+        "kind": "minor"
+      }
+    ],
+    "eligible": [
+      {
+        "dependency": "widget",
+        "from": {
+          ".": "1.2.0"
+        },
+        "to": "1.3.0",
+        "kind": "minor"
+      }
+    ],
+    "omitted": [],
+    "skipped": []
+  },
+  "upgrades": [
+    {
+      "dependency": "widget",
+      "from": {
+        ".": "1.2.0"
+      },
+      "to": "1.3.0",
+      "kind": "minor",
+      "install": {
+        "status": "passed",
+        "evidence": [
+          {
+            "stdout": "Installed locked dependencies.",
+            "stderr": "",
+            "exitCode": 0,
+            "durationMs": 10,
+            "stdoutTruncated": false,
+            "stderrTruncated": false
+          }
+        ]
+      },
+      "typecheck": {
+        "status": "passed",
+        "evidence": [
+          {
+            "stdout": "",
+            "stderr": "",
+            "exitCode": 0,
+            "durationMs": 10,
+            "stdoutTruncated": false,
+            "stderrTruncated": false
+          }
+        ]
+      },
+      "tests": {
+        "status": "passed",
+        "evidence": [
+          {
+            "stdout": "{\"counts\":{\"passed\":1,\"failed\":0,\"skipped\":0,\"todo\":0},\"testFileErrors\":[]}",
+            "stderr": "",
+            "exitCode": 0,
+            "durationMs": 10,
+            "stdoutTruncated": false,
+            "stderrTruncated": false
+          }
+        ],
+        "inventory": {
+          "counts": {
+            "passed": 1,
+            "failed": 0,
+            "skipped": 0,
+            "todo": 0
+          },
+          "testFileErrors": []
+        }
+      },
+      "result": {
+        "status": "passed",
+        "evidence": [
+          {
+            "stdout": "Installed locked dependencies.",
+            "stderr": "",
+            "exitCode": 0,
+            "durationMs": 10,
+            "stdoutTruncated": false,
+            "stderrTruncated": false
+          },
+          {
+            "stdout": "",
+            "stderr": "",
+            "exitCode": 0,
+            "durationMs": 10,
+            "stdoutTruncated": false,
+            "stderrTruncated": false
+          },
+          {
+            "stdout": "{\"counts\":{\"passed\":1,\"failed\":0,\"skipped\":0,\"todo\":0},\"testFileErrors\":[]}",
+            "stderr": "",
+            "exitCode": 0,
+            "durationMs": 10,
+            "stdoutTruncated": false,
+            "stderrTruncated": false
+          }
+        ]
+      },
+      "observation": {
+        "complete": true,
+        "findings": [],
+        "destinations": []
+      },
+      "releaseSummary": {
+        "text": "Widget now provides shared configuration defaults.",
+        "sources": [
+          "https://github.com/example/widget/releases/tag/v1.3.0"
+        ]
+      },
+      "featureMatches": [
+        {
+          "feature": "Use the built-in configuration defaults",
+          "kind": "option",
+          "source": "https://github.com/example/widget/releases/tag/v1.3.0",
+          "location": {
+            "file": "example.js",
+            "line": 1,
+            "url": "https://github.com/example/project/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/example.js#L1"
+          },
+          "disposition": "adopted",
+          "patchId": "ada4db5bb37ae7eda33842a3e01a09a75ad236ed65c68243e83c39b46c530fee"
+        }
+      ],
+      "locators": [],
+      "installSize": {
+        "before": 128,
+        "after": 256,
+        "delta": 128
+      },
+      "verdict": "Passes as is",
+      "patches": [
+        {
+          "id": "3262f5c069360d99f875e10c983b24a0f8db45ef9186afd1513ce4dee88a9a84",
+          "role": "upgrade",
+          "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "testedTip": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "commits": [
+            {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "subject": "chore: upgrade widget to 1.3.0"
+            }
+          ],
+          "mailbox": "From bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Mon Sep 17 00:00:00 2001\nFrom: Example <fixture@example.org>\nDate: Fri, 20 Nov 2026 00:00:00 +0000\nSubject: [PATCH] Upgrade widget to 1.3.0\n\ndiff --git a/package.json b/package.json\n--- a/package.json\n+++ b/package.json\n@@ -1 +1 @@\n-{\"dependencies\":{\"widget\":\"1.2.0\"}}\n+{\"dependencies\":{\"widget\":\"1.3.0\"}}\n",
+          "digest": "3262f5c069360d99f875e10c983b24a0f8db45ef9186afd1513ce4dee88a9a84",
+          "filename": "upgrade-3262f5c06936.patch",
+          "prompt": "Create a branch at aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa. Apply the prerequisite upgrade series first when present, then apply this mailbox with git am. If the branch moved, adapt minimally and disclose the exact changes. Run typecheck and tests without editing tests. Fork first if needed, then open a pull request using the patch commit messages."
+        },
+        {
+          "id": "ada4db5bb37ae7eda33842a3e01a09a75ad236ed65c68243e83c39b46c530fee",
+          "role": "feature",
+          "base": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "testedTip": "cccccccccccccccccccccccccccccccccccccccc",
+          "commits": [
+            {
+              "sha": "cccccccccccccccccccccccccccccccccccccccc",
+              "subject": "feat: Use shared widget defaults"
+            }
+          ],
+          "mailbox": "From cccccccccccccccccccccccccccccccccccccccc Mon Sep 17 00:00:00 2001\nFrom: Example <fixture@example.org>\nDate: Fri, 20 Nov 2026 00:00:00 +0000\nSubject: [PATCH] Use shared widget defaults\n\ndiff --git a/example.js b/example.js\n--- a/example.js\n+++ b/example.js\n@@ -1,3 +1,2 @@\n-import { configure } from 'widget'\n-const defaults = { enabled: true }\n-export default configure(defaults)\n+import { configureDefaults } from 'widget'\n+export default configureDefaults()\n",
+          "digest": "ada4db5bb37ae7eda33842a3e01a09a75ad236ed65c68243e83c39b46c530fee",
+          "filename": "feature-ada4db5bb37a.patch",
+          "prerequisite": "3262f5c069360d99f875e10c983b24a0f8db45ef9186afd1513ce4dee88a9a84",
+          "prompt": "Create a branch at bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb. Apply the prerequisite upgrade series first when present, then apply this mailbox with git am. If the branch moved, adapt minimally and disclose the exact changes. Run typecheck and tests without editing tests. Fork first if needed, then open a pull request using the patch commit messages."
+        }
+      ],
+      "newDependencies": [],
+      "modelUsage": [
+        {
+          "role": "releaseSummary",
+          "step": "releaseSummary",
+          "modelId": "fixture-model",
+          "durationMs": 15,
+          "inputTokens": 60,
+          "outputTokens": 15,
+          "requestId": "fixture-response",
+          "costUsd": 0.00054
+        },
+        {
+          "role": "featureMatch",
+          "step": "featureMatch",
+          "modelId": "fixture-model",
+          "durationMs": 1,
+          "inputTokens": 60,
+          "outputTokens": 15,
+          "requestId": "fixture-response",
+          "costUsd": 0.00054
+        },
+        {
+          "role": "featureAdoption",
+          "step": "verify credential",
+          "modelId": "fixture-model",
+          "durationMs": 0,
+          "inputTokens": 50,
+          "outputTokens": 18,
+          "costUsd": 0.00056
+        },
+        {
+          "role": "featureAdoption",
+          "step": "featureAdoption",
+          "modelId": "fixture-model",
+          "durationMs": 0,
+          "inputTokens": 50,
+          "outputTokens": 18,
+          "costUsd": 0.00056
+        }
+      ]
+    }
+  ],
+  "timeline": [
+    {
+      "type": "inspection.started",
+      "repositoryUrl": "https://github.com/example/project",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 1,
+      "timestamp": "2026-11-20T20:27:00.440Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "2",
+      "label": "Check sandbox availability",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 2,
+      "timestamp": "2026-11-20T20:27:00.440Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "2",
+      "status": "passed",
+      "summary": "Check sandbox availability",
+      "durationMs": 0,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 3,
+      "timestamp": "2026-11-20T20:27:00.440Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "4",
+      "label": "Create sandbox",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 4,
+      "timestamp": "2026-11-20T20:27:00.440Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "4",
+      "status": "passed",
+      "summary": "Create sandbox",
+      "durationMs": 0,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 5,
+      "timestamp": "2026-11-20T20:27:00.440Z"
+    },
+    {
+      "type": "sandbox.event",
+      "sandboxId": "health-code-df58f478-0773-488f-b783-dc0675b3f851",
+      "action": "created",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 6,
+      "timestamp": "2026-11-20T20:27:00.441Z"
+    },
+    {
+      "type": "sandbox.event",
+      "sandboxId": "health-code-df58f478-0773-488f-b783-dc0675b3f851",
+      "action": "credentials-withheld",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 7,
+      "timestamp": "2026-11-20T20:27:00.441Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "8",
+      "label": "Prepare pinned checkout",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 8,
+      "timestamp": "2026-11-20T20:27:00.441Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "8",
+      "status": "passed",
+      "summary": "Prepare pinned checkout",
+      "durationMs": 0,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 9,
+      "timestamp": "2026-11-20T20:27:00.441Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "10",
+      "label": "Lock network to registries",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 10,
+      "timestamp": "2026-11-20T20:27:00.441Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "10",
+      "status": "passed",
+      "summary": "Lock network to registries",
+      "durationMs": 0,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 11,
+      "timestamp": "2026-11-20T20:27:00.441Z"
+    },
+    {
+      "type": "sandbox.event",
+      "sandboxId": "health-code-df58f478-0773-488f-b783-dc0675b3f851",
+      "action": "network-locked",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 12,
+      "timestamp": "2026-11-20T20:27:00.441Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "13",
+      "label": "Restore pinned project",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 13,
+      "timestamp": "2026-11-20T20:27:00.441Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "13",
+      "status": "passed",
+      "summary": "Restore pinned project",
+      "durationMs": 0,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 14,
+      "timestamp": "2026-11-20T20:27:00.441Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "15",
+      "label": "detect",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 15,
+      "timestamp": "2026-11-20T20:27:00.441Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "15",
+      "status": "passed",
+      "summary": "detect",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 16,
+      "timestamp": "2026-11-20T20:27:00.507Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "17",
+      "label": "registry",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 17,
+      "timestamp": "2026-11-20T20:27:00.509Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "17",
+      "status": "passed",
+      "summary": "registry",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 18,
+      "timestamp": "2026-11-20T20:27:00.575Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "19",
+      "label": "install",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 19,
+      "timestamp": "2026-11-20T20:27:00.576Z"
+    },
+    {
+      "type": "detail",
+      "stepId": "19",
+      "stream": "stdout",
+      "text": "Installed locked dependencies.",
+      "truncated": false,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 20,
+      "timestamp": "2026-11-20T20:27:02.177Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "19",
+      "status": "passed",
+      "summary": "install",
+      "durationMs": 1602,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 21,
+      "timestamp": "2026-11-20T20:27:02.178Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "22",
+      "label": "installed-size",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 22,
+      "timestamp": "2026-11-20T20:27:02.178Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "22",
+      "status": "passed",
+      "summary": "installed-size",
+      "durationMs": 70,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 23,
+      "timestamp": "2026-11-20T20:27:02.248Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "24",
+      "label": "typecheck",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 24,
+      "timestamp": "2026-11-20T20:27:02.248Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "24",
+      "status": "passed",
+      "summary": "typecheck",
+      "durationMs": 68,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 25,
+      "timestamp": "2026-11-20T20:27:02.316Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "26",
+      "label": "tests",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 26,
+      "timestamp": "2026-11-20T20:27:02.327Z"
+    },
+    {
+      "type": "detail",
+      "stepId": "26",
+      "stream": "stdout",
+      "text": "{\"counts\":{\"passed\":1,\"failed\":0,\"skipped\":0,\"todo\":0},\"testFileErrors\":[]}",
+      "truncated": false,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 27,
+      "timestamp": "2026-11-20T20:27:02.409Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "26",
+      "status": "passed",
+      "summary": "tests",
+      "durationMs": 163,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 28,
+      "timestamp": "2026-11-20T20:27:02.480Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "29",
+      "label": "integrity",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 29,
+      "timestamp": "2026-11-20T20:27:02.480Z"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "29",
+      "status": "passed",
+      "summary": "integrity",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 30,
+      "timestamp": "2026-11-20T20:27:02.546Z"
+    },
+    {
+      "type": "step.started",
+      "stepId": "31",
+      "label": "Restore pinned project",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 31,
+      "timestamp": "2026-11-20T20:27:02.547Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "31",
+      "status": "passed",
+      "summary": "Restore pinned project",
+      "durationMs": 0,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 32,
+      "timestamp": "2026-11-20T20:27:02.547Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "33",
+      "label": "install",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 33,
+      "timestamp": "2026-11-20T20:27:02.547Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "detail",
+      "stepId": "33",
+      "stream": "stdout",
+      "text": "Installed locked dependencies.",
+      "truncated": false,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 34,
+      "timestamp": "2026-11-20T20:27:02.614Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "33",
+      "status": "passed",
+      "summary": "install",
+      "durationMs": 67,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 35,
+      "timestamp": "2026-11-20T20:27:02.614Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "36",
+      "label": "typecheck",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 36,
+      "timestamp": "2026-11-20T20:27:02.614Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "36",
+      "status": "passed",
+      "summary": "typecheck",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 37,
+      "timestamp": "2026-11-20T20:27:02.680Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "38",
+      "label": "tests",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 38,
+      "timestamp": "2026-11-20T20:27:02.680Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "detail",
+      "stepId": "38",
+      "stream": "stdout",
+      "text": "{\"counts\":{\"passed\":1,\"failed\":0,\"skipped\":0,\"todo\":0},\"testFileErrors\":[]}",
+      "truncated": false,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 39,
+      "timestamp": "2026-11-20T20:27:02.746Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "38",
+      "status": "passed",
+      "summary": "tests",
+      "durationMs": 133,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 40,
+      "timestamp": "2026-11-20T20:27:02.813Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "41",
+      "label": "usage",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 41,
+      "timestamp": "2026-11-20T20:27:02.813Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "41",
+      "status": "passed",
+      "summary": "usage",
+      "durationMs": 67,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 42,
+      "timestamp": "2026-11-20T20:27:02.880Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "43",
+      "label": "installed-size",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 43,
+      "timestamp": "2026-11-20T20:27:02.880Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "43",
+      "status": "passed",
+      "summary": "installed-size",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 44,
+      "timestamp": "2026-11-20T20:27:02.946Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "45",
+      "label": "Read release notes",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 45,
+      "timestamp": "2026-11-20T20:27:02.946Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "45",
+      "status": "passed",
+      "summary": "Read release notes",
+      "durationMs": 1,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 46,
+      "timestamp": "2026-11-20T20:27:02.947Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "47",
+      "label": "releaseSummary",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 47,
+      "timestamp": "2026-11-20T20:27:02.948Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "47",
+      "status": "passed",
+      "summary": "releaseSummary",
+      "durationMs": 15,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 48,
+      "timestamp": "2026-11-20T20:27:02.963Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "49",
+      "label": "featureMatch",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 49,
+      "timestamp": "2026-11-20T20:27:02.964Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "49",
+      "status": "passed",
+      "summary": "featureMatch",
+      "durationMs": 1,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 50,
+      "timestamp": "2026-11-20T20:27:02.965Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "51",
+      "label": "Restore pinned project",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 51,
+      "timestamp": "2026-11-20T20:27:02.965Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "51",
+      "status": "passed",
+      "summary": "Restore pinned project",
+      "durationMs": 0,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 52,
+      "timestamp": "2026-11-20T20:27:02.965Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "53",
+      "label": "install",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 53,
+      "timestamp": "2026-11-20T20:27:02.965Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "detail",
+      "stepId": "53",
+      "stream": "stdout",
+      "text": "Installed locked dependencies.",
+      "truncated": false,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 54,
+      "timestamp": "2026-11-20T20:27:03.031Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "53",
+      "status": "passed",
+      "summary": "install",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 55,
+      "timestamp": "2026-11-20T20:27:03.031Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "56",
+      "label": "Final patch check",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 56,
+      "timestamp": "2026-11-20T20:27:03.032Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "57",
+      "label": "install",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 57,
+      "timestamp": "2026-11-20T20:27:03.032Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "detail",
+      "stepId": "57",
+      "stream": "stdout",
+      "text": "Installed locked dependencies.",
+      "truncated": false,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 58,
+      "timestamp": "2026-11-20T20:27:03.098Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "57",
+      "status": "passed",
+      "summary": "install",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 59,
+      "timestamp": "2026-11-20T20:27:03.098Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "60",
+      "label": "typecheck",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 60,
+      "timestamp": "2026-11-20T20:27:03.098Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "60",
+      "status": "passed",
+      "summary": "typecheck",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 61,
+      "timestamp": "2026-11-20T20:27:03.164Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "62",
+      "label": "tests",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 62,
+      "timestamp": "2026-11-20T20:27:03.164Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "detail",
+      "stepId": "62",
+      "stream": "stdout",
+      "text": "{\"counts\":{\"passed\":1,\"failed\":0,\"skipped\":0,\"todo\":0},\"testFileErrors\":[]}",
+      "truncated": false,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 63,
+      "timestamp": "2026-11-20T20:27:03.230Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "62",
+      "status": "passed",
+      "summary": "tests",
+      "durationMs": 132,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 64,
+      "timestamp": "2026-11-20T20:27:03.296Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "65",
+      "label": "integrity",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 65,
+      "timestamp": "2026-11-20T20:27:03.296Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "65",
+      "status": "passed",
+      "summary": "integrity",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 66,
+      "timestamp": "2026-11-20T20:27:03.362Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "56",
+      "status": "passed",
+      "summary": "Final patch check",
+      "durationMs": 331,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 67,
+      "timestamp": "2026-11-20T20:27:03.363Z",
+      "upgradeId": "widget@1.3.0"
+    },
+    {
+      "type": "sandbox.event",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 68,
+      "timestamp": "2026-11-20T20:27:03.366Z",
+      "sandboxId": "health-code-df58f478-0773-488f-b783-dc0675b3f851",
+      "action": "agent-started",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "68",
+      "label": "install",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 69,
+      "timestamp": "2026-11-20T20:27:03.367Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "detail",
+      "stepId": "68",
+      "stream": "stdout",
+      "text": "Installed locked dependencies.",
+      "truncated": false,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 70,
+      "timestamp": "2026-11-20T20:27:03.433Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "68",
+      "status": "passed",
+      "summary": "install",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 71,
+      "timestamp": "2026-11-20T20:27:03.434Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "71",
+      "label": "typecheck",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 72,
+      "timestamp": "2026-11-20T20:27:03.434Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "71",
+      "status": "passed",
+      "summary": "typecheck",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 73,
+      "timestamp": "2026-11-20T20:27:03.500Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "73",
+      "label": "tests",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 74,
+      "timestamp": "2026-11-20T20:27:03.500Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "detail",
+      "stepId": "73",
+      "stream": "stdout",
+      "text": "{\"counts\":{\"passed\":1,\"failed\":0,\"skipped\":0,\"todo\":0},\"testFileErrors\":[]}",
+      "truncated": false,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 75,
+      "timestamp": "2026-11-20T20:27:03.566Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "73",
+      "status": "passed",
+      "summary": "tests",
+      "durationMs": 132,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 76,
+      "timestamp": "2026-11-20T20:27:03.632Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "76",
+      "label": "integrity",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 77,
+      "timestamp": "2026-11-20T20:27:03.632Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "76",
+      "status": "passed",
+      "summary": "integrity",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 78,
+      "timestamp": "2026-11-20T20:27:03.698Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "78",
+      "label": "Final patch check",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 79,
+      "timestamp": "2026-11-20T20:27:03.698Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "79",
+      "label": "install",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 80,
+      "timestamp": "2026-11-20T20:27:03.699Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "detail",
+      "stepId": "79",
+      "stream": "stdout",
+      "text": "Installed locked dependencies.",
+      "truncated": false,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 81,
+      "timestamp": "2026-11-20T20:27:03.765Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "79",
+      "status": "passed",
+      "summary": "install",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 82,
+      "timestamp": "2026-11-20T20:27:03.765Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "82",
+      "label": "typecheck",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 83,
+      "timestamp": "2026-11-20T20:27:03.765Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "82",
+      "status": "passed",
+      "summary": "typecheck",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 84,
+      "timestamp": "2026-11-20T20:27:03.831Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "84",
+      "label": "tests",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 85,
+      "timestamp": "2026-11-20T20:27:03.832Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "detail",
+      "stepId": "84",
+      "stream": "stdout",
+      "text": "{\"counts\":{\"passed\":1,\"failed\":0,\"skipped\":0,\"todo\":0},\"testFileErrors\":[]}",
+      "truncated": false,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 86,
+      "timestamp": "2026-11-20T20:27:03.898Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "84",
+      "status": "passed",
+      "summary": "tests",
+      "durationMs": 132,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 87,
+      "timestamp": "2026-11-20T20:27:03.964Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.started",
+      "stepId": "87",
+      "label": "integrity",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 88,
+      "timestamp": "2026-11-20T20:27:03.964Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "87",
+      "status": "passed",
+      "summary": "integrity",
+      "durationMs": 66,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 89,
+      "timestamp": "2026-11-20T20:27:04.030Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "step.finished",
+      "stepId": "78",
+      "status": "passed",
+      "summary": "Final patch check",
+      "durationMs": 332,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 90,
+      "timestamp": "2026-11-20T20:27:04.030Z",
+      "upgradeId": "widget@1.3.0",
+      "role": "featureAdoption",
+      "attemptId": "6be27a04-4a81-4430-9418-060c7b6244c0"
+    },
+    {
+      "type": "sandbox.event",
+      "sandboxId": "health-code-df58f478-0773-488f-b783-dc0675b3f851",
+      "action": "deleted",
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 91,
+      "timestamp": "2026-11-20T20:27:04.031Z"
+    },
+    {
+      "type": "inspection.finished",
+      "inspected": 1,
+      "durationMs": 3591,
+      "version": 2,
+      "inspectionId": "df58f478-0773-488f-b783-dc0675b3f851",
+      "sequence": 92,
+      "timestamp": "2026-11-20T20:27:04.031Z"
+    }
+  ]
+}

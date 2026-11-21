@@ -8,11 +8,18 @@
 		}
 	},
 	"dependencies": {
+		"@ai-sdk/anthropic": "4.0.105",
+		"@ai-sdk/openai-compatible": "3.0.92",
+		"@babel/parser": "8.1.2",
 		"@runta/runta-sdk": "0.2.0",
+		"@types/json-schema": "7.0.15",
+		"@types/node": "26.6.6",
 		"@yarnpkg/lockfile": "1.1.0",
+		"ai": "7.0.173",
 		"fast-xml-parser": "5.12.1",
 		"jsonc-parser": "3.3.1",
 		"semver": "7.8.6",
+		"smol-toml": "1.9.1",
 		"yaml": "2.9.1",
 		"zod": "4.6.7"
 	},
@@ -23,10 +30,11 @@
 	"version": "0.1.0",
 	"license": "MIT",
 	"files": [
-		"dist"
+		"dist",
+		"prompts"
 	],
 	"types": "./dist/index.d.ts",
 	"scripts": {
-		"build": "tsc -p tsconfig.build.json && bun build guest/project.ts --target=node --format=esm --outfile=dist/guest.mjs && bun build guest/observe.ts --target=node --format=esm --outfile=dist/observe.mjs"
+		"build": "tsc -p tsconfig.build.json && bun build guest/project.ts --target=node --format=esm --outfile=dist/guest.mjs && bun build guest/observe.ts --target=node --format=esm --outfile=dist/observe.mjs && bun build guest/agent.ts --target=node --format=esm --outfile=dist/agent.mjs && bun build guest/managePatch.ts --target=node --format=esm --outfile=dist/patch.mjs"
 	}
 }

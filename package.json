@@ -19,9 +19,12 @@
 		"test": "bun run --cwd packages/health-code build && bun test ./scripts ./packages ./apps",
 		"check:package": "bash scripts/check-packed-library.sh",
 		"test:provider": "bun run --cwd packages/health-code build && bun test --timeout 600000 ./packages/health-code/test/live.ts",
-		"inspect": "bun run --cwd packages/health-code build && bun scripts/inspect.ts"
+		"eval": "bun run --cwd packages/health-code build && bun scripts/evaluate.ts",
+		"inspect": "bun run --cwd packages/health-code build && bun scripts/inspect.ts",
+		"test:credential": "bun run --cwd packages/health-code build && bun test --timeout 300000 ./packages/health-code/test/liveCredential.ts"
 	},
 	"devDependencies": {
+		"@ai-sdk/anthropic": "4.0.105",
 		"@biomejs/biome": "2.6.8",
 		"@types/bun": "1.4.4",
 		"@types/node": "26.6.6",

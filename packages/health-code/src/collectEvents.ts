@@ -15,10 +15,14 @@ export function redact(text: string): string {
 	return text
 		.replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[redacted]@")
 		.replace(
-			/\b(?:Bearer\s+[A-Za-z0-9._~+/=-]+|(?:gh[pousr]_|github_pat_|sk-|rt_|npm_)[A-Za-z0-9_-]{8,})/gi,
+			/\b(?:(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+|(?:gh[pousr]_|github_pat_|sk-|rt_|npm_)[A-Za-z0-9_-]{8,})/gi,
 			"[redacted]",
 		)
 		.replace(/("(?:[^"\\]*(?:token|password|secret|api[_-]?key))"\s*:\s*)"(?:\\.|[^"\\])*"/gi, '$1"[redacted]"')
+		.replace(
+			/((?:token|password|secret|api[_-]?key)["']?\s*[=:]\s*)(["'])(?:\\[\s\S]|(?!\2)[^\\])*?\2/gi,
+			"$1[redacted]",
+		)
 		.replace(/((?:token|password|secret|api[_-]?key)\s*[=:]\s*)[^\s,;]+/gi, "$1[redacted]")
 }
 
@@ -31,7 +35,14 @@ export function redactEvidence<T>(value: T): T {
 		return value.map(redactEvidence) as T
 	}
 	if (value && typeof value === "object") {
-		return Object.fromEntries(Object.entries(value).map(([key, item]) => [redact(key), redactEvidence(item)])) as T
+		return Object.fromEntries(
+			Object.entries(value).map(([key, item]) => [
+				redact(key),
+				typeof item === "string" && /(?:token|password|secret|api[_-]?key)$/i.test(key)
+					? "[redacted]"
+					: redactEvidence(item),
+			]),
+		) as T
 	}
 	return value
 }
@@ -71,12 +82,17 @@ export class InspectionContext {
 	readonly end: number
 	readonly maximum: number
 	private readonly timeouts: Record<Stage, number>
-	private deliver = true
+	private deliveryFailed = false
+	private groupEnd?: number
 	private detectionEnd?: number
+	attemptEnd?: number
 	cleaningUp = false
 	setupComplete = false
 	upgradeId?: string
-	constructor(readonly options: InspectionOptions) {
+	constructor(
+		readonly options: InspectionOptions,
+		private readonly observe?: (event: InspectionEvent) => () => Promise<void>,
+	) {
 		const limits = options.limits ?? {}
 		const duration = limits.maxDurationMs ?? 1800000
 		const cost = limits.maxCostUsd ?? 0.25
@@ -106,6 +122,10 @@ export class InspectionContext {
 		this.cleanupMs = Math.min(60000, Math.max(1, Math.floor(low / 4)))
 		this.end = this.started + low
 	}
+	cleanupWindow(): number {
+		const remaining = this.end - Date.now()
+		return remaining > 0 ? Math.min(this.cleanupMs, remaining) : this.cleanupMs
+	}
 	operation(stage: Stage): Operation {
 		if (stage === "detect") {
 			this.detectionEnd ??= Date.now() + this.timeouts.detect
@@ -113,6 +133,8 @@ export class InspectionContext {
 		return {
 			timeoutMs: Math.min(
 				this.timeouts[stage],
+				(this.groupEnd ?? Infinity) - Date.now(),
+				(this.attemptEnd ?? this.end) - Date.now(),
 				stage === "detect" ? (this.detectionEnd ?? this.end) - Date.now() : Infinity,
 				this.end - Date.now() - this.cleanupMs,
 				stage === "setup" && !this.setupComplete ? this.started + this.timeouts.setup - Date.now() : Infinity,
@@ -134,13 +156,24 @@ export class InspectionContext {
 			...(this.upgradeId ? { upgradeId: this.upgradeId } : {}),
 		})
 		this.timeline.push(event)
-		const callback = this.options.onEvent
-		if (!callback || !this.deliver) {
+		const callback = this.observe?.(event) ?? (() => this.options.onEvent?.(structuredClone(event)))
+		await this.deliver(callback)
+	}
+	assertActive(): void {
+		if (this.deliveryFailed) {
+			throw new InspectionError("event-delivery", "Inspection event callback failed")
+		}
+		if (this.options.signal?.aborted) {
+			throw new InspectionError("cancelled", "Inspection interrupted")
+		}
+	}
+	async deliver(callback: () => void | Promise<void>): Promise<void> {
+		if (this.deliveryFailed || (!this.options.onEvent && !this.observe)) {
 			return
 		}
 		try {
 			const remaining = this.end - Date.now() - (this.cleaningUp ? 0 : this.cleanupMs)
-			await bounded(async () => callback(structuredClone(event)), {
+			await bounded(async () => callback(), {
 				timeoutMs: Math.min(10000, remaining),
 				signal: this.cleaningUp ? undefined : this.options.signal,
 			})
@@ -148,8 +181,25 @@ export class InspectionContext {
 			if (this.options.signal?.aborted && error instanceof InspectionError && error.code === "cancelled") {
 				throw error
 			}
-			this.deliver = false
+			this.deliveryFailed = true
 			throw new InspectionError("event-delivery", "Inspection event callback failed")
+		}
+	}
+	/** All child operations inherit this deadline. The group settles before its caller continues. */
+	async group<T>(stage: Stage, label: string, work: () => Promise<T>): Promise<T> {
+		const previous = this.groupEnd
+		this.groupEnd = Date.now() + this.operation(stage).timeoutMs
+		try {
+			return await this.track(label, async () => {
+				const result = await work()
+				this.assertActive()
+				if (this.operation(stage).timeoutMs <= 0) {
+					throw new InspectionError("deadline", "Patch verification deadline reached")
+				}
+				return result
+			})
+		} finally {
+			this.groupEnd = previous
 		}
 	}
 	async step<T>(
@@ -158,6 +208,21 @@ export class InspectionContext {
 		work: (options: Operation, stepId: string) => Promise<T>,
 		status?: (value: T) => "passed" | "failed" | "untested",
 	): Promise<T> {
+		return this.track(
+			label,
+			async (stepId) => {
+				const operation = this.operation(stage)
+				return bounded((signal) => work({ ...operation, signal }, stepId), operation)
+			},
+			status,
+		)
+	}
+	private async track<T>(
+		label: string,
+		work: (stepId: string) => Promise<T>,
+		status?: (value: T) => "passed" | "failed" | "untested",
+	): Promise<T> {
+		this.assertActive()
 		const start = Date.now()
 		const stepId = String(this.timeline.length + 1)
 		const finish = (result: "passed" | "failed" | "untested"): Promise<void> =>
@@ -165,14 +230,24 @@ export class InspectionContext {
 		let value: T
 		try {
 			await this.emit({ type: "step.started", stepId, label })
-			const operation = this.operation(stage)
-			value = await bounded((signal) => work({ ...operation, signal }, stepId), operation)
+			value = await work(stepId)
 		} catch (error) {
 			// Keep the work error if its failure event also cannot be delivered.
 			await finish("failed").catch(() => undefined)
 			throw error
 		}
 		await finish(status?.(value) ?? "passed")
+		this.assertActive()
+		if (this.groupEnd && Date.now() >= this.groupEnd) {
+			throw new InspectionError("deadline", "Patch verification deadline reached")
+		}
 		return value
+	}
+}
+
+export function rethrowInspectionFailure(error: unknown, context: InspectionContext): void {
+	context.assertActive()
+	if (error instanceof InspectionError && ["cancelled", "event-delivery"].includes(error.code)) {
+		throw error
 	}
 }

@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs"
+import { readFileSync, rmSync, statSync } from "node:fs"
 import { isIP } from "node:net"
 import { posix } from "node:path"
 import type { InstallationFinding, Observation } from "../src/contracts.ts"
@@ -11,7 +11,7 @@ function markIncomplete(result: Observation, reason = "Incomplete installation o
 }
 function addFinding(result: Observation, finding: InstallationFinding): void {
 	if (result.findings.length >= 256) {
-		markIncomplete(result)
+		markIncomplete(result, "Finding limit reached")
 		return
 	}
 	if (!result.findings.some((existing) => JSON.stringify(existing) === JSON.stringify(finding))) {
@@ -60,7 +60,7 @@ function network(line: string, hosts: DnsHistory, timestamp: number, allowed: st
 	}
 	const address = line.match(/(?:inet_addr\(|inet_pton\(AF_INET6, )"([^"]+)"/)?.[1]
 	if (!address) {
-		markIncomplete(result)
+		markIncomplete(result, "Socket address unavailable")
 		return
 	}
 	if (address === "10.0.2.3" && /sin_port=htons\(53\)/.test(line)) {
@@ -79,7 +79,7 @@ function network(line: string, hosts: DnsHistory, timestamp: number, allowed: st
 	if (candidates.length && candidates.every((host) => allowed.includes(host))) {
 		return
 	}
-	markIncomplete(result)
+	markIncomplete(result, "Socket destination could not be attributed to DNS")
 	addFinding(result, { kind: "connection", destination: address, outcome: "unknown" })
 }
 function mutationPaths({
@@ -87,32 +87,61 @@ function mutationPaths({
 	line,
 	result,
 	links,
+	fixedDirectory,
 }: {
 	call: string
 	line: string
 	result: Observation
 	links: FileLinks
+	fixedDirectory?: string
 }): string[] {
 	const paths: string[] = []
-	const quoted = [...line.matchAll(/(?:([\w-]+)<([^>]+)>, )?"((?:[^"\\]|\\.)*)"/g)]
-	const relevant = call.startsWith("symlink") ? quoted.slice(-1) : quoted
+	const quoted = [...line.matchAll(/(?:([\w-]+)<([^>]+)>(?:\(deleted\))?, )?"((?:[^"\\]|\\.)*)"/g)]
+	const relevant = call.startsWith("symlink")
+		? quoted.slice(-1)
+		: /^(?:link|rename)/.test(call)
+			? quoted.slice(0, 2)
+			: quoted.slice(0, 1)
 	for (const item of relevant) {
 		const path = item[3] ?? ""
 		if (path.includes("\\") || path.split("/").includes("..")) {
-			markIncomplete(result)
+			markIncomplete(result, "Filesystem path escaped or contained parent components")
 		}
-		if (path.startsWith("/")) {
-			paths.push(path)
-		} else if (item[2]?.startsWith("/")) {
-			paths.push(posix.resolve(item[2], path))
+		const resolved = mutationTarget({ item, path, fixedDirectory, line, call })
+		if (resolved) {
+			paths.push(resolved)
 		} else {
-			markIncomplete(result)
+			markIncomplete(result, `Relative filesystem change lacks a directory descriptor (${call})`)
 		}
 	}
 	if (!trackFileLinks({ call, line, paths, links })) {
-		markIncomplete(result, "Could not resolve a filesystem change through a symbolic link")
+		markIncomplete(
+			result,
+			`Could not resolve a filesystem change through a symbolic link (${call}: ${paths.map((path) => path.slice(0, 240)).join(", ")})`,
+		)
 	}
 	return paths
+}
+function mutationTarget({
+	path,
+	item,
+	fixedDirectory,
+	line,
+	call,
+}: {
+	path: string
+	item: RegExpMatchArray
+	fixedDirectory?: string
+	line: string
+	call: string
+}): string | undefined {
+	if (path.startsWith("/")) {
+		return path
+	} else if (item[2]?.startsWith("/")) {
+		return posix.resolve(item[2], path)
+	} else if (fixedDirectory && (!/(?:at|at2)$/.test(call) || /AT_FDCWD, $/.test(line.slice(0, item.index)))) {
+		return posix.resolve(fixedDirectory, path)
+	}
 }
 function transferTargets(line: string, call: string): string[] {
 	const descriptors = [...line.matchAll(/\d+<([^>]+)>/g)]
@@ -138,11 +167,11 @@ function observeMappings(call: string, line: string, state: FileState, result: O
 function descriptorTargets(line: string, result: Observation): string[] {
 	const target = line.match(/^\w+\(\d+<([^>]+)>/)?.[1]
 	if (!target) {
-		markIncomplete(result)
+		markIncomplete(result, "Writable file descriptor unavailable")
 	}
 	return target?.startsWith("/") ? [target] : []
 }
-function filesystem(line: string, result: Observation, state: FileState): void {
+function filesystem(line: string, result: Observation, state: FileState, fixedDirectory?: string): void {
 	if (!/\)\s+= (?:0x[\da-f]+|0|[1-9]\d*)(?:<[^>]*>)?$/.test(line)) {
 		return
 	}
@@ -174,14 +203,14 @@ function filesystem(line: string, result: Observation, state: FileState): void {
 		if (target) {
 			paths = [target]
 		} else {
-			markIncomplete(result)
+			markIncomplete(result, "Created file descriptor unavailable")
 		}
 	} else if (
 		/^(?:rename|unlink|rmdir|mkdir|f?chmod|f?chown|lchown|truncate|link|symlink|utime|mknod|l?setxattr|l?removexattr)/.test(
 			call,
 		)
 	) {
-		paths = mutationPaths({ call, line, result, links: state.links })
+		paths = mutationPaths({ call, line, result, links: state.links, fixedDirectory })
 	}
 	for (const path of paths) {
 		const normalized = posix.normalize(path)
@@ -215,8 +244,11 @@ function recordDnsQueries(dns: string, allowed: string[], connections: Observati
 	// Preserve off-list DNS attempts even when the gateway supplies no address.
 	for (const query of dns.split("\n").filter((line) => / > [\w:.]+\.53: /.test(line))) {
 		const hostname = query.match(/\b[\w-]+\? ([\w.-]+)\.(?:\s|$)/)?.[1]?.toLowerCase()
+		if (hostname && connections.destinations && !connections.destinations.includes(hostname)) {
+			connections.destinations.push(hostname)
+		}
 		if (!hostname) {
-			markIncomplete(connections)
+			markIncomplete(connections, "DNS query name unavailable")
 		}
 		if (
 			hostname &&
@@ -234,9 +266,11 @@ export function inspectTrace(
 	allowed: string[],
 	initialLinks: string[] = [],
 ): InstallationObservations {
-	const connections: Observation = { complete: true, findings: [] }
+	const connections: Observation = { complete: true, findings: [], destinations: [] }
 	const files: Observation = { complete: true, findings: [] }
 	const hosts = dnsAnswers(dns)
+	// Every descendant starts in the project mount. Use that invariant only if the entire trace preserves it.
+	const fixedDirectory = stableProjectDirectory(syscalls) ? "/project" : undefined
 	const pending = new Map<string, TraceCall>()
 	const state = { links: new Map(initialLinks.map((path) => [path, undefined])), sharedOutsideMapping: false }
 	let started = false
@@ -251,21 +285,57 @@ export function inspectTrace(
 		}
 		if (started) {
 			network(line, hosts, timestamp, allowed, connections)
-			filesystem(line, files, state)
+			filesystem(line, files, state, fixedDirectory)
 		}
 	}
 	recordDnsQueries(dns, allowed, connections)
-	if (!started || pending.size) {
-		markIncomplete(files)
-		markIncomplete(connections)
-	}
+	verifyTraceEnd({ started, pending, connections, files })
 	if (!/\b0 packets dropped by kernel/.test(status)) {
-		markIncomplete(connections)
+		markIncomplete(connections, "DNS capture dropped packets")
 	}
 	return { connections, files }
 }
+function pendingSyscalls(pending: Map<string, TraceCall>): string[] {
+	return [...new Set([...pending.values()].map((entry) => /^(\w+)\(/.exec(entry.line)?.[1] ?? "unknown"))]
+}
+function onlySocketReads(calls: string[]): boolean {
+	return calls.every((call) => ["recvfrom", "recvmsg", "recvmmsg"].includes(call))
+}
+function verifyTraceEnd({
+	started,
+	pending,
+	connections,
+	files,
+}: {
+	started: boolean
+	pending: Map<string, TraceCall>
+	connections: Observation
+	files: Observation
+}): void {
+	if (!started || pending.size) {
+		const calls = pendingSyscalls(pending)
+		const reason = started ? `unfinished ${calls.slice(0, 6).join(", ")}` : "missing execution marker"
+		if (!started || !onlySocketReads(calls)) {
+			markIncomplete(files, `Filesystem trace did not finish (${reason})`)
+			markIncomplete(connections, `Network trace did not finish (${reason})`)
+		}
+	}
+}
+function stableProjectDirectory(trace: string): boolean {
+	const pending = new Map<string, TraceCall>()
+	for (const row of trace.split("\n")) {
+		const entry = assembled(row, pending)
+		if (!entry || !/^(?:f?chdir|chroot|pivot_root)\(/.test(entry.line) || / = -1 /.test(entry.line)) {
+			continue
+		}
+		if (!/^chdir\("\/project"\) = 0$/.test(entry.line) && !/^fchdir\(\d+<\/project>\) = 0$/.test(entry.line)) {
+			return false
+		}
+	}
+	return onlySocketReads(pendingSyscalls(pending))
+}
 const directory = process.argv[2]
-if (directory?.startsWith("/var/lib/health-code/evidence-")) {
+if (directory && /^\/var\/lib\/health-code\/evidence-[a-f0-9-]{36}$/.test(directory)) {
 	const read = (name: string): string => {
 		const path = `${directory}/${name}`
 		if (statSync(path).size >= 32 * 1024 * 1024) {
@@ -273,9 +343,15 @@ if (directory?.startsWith("/var/lib/health-code/evidence-")) {
 		}
 		return readFileSync(path, "utf8")
 	}
-	const links = read("links")
-		.split("\0")
-		.filter(Boolean)
-		.map((path) => posix.resolve("/project", path))
-	console.log(JSON.stringify(inspectTrace(read("syscalls"), read("dns"), read("status"), process.argv.slice(3), links)))
+	try {
+		const links = read("links")
+			.split("\0")
+			.filter(Boolean)
+			.map((path) => posix.resolve("/project", path))
+		console.log(
+			JSON.stringify(inspectTrace(read("syscalls"), read("dns"), read("status"), process.argv.slice(3), links)),
+		)
+	} finally {
+		rmSync(directory, { recursive: true, force: true })
+	}
 }

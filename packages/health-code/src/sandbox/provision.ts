@@ -56,7 +56,7 @@ export function provision(): string {
 		"mkdir -p /opt/health-code/bin /var/lib/health-code",
 		"export DEBIAN_FRONTEND=noninteractive",
 		"apt-get -qq update",
-		"apt-get -qq install -y bubblewrap strace tcpdump git curl openssl ca-certificates util-linux iproute2 slirp4netns python3-seccomp",
+		"apt-get -qq install -y bubblewrap procps strace tcpdump git curl openssl ca-certificates util-linux iproute2 slirp4netns python3-seccomp",
 		configureGuestNetwork,
 		...downloads,
 	].join("\n")

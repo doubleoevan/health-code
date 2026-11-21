@@ -1,3 +1,4 @@
+import type { AgentCapability, InspectionEventV2, PatchOperation } from "./agentContracts.ts"
 export type Stage = "setup" | "detect" | "install" | "typecheck" | "tests"
 export type Evidence = {
 	stdout: string
@@ -15,13 +16,28 @@ export type InstallationFinding =
 			outcome: "attempted" | "blocked" | "unknown"
 	  }
 	| { kind: "write"; path: string }
-export type Observation = { complete: boolean; findings: InstallationFinding[]; reason?: string }
+export type Observation = {
+	complete: boolean
+	findings: InstallationFinding[]
+	reason?: string
+	destinations?: string[]
+}
+export type TestCounts = Record<"passed" | "failed" | "skipped" | "todo", number>
+export type TestCase = { file: string; name: string; status: keyof TestCounts }
+export type TestInventory = {
+	discoveredFiles?: string[]
+	counts: TestCounts
+	cases: TestCase[]
+	testFileErrors: { file: string; reason: string }[]
+}
 export type TestFailure = { file: string; name?: string; workspace: string }
 export type CheckResult = (
 	| { status: "passed"; evidence: Evidence[] }
 	| { status: "failed"; evidence: Evidence[]; failingTests: TestFailure[] }
 	| { status: "untested"; reason: string; detail?: string; evidence: Evidence[] }
 ) & {
+	inventory?: Omit<TestInventory, "cases">
+	inventoryUnavailable?: string
 	excluded?: TestFailure[]
 	unconfirmedTests?: TestFailure[]
 	attempts?: { status: "passed" | "failed" | "untested"; failingTests: TestFailure[] }[]
@@ -63,13 +79,15 @@ export type InspectionEvent = EventPayload & {
 export type Command = {
 	argv: string[]
 	timeoutMs: number
-	observe?: boolean
+	observe?: boolean | "network"
 	environment?: string[]
 	signal?: AbortSignal
 }
 export type CommandResult = Evidence & { observationId?: string; timedOut?: boolean }
 export type Operation = { timeoutMs: number; signal?: AbortSignal }
 export interface SandboxProvider {
+	openCredentialSession?: AgentCapability
+	patchWorkspace?(sandbox: Sandbox, request: PatchOperation, operation: Operation): Promise<string | null>
 	checkAvailability(options?: Operation): Promise<void>
 	estimateMaxCost(durationMs: number): number
 	createSandbox(name: string, options: Operation): Promise<Sandbox>
@@ -94,6 +112,9 @@ export type InspectionOptions = {
 	sandboxProvider: SandboxProvider
 	limits?: InspectionLimits
 	onEvent?: (event: InspectionEvent) => void | Promise<void>
+	includeTestInventory?: boolean
+	applicationEnvironment?: "empty" | "placeholders"
+	upgrade?: { dependency: string; from: string; to: string }
 	models?: Readonly<Record<string, string>>
 	signal?: AbortSignal
 }
@@ -127,7 +148,7 @@ export type ReportCard = {
 	timeline: InspectionEvent[]
 }
 export class InspectionError extends Error {
-	timeline: InspectionEvent[] = []
+	timeline: InspectionEvent[] | InspectionEventV2[] = []
 	cleanupId?: string
 	constructor(
 		readonly code: string,

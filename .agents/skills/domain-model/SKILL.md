@@ -17,6 +17,7 @@ An **Inspection** targets a **Repository** at a pinned commit. An **Ecosystem Ad
 | Installation Finding | One observed connection attempt or filesystem change attributed to an Install Check. | Record its source and coverage. |
 | Upgrade Check | Bumping, installing, typechecking, and testing one Upgrade. | Count a new failure only if it fails again on a rerun. |
 | Check Result | The result of a check. | Passed, failed with the failing tests, or untested with the reason. |
+| Test file error | A test runner error attributed to a file outside a named test case, such as a module-load or setup error. | Show **Test file errors** and record each file and reason under `testFileErrors`. Failed and skipped cases keep their own counts. |
 | Feature Match | A new feature in an Upgrade's release notes matched to code it could replace in the Repository. | Cite the release notes and the code. |
 | Agent Attempt | One execution of a coding agent inside the sandbox to fix a broken Upgrade or adopt a Feature Match. | Bound the attempt by time and cost. |
 | Patch | A git format-patch file of tested commits, pinned to the commit it was tested on. | Apply the upgrade patch first. The feature patch applies on top of it. |
@@ -26,6 +27,16 @@ An **Inspection** targets a **Repository** at a pinned commit. An **Ecosystem Ad
 | Sandbox Event | An Inspection Event recording an action by the sandbox's controls. | Sandbox created, network locked, connection blocked, agent started with its key kept out of the sandbox, or sandbox deleted. Highlight and pin these events in the live log and timeline. |
 | Sandbox Provider | The interface checks use to create a sandbox, execute commands in it, and destroy it. | Runta is the shipped provider. Unit tests use a fake. |
 | Ecosystem Adapter | Language support behind one interface to detect the package manager, install, bump a dependency, typecheck, test, and list upgrades. | The Node adapter covers JavaScript and TypeScript. |
+
+## Report Card labels
+
+Use **Report Card** in product copy. In API docs, call the model-enabled result the **version 2 Report Card** (`ReportCardV2`). **Repair** and **Feature adoption** are the two Agent Attempt roles. Their API IDs are `repair` and `featureAdoption`. **Turn limit** (`maxTurns`) bounds how many turns an attempt can take.
+
+Use **Direct replacement** or **Inferred replacement** for a Feature Match. Identify the **Source location**, **Affected call sites** and **Adoption outcome**. Reserve **Verdict** for the Upgrade.
+
+The **Final patch check** produces **Patch verification**. Label the artifact **Download patch** and identify **Applies to commit**, **Tested commit** and **Required upgrade patch**. Report **Added dependencies**, **Installed size change** and **Why repair stopped** when recorded.
+
+Separate **Model cost** from **Reserved upper bound** and label measured reply tokens **Output tokens**.
 
 ## Rejected terms
 

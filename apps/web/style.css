@@ -1,0 +1,258 @@
+:root {
+	color-scheme: light dark;
+	--paper: #f7f7f1;
+	--ink: #20291e;
+	--muted: #545f52;
+	--rule: #c4cbbe;
+	--panel: #fff;
+	--accent: #245637;
+	--wash: #e1eadf;
+	font:
+		16px / 1.55 "Inter",
+		system-ui,
+		sans-serif;
+	background: var(--paper);
+	color: var(--ink);
+}
+* {
+	box-sizing: border-box;
+}
+body {
+	margin: 0;
+}
+main {
+	overflow-wrap: anywhere;
+	max-width: 66rem;
+	margin: auto;
+	padding: 0 clamp(1.25rem, 5vw, 5rem) 5rem;
+}
+.mast {
+	padding: 1.35rem 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	border-bottom: 1px solid var(--rule);
+}
+:where(.mast) a {
+	font-weight: 750;
+	text-decoration: none;
+	font-size: 1.25rem;
+	color: var(--ink);
+	letter-spacing: -0.045em;
+}
+.mark {
+	font-size: 1.5rem;
+	color: var(--accent);
+	vertical-align: middle;
+}
+.home {
+	padding: clamp(3rem, 10vh, 8rem) 0;
+}
+.intro {
+	font-size: 1.18rem;
+	max-width: 38rem;
+	color: var(--muted);
+}
+h1,
+h2,
+h3 {
+	line-height: 1.08;
+	text-wrap: balance;
+}
+h1 {
+	font-family: "Instrument Serif", Georgia, serif;
+	font-weight: 400;
+	font-size: clamp(2.5rem, 6vw, 4.6rem);
+	letter-spacing: -0.055em;
+	margin: 2.75rem 0 1.2rem;
+}
+.home h1 {
+	margin-top: 0;
+	font-size: clamp(3.2rem, 8vw, 6.5rem);
+}
+h2 {
+	font-size: 1.3rem;
+	margin: 2rem 0 1rem;
+}
+h3 {
+	font-size: 1.25rem;
+	margin: 0;
+}
+form {
+	max-width: 44rem;
+	margin-top: 2.75rem;
+}
+label,
+dt {
+	font-weight: 650;
+}
+label {
+	display: block;
+	margin-bottom: 0.55rem;
+}
+.field,
+.buttons,
+article header {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+}
+:where(.field) input {
+	min-width: 0;
+	flex: 1;
+}
+input,
+button,
+textarea {
+	font: inherit;
+	color: inherit;
+}
+input,
+textarea,
+article {
+	background: var(--panel);
+	border: 1px solid var(--rule);
+	border-radius: 0.5rem;
+}
+input,
+button {
+	padding: 0.85rem 1rem;
+}
+button {
+	cursor: pointer;
+	border: 0;
+	border-radius: 0.4rem;
+	background: var(--accent);
+	color: var(--panel);
+	font-weight: 650;
+}
+button:disabled {
+	opacity: 0.7;
+}
+.secondary {
+	background: var(--wash);
+	color: var(--accent);
+	padding: 0.5rem 0.85rem;
+}
+a {
+	color: var(--accent);
+	text-underline-offset: 0.18em;
+}
+small,
+.mono,
+.elapsed,
+dt {
+	color: var(--muted);
+}
+.mono,
+.elapsed,
+pre {
+	font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+.elapsed {
+	margin-left: auto;
+}
+.current,
+aside {
+	background: var(--wash);
+	padding: 1rem;
+	border-radius: 0.55rem;
+}
+.current {
+	display: flex;
+	align-items: center;
+	gap: 0.65rem;
+}
+.spinner {
+	height: 1em;
+	width: 1em;
+	border: 2px solid var(--rule);
+	border-top-color: var(--accent);
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.spinner {
+		animation: none;
+	}
+}
+aside h2 {
+	margin: 0.25rem 0;
+}
+.timeline {
+	padding-left: 1.65rem;
+}
+.timeline li {
+	border-bottom: 1px solid var(--rule);
+	padding: 0.5rem;
+}
+.control,
+.positive {
+	color: var(--accent);
+}
+article {
+	padding: clamp(1rem, 3vw, 2rem);
+	margin-bottom: 0.8rem;
+}
+article header {
+	justify-content: space-between;
+	flex-wrap: wrap;
+}
+.neutral {
+	color: var(--muted);
+}
+dt {
+	margin-top: 0.55rem;
+	font-size: 0.85rem;
+}
+dd {
+	margin: 0;
+}
+summary {
+	cursor: pointer;
+	padding: 0.3rem 0;
+}
+textarea {
+	width: 100%;
+}
+pre {
+	white-space: pre-wrap;
+}
+:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: 3px;
+}
+@media (max-width: 40rem) {
+	.field {
+		align-items: stretch;
+		flex-direction: column;
+	}
+	.mast small {
+		max-width: 10rem;
+		text-align: right;
+	}
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ink: #edf1e8;
+		--muted: #bbc5b7;
+		--rule: #485247;
+		--paper: #171d18;
+		--panel: #212823;
+		--accent: #a9dec0;
+		--wash: #303d32;
+	}
+}
+
+.rolling,
+.history {
+	max-height: 55vh;
+	overflow-y: auto;
+	scrollbar-gutter: stable;
+}

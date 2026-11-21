@@ -6,12 +6,15 @@ import {
 	createSandboxProvider,
 	InspectionError,
 	type InspectionEvent,
+	type InspectionEventV2,
 	inspectRepository,
 } from "health-code"
 
+type LogEvent = InspectionEvent | InspectionEventV2
+
 type Output = { isTTY?: boolean; columns?: number; write: (text: string) => unknown }
 
-function toLogLines(event: Exclude<InspectionEvent, { type: "step.started" }>): string[] {
+function toLogLines(event: Exclude<LogEvent, { type: "step.started" }>): string[] {
 	switch (event.type) {
 		case "inspection.started":
 			return [`Inspecting ${event.repositoryUrl}`]
@@ -46,7 +49,7 @@ function toPrintable(value: string): string {
 		.join("")
 }
 
-function toActiveStep(event: InspectionEvent, current: string): string {
+function toActiveStep(event: LogEvent, current: string): string {
 	switch (event.type) {
 		case "step.started":
 			return toPrintable(`… ${event.label}${event.upgradeId ? ` [${event.upgradeId}]` : ""}`)
@@ -62,7 +65,7 @@ function toActiveStep(event: InspectionEvent, current: string): string {
 /**
  * Keeps the active step on the last terminal line while evidence scrolls above it.
  */
-export function createInspectionLog(output: Output): (event: InspectionEvent) => void {
+export function createInspectionLog(output: Output): (event: LogEvent) => void {
 	let active = ""
 	return (event) => {
 		if (active && output.isTTY) {

@@ -1,0 +1,17 @@
+{
+	"version": 1,
+	"id": "carlnotes-baseline",
+	"kind": "baseline",
+	"repositoryUrl": "https://github.com/doubleoevan/carlnotes",
+	"commit": "2c229c8d44e957e93d5178a8664d5e2d5cbbe0f6",
+	"review": "reviewed",
+	"expected": {
+		"counts": {
+			"passed": 5593,
+			"failed": 5,
+			"skipped": 26,
+			"todo": 0
+		},
+		"testFileErrors": []
+	}
+}

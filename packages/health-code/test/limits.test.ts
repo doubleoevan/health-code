@@ -204,3 +204,68 @@ test("throwing callbacks leave exactly one finish for each recorded step start",
 		)
 	}
 })
+
+test("a timed-out final check settles before its caller can publish", async () => {
+	const { InspectionContext } = await import("../src/collectEvents.ts")
+	const context = new InspectionContext({
+		repositoryUrl: fixtureUrl,
+		sandboxProvider: offline(),
+		limits: { timeouts: { setup: 20, tests: 60000 } },
+	})
+	context.setupComplete = true
+	let published = false
+	let settled = false
+	await assert.rejects(
+		async () => {
+			await context.group("setup", "Final patch check", async () => {
+				assert.ok(context.operation("tests").timeoutMs <= 20)
+				try {
+					await context.step(
+						"tests",
+						"tests",
+						(op) =>
+							new Promise<void>((resolve) => op.signal?.addEventListener("abort", () => resolve(), { once: true })),
+					)
+				} finally {
+					settled = true
+				}
+			})
+			published = true
+		},
+		{ code: "deadline" },
+	)
+	assert.ok(settled)
+	assert.equal(published, false)
+})
+
+test("a failed event listener leaves internal cleanup and terminal events sequenced", async () => {
+	const { InspectionContext } = await import("../src/collectEvents.ts")
+	const internal: InspectionEvent[] = []
+	let deliveries = 0
+	const context = new InspectionContext({ repositoryUrl: fixtureUrl, sandboxProvider: offline() }, (event) => {
+		internal.push(event)
+		return async () => {
+			deliveries++
+			throw Error("Listener unavailable")
+		}
+	})
+	await assert.rejects(context.emit({ type: "inspection.started", repositoryUrl: fixtureUrl }), {
+		code: "event-delivery",
+	})
+	await assert.rejects(
+		context.step("setup", "Next model", async () => assert.fail("Model should not start")),
+		{ code: "event-delivery" },
+	)
+	context.cleaningUp = true
+	await context.emit({ type: "sandbox.event", sandboxId: "fixture", action: "deleted" })
+	await context.emit({ type: "inspection.failed", code: "event-delivery", message: "Delivery failed" })
+	assert.deepEqual(
+		internal.map((event) => event.type),
+		["inspection.started", "sandbox.event", "inspection.failed"],
+	)
+	assert.deepEqual(
+		internal.map((event) => event.sequence),
+		[1, 2, 3],
+	)
+	assert.equal(deliveries, 1)
+})

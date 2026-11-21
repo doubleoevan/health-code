@@ -5,26 +5,11 @@ import { parse as parseClassicLock } from "@yarnpkg/lockfile"
 import { parse as jsonc } from "jsonc-parser/lib/esm/main.js"
 import { valid, validRange } from "semver"
 import { parse as yaml } from "yaml"
+import { bumpManifest, lockfiles, type Manifest, sections } from "../src/bumpManifest.ts"
 import type { PackageManager, Project } from "../src/contracts.ts"
 
-export type Manifest = {
-	name?: string
-	overrides?: Record<string, string | Record<string, unknown>>
-	packageManager?: string
-	workspaces?: string[] | { packages: string[] }
-	scripts?: { test?: string }
-	dependencies?: Record<string, string>
-	devDependencies?: Record<string, string>
-	optionalDependencies?: Record<string, string>
-	peerDependencies?: Record<string, string>
-}
-const sections = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"] as const
-const lockfiles = {
-	npm: ["npm-shrinkwrap.json", "package-lock.json"],
-	bun: ["bun.lock", "bun.lockb"],
-	pnpm: ["pnpm-lock.yaml"],
-	yarn: ["yarn.lock"],
-} as const
+export type { Manifest } from "../src/bumpManifest.ts"
+
 const ignore = new Set([".git", "node_modules", ".health-code", ".yarn", ".pnpm-store"])
 
 export function readText(path: string): string {
@@ -54,7 +39,7 @@ export function managerName(manifest: Manifest): PackageManager {
 function ignored(name: string, symlink: boolean): boolean {
 	return symlink || ignore.has(name) || (name.startsWith(".env") && name !== ".env.example")
 }
-function filesUnder(root: string): string[] {
+export function filesUnder(root: string): string[] {
 	const result: string[] = []
 	let count = 0
 	function visit(dir: string): void {
@@ -236,18 +221,7 @@ export function bumpDependency(name: string, target: string): void {
 		throw new Error("Invalid target version")
 	}
 	for (const [dir, manifest] of manifests(filesUnder("."))) {
-		let changed = false
-		for (const section of sections) {
-			const values = manifest[section]
-			if (values && Object.hasOwn(values, name)) {
-				if (dir === "." && manifest.overrides) {
-					updateOverride(manifest.overrides, name, values[name], target)
-				}
-				values[name] = target
-				changed = true
-			}
-		}
-		if (changed) {
+		if (bumpManifest({ dir, manifest, name, target })) {
 			writeManifest(dir, manifest)
 		}
 	}
@@ -259,18 +233,4 @@ function writeManifest(dir: string, manifest: Manifest): void {
 
 function registrySource(range: string): boolean {
 	return !!validRange(range) || /^[a-z][a-z0-9_.-]*$/i.test(range)
-}
-
-function updateOverride(
-	overrides: NonNullable<Manifest["overrides"]>,
-	name: string,
-	from: string | undefined,
-	to: string,
-): void {
-	const rule = overrides[name]
-	if (typeof rule === "string" && rule === from) {
-		overrides[name] = to
-	} else if (rule && typeof rule === "object" && rule["."] === from) {
-		rule["."] = to
-	}
 }

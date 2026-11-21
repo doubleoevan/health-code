@@ -2,7 +2,8 @@ import type { Command } from "../contracts.ts"
 
 const reserved =
 	/^(?:PATH|HOME|TMP.*|TEMP|PWD|SHELL|USER|LOGNAME|IFS|ENV|BASH_ENV|NODE.*|BUN.*|NPM.*|npm_.*|YARN.*|PNPM.*|GIT.*|LD_.*|DYLD_.*|SSL_.*|.*PROXY|RUNTA_.*|COREPACK.*|XDG_.*|CI|LANG|LC_.*|SHELLOPTS|BASHOPTS)$/i
-export function guestArguments(command: Command, observation: string | undefined): string[] {
+type TestMount = { path: string; kind: "report" | "inventory"; writable?: boolean }
+export function guestArguments(command: Command, observation: string | undefined, testMount?: TestMount): string[] {
 	// Build a minimal filesystem with one persistent writable project directory.
 	const args = [
 		"ip",
@@ -68,6 +69,9 @@ export function guestArguments(command: Command, observation: string | undefined
 		"--chdir",
 		"/project",
 	]
+	if (testMount) {
+		args.push(testMount.writable ? "--bind" : "--ro-bind", testMount.path, `/inspection-${testMount.kind}`)
+	}
 	if (observation) {
 		args.push("--bind", observation, "/evidence")
 	}
@@ -84,7 +88,9 @@ export function guestArguments(command: Command, observation: string | undefined
 			"-o",
 			"|head -c 33554432 > /evidence/syscalls; cat >/dev/null",
 			"-e",
-			"trace=%file,%network,write,writev,pwrite64,pwritev,pwritev2,ftruncate,fallocate,sendfile,copy_file_range,splice,mmap,mprotect,pkey_mprotect,fchmod,fchown,fsetxattr,fremovexattr,fchdir,dup,dup2,clone,clone3,fork,vfork",
+			command.observe === "network"
+				? "trace=execve,connect,sendto,sendmsg,sendmmsg"
+				: "trace=%file,%network,write,writev,pwrite64,pwritev,pwritev2,ftruncate,fallocate,sendfile,copy_file_range,splice,mmap,mprotect,pkey_mprotect,fchmod,fchown,fsetxattr,fremovexattr,fchdir,dup,dup2,clone,clone3,fork,vfork",
 			"--",
 		)
 	}

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import type { CredentialSession, ModelReply, PatchOperation } from "./agentContracts.ts"
 import {
 	type Command,
 	type CommandResult,
@@ -18,16 +19,30 @@ export type FixtureCommand = {
 export type SandboxFixture = {
 	commit: string
 	commands: readonly FixtureCommand[]
+	agentReplies?: readonly ModelReply[]
+	verifiedStub?: boolean
+	patches?: readonly { request: PatchOperation; response: string | null }[]
 	files?: Readonly<Record<string, string>>
 }
 
 const empty: Observation = { complete: true, findings: [] }
 
 /** Replays each inspection independently, using the caller's fixture records. */
-export function createFakeSandboxProvider(fixture: SandboxFixture): SandboxProvider {
+export function createFakeSandboxProvider(
+	fixture: SandboxFixture,
+): SandboxProvider & { credentialEvents: { sandboxId: string; action: string; host: string }[] } {
+	const credentialEvents: { sandboxId: string; action: string; host: string }[] = []
 	const sessions = new Map<
 		string,
-		{ index: number; locked: boolean; files: Map<string, string>; observations: Map<string, FixtureCommand> }
+		{
+			index: number
+			turn: number
+			patch: number
+			bound: boolean
+			locked: boolean
+			files: Map<string, string>
+			observations: Map<string, FixtureCommand>
+		}
 	>()
 	function session(sandbox: Sandbox): NonNullable<ReturnType<typeof sessions.get>> {
 		const state = sessions.get(sandbox.id)
@@ -44,12 +59,75 @@ export function createFakeSandboxProvider(fixture: SandboxFixture): SandboxProvi
 		return entry
 	}
 	return {
+		credentialEvents,
+		async openCredentialSession(sandbox, route): Promise<CredentialSession> {
+			const state = session(sandbox)
+			if (!state.locked || state.bound) {
+				throw new InspectionError("credential-binding", "Registry phase required")
+			}
+			const record = (action: string): void => {
+				credentialEvents.push({ sandboxId: sandbox.id, host: new URL(route.baseUrl).hostname, action })
+			}
+			state.bound = true
+			let verified = false
+			let closed = false
+			record("attach")
+			record("readback")
+			return {
+				async verify(): Promise<ModelReply> {
+					if (closed || !fixture.verifiedStub) {
+						throw new InspectionError("credential-binding", "Credential probe failed")
+					}
+					verified = true
+					record("verified")
+					return { text: "OK", modelId: route.modelId, inputTokens: 1, outputTokens: 1 }
+				},
+				async generate(): Promise<ModelReply> {
+					if (closed || !verified) {
+						throw new InspectionError("credential-binding", "Verified stub required")
+					}
+					const reply = fixture.agentReplies?.[state.turn++]
+					if (!reply) {
+						throw new InspectionError("fixture-command", "Missing model reply")
+					}
+					return structuredClone(reply)
+				},
+				async close(): Promise<void> {
+					if (!closed) {
+						closed = true
+						verified = false
+						state.bound = false
+						record("revoke")
+						record("registry-only")
+					}
+				},
+			}
+		},
+		async patchWorkspace(sandbox, request): Promise<string | null> {
+			const state = session(sandbox)
+			if (!state.locked || state.bound) {
+				throw new InspectionError("policy", "Registry phase required")
+			}
+			const patch = fixture.patches?.[state.patch++]
+			if (!patch || JSON.stringify(patch.request) !== JSON.stringify(request)) {
+				throw new InspectionError("fixture-command", "Unexpected patch operation")
+			}
+			return patch.response
+		},
 		async checkAvailability(): Promise<void> {},
 		estimateMaxCost(): number {
 			return 0
 		},
 		async createSandbox(name): Promise<Sandbox> {
-			sessions.set(name, { index: 0, locked: false, files: new Map(), observations: new Map() })
+			sessions.set(name, {
+				index: 0,
+				turn: 0,
+				patch: 0,
+				bound: false,
+				locked: false,
+				files: new Map(),
+				observations: new Map(),
+			})
 			return { id: name }
 		},
 		async prepareRepository(sandbox): Promise<string> {
@@ -58,6 +136,9 @@ export function createFakeSandboxProvider(fixture: SandboxFixture): SandboxProvi
 		},
 		async setNetworkPolicy(sandbox, hosts): Promise<void> {
 			validateRegistryHosts(hosts)
+			if (session(sandbox).bound) {
+				throw new InspectionError("policy", "Agent session active")
+			}
 			session(sandbox).locked = true
 		},
 		async resetProject(sandbox): Promise<void> {
@@ -66,7 +147,7 @@ export function createFakeSandboxProvider(fixture: SandboxFixture): SandboxProvi
 		},
 		async executeCommand(sandbox, command: Command): Promise<CommandResult> {
 			const state = session(sandbox)
-			if (!state.locked) {
+			if (!state.locked || state.bound) {
 				throw new InspectionError("policy", "Registry policy required")
 			}
 			const entry = fixture.commands[state.index++]

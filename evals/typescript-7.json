@@ -1,0 +1,19 @@
+{
+	"version": 1,
+	"id": "typescript-7",
+	"kind": "upgrade",
+	"repositoryUrl": "https://github.com/doubleoevan/health-code",
+	"commit": "7e6d81920e7959933822dc628fe7ad184f56cf61",
+	"upgrade": { "dependency": "typescript", "from": "5.9.3", "to": "7.0.2" },
+	"expected": {
+		"check": "failed",
+		"confirmed": true,
+		"locator": "scripts/readWorkspace.ts",
+		"verdict": "Fixed",
+		"existingTestChanges": false
+	},
+	"reference": {
+		"parent": "cc0c5319b89410fc71ff9b7359f49fd11916e2c7",
+		"commit": "f89eebc05313cb8e49e1d81934ac2484f640cb92"
+	}
+}

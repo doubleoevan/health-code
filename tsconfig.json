@@ -8,7 +8,7 @@
 			"path": "packages/health-code"
 		},
 		{
-			"path": "apps/site"
+			"path": "apps/web"
 		},
 		{
 			"path": "apps/mcp"

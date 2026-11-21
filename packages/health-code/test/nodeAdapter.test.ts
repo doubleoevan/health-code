@@ -6,7 +6,7 @@ import { join, resolve } from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { inspectTrace } from "../guest/observe.ts"
-import { confirm } from "../src/checkProject.ts"
+import { confirm } from "../src/confirmCheck.ts"
 import type { CheckResult, Project } from "../src/contracts.ts"
 import { selectUpgrades } from "../src/selectUpgrades.ts"
 

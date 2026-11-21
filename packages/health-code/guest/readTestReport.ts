@@ -1,28 +1,29 @@
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync, statSync } from "node:fs"
 import { isAbsolute, relative } from "node:path"
 import { XMLParser } from "fast-xml-parser"
 import type { TestFailure } from "../src/contracts.ts"
+import { jsonCaseName, xmlCaseName } from "../src/testCaseName.ts"
 import { readText, workspaceDirectories } from "./inventory.ts"
 
 export const reportPath = ".health-code/test-results"
-export function reporterArguments(script: string): string[] {
+export function reporterArguments(script: string, path = reportPath): string[] {
 	if (!/^(?:bun test|vitest(?: run)?|jest)(?:\s+[\w./=-]+)*$/.test(script)) {
 		return []
 	}
 	if (script.startsWith("bun test")) {
-		return ["--reporter=junit", `--reporter-outfile=${reportPath}`]
+		return ["--reporter=junit", `--reporter-outfile=${path}`]
 	}
 	if (script.startsWith("jest")) {
-		return ["--json", `--outputFile=${reportPath}`, "--runInBand"]
+		return ["--json", `--outputFile=${path}`, "--runInBand"]
 	}
-	return ["--run", "--reporter=json", `--outputFile=${reportPath}`]
+	return ["--run", "--reporter=json", `--outputFile=${path}`]
 }
 
 type Suite = {
 	name?: string
 	status?: string
 	message?: string
-	assertionResults?: { status: string; fullName: string }[]
+	assertionResults?: { status: string; fullName: string; title?: string; ancestorTitles?: string[] }[]
 }
 type XmlSuite = { name?: string; file?: string; testcase?: XmlCase[]; testsuite?: XmlSuite[]; errors?: string }
 type XmlCase = { name?: string; classname?: string; file?: string; failure?: unknown; error?: unknown }
@@ -30,10 +31,15 @@ type XmlCase = { name?: string; classname?: string; file?: string; failure?: unk
 function fileName(path: string): string {
 	return isAbsolute(path) ? relative(process.cwd(), path) : path
 }
-function xmlFailures(suites: XmlSuite[]): TestFailure[] {
+function reportedXmlName(item: XmlCase, structured: boolean): string {
+	return structured && item.name
+		? xmlCaseName(item.name, item.classname)
+		: [item.classname, item.name].filter(Boolean).join(" ")
+}
+function xmlFailures(suites: XmlSuite[], structured: boolean): TestFailure[] {
 	const failures: TestFailure[] = []
 	for (const suite of suites) {
-		failures.push(...xmlFailures(suite.testsuite ?? []))
+		failures.push(...xmlFailures(suite.testsuite ?? [], structured))
 		const cases = suite.testcase ?? []
 		if (!cases.length && Number(suite.errors) > 0) {
 			failures.push({ workspace: ".", file: fileName(suite.file ?? suite.name ?? "unknown") })
@@ -43,14 +49,17 @@ function xmlFailures(suites: XmlSuite[]): TestFailure[] {
 				failures.push({
 					workspace: ".",
 					file: fileName(item.file ?? suite.file ?? suite.name ?? "unknown"),
-					name: [item.classname, item.name].filter(Boolean).join(" "),
+					name: reportedXmlName(item, structured),
 				})
 			}
 		}
 	}
 	return failures
 }
-export function readTestReport(script: string): {
+export function readTestReport(
+	script: string,
+	protectedReport = false,
+): {
 	complete: boolean
 	granularity: "case" | "exit"
 	failures: TestFailure[]
@@ -58,10 +67,11 @@ export function readTestReport(script: string): {
 	if (!reporterArguments(script).length) {
 		return { complete: true, granularity: "exit", failures: [] }
 	}
-	if (!existsSync(reportPath)) {
+	const path = protectedReport ? "/inspection-report" : reportPath
+	if (!existsSync(path) || statSync(path).size > 16 * 1024 * 1024) {
 		return { complete: false, granularity: "case", failures: [] }
 	}
-	const text = readText(reportPath)
+	const text = protectedReport ? readFileSync(path, "utf8") : readText(path)
 	if (text.trimStart().startsWith("<")) {
 		if (/<!DOCTYPE/i.test(text)) {
 			throw new Error("Unsupported report declaration")
@@ -76,11 +86,11 @@ export function readTestReport(script: string): {
 		if (!Array.isArray(suites)) {
 			throw new Error("Invalid test report")
 		}
-		return { complete: true, granularity: "case", failures: scopeFailures(xmlFailures(suites)) }
+		return { complete: true, granularity: "case", failures: scopeFailures(xmlFailures(suites, protectedReport)) }
 	}
-	return { complete: true, granularity: "case", failures: scopeFailures(jsonFailures(text)) }
+	return { complete: true, granularity: "case", failures: scopeFailures(jsonFailures(text, protectedReport)) }
 }
-function jsonFailures(text: string): TestFailure[] {
+function jsonFailures(text: string, structured: boolean): TestFailure[] {
 	const json = JSON.parse(text)
 	if (!Array.isArray(json.testResults)) {
 		throw new Error("Invalid test report")
@@ -90,7 +100,7 @@ function jsonFailures(text: string): TestFailure[] {
 		const file = fileName(suite.name ?? "unknown")
 		const failed = (suite.assertionResults ?? []).filter((test) => test.status === "failed")
 		for (const test of failed) {
-			failures.push({ workspace: ".", file, name: test.fullName })
+			failures.push({ workspace: ".", file, name: structured ? jsonCaseName(test) : test.fullName })
 		}
 		if (!failed.length && suite.status === "failed") {
 			failures.push({ workspace: ".", file })

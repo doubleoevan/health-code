@@ -6,7 +6,16 @@ export function translate(error: unknown): Error {
 	if (error instanceof InspectionError) {
 		return error
 	}
-	return new SandboxUnavailableError(availabilityReason(error instanceof ApiError ? error.statusCode : undefined))
+	const failure = new SandboxUnavailableError(
+		availabilityReason(error instanceof ApiError ? error.statusCode : undefined),
+	)
+	if (error instanceof ApiError) {
+		failure.cause = {
+			status: error.statusCode,
+			code: /^[a-z0-9_-]{1,80}$/i.test(error.code ?? "") ? error.code : undefined,
+		}
+	}
+	return failure
 }
 export async function providerRequest<T>(request: Promise<T>): Promise<T> {
 	try {

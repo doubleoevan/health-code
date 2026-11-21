@@ -1,0 +1,43 @@
+name: Inspection evaluations
+on:
+  workflow_dispatch:
+    inputs:
+      case:
+        description: Pinned case to score
+        type: choice
+        options: [typescript-7, carlnotes-baseline]
+        required: true
+permissions:
+  contents: read
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-bun
+      - name: Score selected case
+        id: evaluation
+        continue-on-error: true
+        env:
+          CASE_ID: ${{ inputs.case }}
+          RUNTA_TOKEN: ${{ secrets.RUNTA_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          HEALTH_CODE_STORED_CREDENTIAL: ${{ vars.HEALTH_CODE_STORED_CREDENTIAL }}
+        run: bun run eval --case "$CASE_ID"
+      - name: Publish evaluation result
+        if: always()
+        env:
+          CASE_ID: ${{ inputs.case }}
+          OUTCOME: ${{ steps.evaluation.outcome }}
+        run: |
+          echo "## $CASE_ID evaluation" >> "$GITHUB_STEP_SUMMARY"
+          echo "Score step outcome: $OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+          for report in logs/typescript-7-*.json; do
+            if [ -f "$report" ]; then
+              jq -r '"Verdict: \(.verdict). Confirmed break: \(.confirmed). Budget acceptance: \(.budgetAcceptance). Repair turns: \(.attemptTurns). Model cost: $\(.modelCostUsd)."' "$report" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done

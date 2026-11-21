@@ -1,7 +1,8 @@
-import { randomUUID } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { setTimeout as delay } from "node:timers/promises"
+import { gzipSync } from "node:zlib"
 import { ApiError, Runta } from "@runta/runta-sdk"
+import type { CredentialSession } from "../agentContracts.ts"
 import { bounded, checkOperation } from "../collectEvents.ts"
 import {
 	type CommandResult,
@@ -14,26 +15,20 @@ import {
 } from "../contracts.ts"
 import { confirmNetworkPolicy, validateRegistryHosts } from "../networkPolicy.ts"
 import { toRepositoryUrl } from "../toRepositoryUrl.ts"
-import { guestArguments, observe } from "./executeGuest.ts"
+import { executeCommand, type Instance } from "./executeCommand.ts"
+import { guestArguments } from "./executeGuest.ts"
+import { openCredentialSession } from "./openCredentialSession.ts"
 import { checkout, provision, restore } from "./provision.ts"
+import { toSandboxPrefix } from "./reconcileSandboxes.ts"
 import {
 	availabilityReason,
 	checked,
-	exec,
 	providerRequest,
 	type Runtime,
 	remainingOperation,
 	translate,
 } from "./requestRuntime.ts"
-
-type Instance = {
-	runtime: Runtime
-	locked: boolean
-	updating: boolean
-	commands: number
-	hosts: string[]
-	observations: Map<string, { connections: Observation; files: Observation }>
-}
+import { credentialTarget } from "./setCredentialBinding.ts"
 
 function validatedPath(path: string): string {
 	if (
@@ -46,19 +41,41 @@ function validatedPath(path: string): string {
 	}
 	return `/project/${path}`
 }
-export type ProviderOptions = { token?: string; fetch?: typeof fetch }
+export type ProviderOptions = {
+	token?: string
+	fetch?: typeof fetch
+	deployment?: string
+	memoryMib?: 4096 | 8192
+	revision?: string
+}
 /** Creates an isolated provider client. Only its token default reads application settings. */
 export function createSandboxProvider(options: ProviderOptions = {}): SandboxProvider {
-	return connectProvider(options)
+	if (options.revision && !/^[a-f0-9]{40}$/.test(options.revision)) {
+		throw new InspectionError("invalid-revision", "Expected a full commit SHA")
+	}
+	return connectProvider(options, options.revision)
 }
 /** Connects the sandbox client and optionally pins acquisition to a specific revision. */
-export function connectProvider(options: ProviderOptions, revision?: string): SandboxProvider {
+export function connectProvider(
+	options: ProviderOptions,
+	revision?: string,
+	proveDeniedRequest = false,
+): SandboxProvider {
+	const memoryMib = options.memoryMib ?? 4096
+	if (![4096, 8192].includes(memoryMib)) {
+		throw new InspectionError("invalid-limits", "Unsupported sandbox memory size")
+	}
 	const token = options.token ?? process.env.RUNTA_TOKEN
+	const prefix = options.deployment === undefined ? "health-code-" : toSandboxPrefix(options.deployment)
+	function runtimeName(name: string): string {
+		return prefix + name.slice("health-code-".length)
+	}
 	const endpoint = "https://api.runta.com"
 	let client: Runta | undefined
 	const instances = new Map<string, Instance>()
 	const creating = new Map<string, Promise<Runtime>>()
 	const owned = new Set<string>()
+	const deletions = new Map<string, Promise<void>>()
 	function sdk(): Runta {
 		if (!token) {
 			throw new SandboxUnavailableError("authentication")
@@ -80,7 +97,27 @@ export function connectProvider(options: ProviderOptions, revision?: string): Sa
 		}
 		return instance
 	}
-	async function destroy(sandbox: Sandbox, operation: Operation): Promise<void> {
+	async function withCommand<T>(instance: Instance, work: (runtime: Runtime) => Promise<T>): Promise<T> {
+		if (instance.updating) {
+			throw new InspectionError("sandbox-busy", "Sandbox policy transition is active")
+		}
+		instance.commands++
+		try {
+			return await work(instance.runtime)
+		} finally {
+			instance.commands--
+		}
+	}
+	function destroy(sandbox: Sandbox, operation: Operation): Promise<void> {
+		const pending = deletions.get(sandbox.id)
+		if (pending) {
+			return pending
+		}
+		const deletion = deleteAllocation(sandbox, operation).finally(() => deletions.delete(sandbox.id))
+		deletions.set(sandbox.id, deletion)
+		return deletion
+	}
+	async function deleteAllocation(sandbox: Sandbox, operation: Operation): Promise<void> {
 		if (!owned.has(sandbox.id)) {
 			return
 		}
@@ -101,7 +138,7 @@ export function connectProvider(options: ProviderOptions, revision?: string): Sa
 		if (pending) {
 			await pending.catch(() => undefined)
 		}
-		return instances.get(sandbox.id)?.runtime ?? (await sdk().runtimes.get(sandbox.id))
+		return instances.get(sandbox.id)?.runtime ?? (await sdk().runtimes.get(runtimeName(sandbox.id)))
 	}
 	function deletedInstance(sandbox: Sandbox, error: unknown): boolean {
 		return error instanceof ApiError && error.statusCode === 404 && instances.has(sandbox.id)
@@ -130,6 +167,54 @@ export function connectProvider(options: ProviderOptions, revision?: string): Sa
 		}
 	}
 	return {
+		async patchWorkspace(sandbox, request, operation): Promise<string | null> {
+			const instance = locked(sandbox)
+			if (instance.commands || instance.updating) {
+				throw new InspectionError("sandbox-busy", "Repository command is active")
+			}
+			instance.updating = true
+			instance.locked = false
+			try {
+				checkOperation(operation.signal)
+				const outcome = await instance.runtime.exec(
+					["env", "-i", "PATH=/usr/bin:/bin", "/opt/health-code/bin/node", "/opt/health-code/patch.mjs"],
+					{
+						stdin: JSON.stringify(request),
+						timeoutSecs: Math.ceil(operation.timeoutMs / 1000),
+						maxOutputBytes: 1024 * 1024,
+					},
+				)
+				if (outcome.exitCode || outcome.stdoutTruncated) {
+					throw new InspectionError("patch-workspace", `Protected patch operation failed (${request.kind})`)
+				}
+				return JSON.parse(outcome.stdoutText) as string | null
+			} finally {
+				instance.updating = false
+				instance.locked = true
+			}
+		},
+		async openCredentialSession(sandbox, route, operation): Promise<CredentialSession> {
+			const instance = locked(sandbox)
+			if (!token || instance.updating || instance.commands) {
+				throw new InspectionError("credential-binding", "Runtime is busy or unavailable")
+			}
+			credentialTarget(route)
+			instance.updating = true
+			instance.locked = false
+			return openCredentialSession({
+				proveDeniedRequest,
+				runtime: instance.runtime,
+				token,
+				request: options.fetch ?? fetch,
+				route,
+				operation,
+				release() {
+					instance.updating = false
+					instance.locked = true
+				},
+				destroy: (cleanup) => destroy(sandbox, cleanup),
+			})
+		},
 		async checkAvailability(operation = { timeoutMs: 10000 }): Promise<void> {
 			if (!token) {
 				throw new SandboxUnavailableError("authentication")
@@ -151,7 +236,7 @@ export function connectProvider(options: ProviderOptions, revision?: string): Sa
 			}, operation)
 		},
 		estimateMaxCost(durationMs): number {
-			return (Math.ceil(durationMs / 60000) / 60) * (2 * 0.0504 + 4 * 0.0162 + 256 * 0.000108)
+			return (Math.ceil(durationMs / 60000) / 60) * (2 * 0.0504 + (memoryMib / 1024) * 0.0162 + 256 * 0.000108)
 		},
 		async createSandbox(name, operation): Promise<Sandbox> {
 			if (!/^health-code-[\da-f-]{36}$/.test(name)) {
@@ -164,10 +249,10 @@ export function connectProvider(options: ProviderOptions, revision?: string): Sa
 				checkOperation(operation.signal)
 				const manager = sdk().runtimes
 				owned.add(name)
-				const request = manager.create(name, {
+				const request = manager.create(runtimeName(name), {
 					vcpus: 2,
-					memoryMib: 4096,
-					memoryMaxMib: 4096,
+					memoryMib,
+					memoryMaxMib: memoryMib,
 					timeoutMs: operation.timeoutMs,
 				})
 				creating.set(name, request)
@@ -206,29 +291,34 @@ export function connectProvider(options: ProviderOptions, revision?: string): Sa
 			}
 		},
 		async prepareRepository(sandbox, url, operation): Promise<string> {
-			const { runtime } = state(sandbox)
-			const repositoryUrl = toRepositoryUrl(url)
-			const remaining = remainingOperation(operation)
-			await checked(runtime, ["sh", "-c", provision()], remaining())
-			for (const [local, remote] of [
-				["guest.mjs", "project.mjs"],
-				["observe.mjs", "observe.mjs"],
-			] as const) {
-				const contents = await readFile(new URL(`../../dist/${local}`, import.meta.url), "utf8")
-				remaining()
-				await providerRequest(runtime.files.write(`/opt/health-code/${remote}`, contents))
-			}
-			await checked(runtime, ["chmod", "-R", "a+rX", "/opt/health-code"], remaining())
-			try {
-				return (
-					await checked(runtime, ["sh", "-c", checkout, "checkout", repositoryUrl, revision ?? ""], remaining())
-				).trim()
-			} catch (error) {
-				if (error instanceof InspectionError && error.code === "sandbox-command") {
-					throw new InspectionError("repository-unavailable", "Public repository or pinned commit is unavailable")
+			return withCommand(state(sandbox), async (runtime) => {
+				const repositoryUrl = toRepositoryUrl(url)
+				const remaining = remainingOperation(operation)
+				await checked(runtime, ["sh", "-c", provision()], remaining())
+				for (const [local, remote] of [
+					["guest.mjs", "project.mjs"],
+					["observe.mjs", "observe.mjs"],
+					["agent.mjs", "agent.mjs"],
+					["patch.mjs", "patch.mjs"],
+				] as const) {
+					const contents = await readFile(new URL(`../../dist/${local}`, import.meta.url))
+					remaining()
+					const archive = `/opt/health-code/${remote}.gz`
+					await providerRequest(runtime.files.write(archive, gzipSync(contents)))
+					await checked(runtime, ["gzip", "-df", archive], remaining())
 				}
-				throw error
-			}
+				await checked(runtime, ["chmod", "-R", "a+rX", "/opt/health-code"], remaining())
+				try {
+					return (
+						await checked(runtime, ["sh", "-c", checkout, "checkout", repositoryUrl, revision ?? ""], remaining())
+					).trim()
+				} catch (error) {
+					if (error instanceof InspectionError && error.code === "sandbox-command") {
+						throw new InspectionError("repository-unavailable", "Public repository or pinned commit is unavailable")
+					}
+					throw error
+				}
+			})
 		},
 		async setNetworkPolicy(sandbox, hosts, operation): Promise<void> {
 			const instance = state(sandbox)
@@ -254,68 +344,40 @@ export function connectProvider(options: ProviderOptions, revision?: string): Sa
 			}
 		},
 		async resetProject(sandbox, operation): Promise<void> {
-			await checked(locked(sandbox).runtime, ["sh", "-c", restore], operation)
+			await withCommand(locked(sandbox), (runtime) => checked(runtime, ["sh", "-c", restore], operation))
 		},
 		async executeCommand(sandbox, command): Promise<CommandResult> {
-			const instance = locked(sandbox)
-			instance.commands++
-			try {
-				const remaining = remainingOperation(command)
-				const id = randomUUID()
-				const dir = command.observe ? `/var/lib/health-code/evidence-${id}` : undefined
-				const argv = guestArguments(command, dir)
-				const result = await exec(
-					instance.runtime,
-					dir ? ["bash", "-c", observe, "observe", dir, ...argv] : argv,
-					command,
-				)
-				if (dir) {
-					const missing: Observation = { complete: false, reason: "Installation observer unavailable", findings: [] }
-					let evidence = { connections: missing, files: missing }
-					try {
-						const budget = remaining()
-						const raw = await checked(
-							instance.runtime,
-							["/opt/health-code/bin/node", "/opt/health-code/observe.mjs", dir, ...instance.hosts],
-							{ ...budget, timeoutMs: Math.min(5000, budget.timeoutMs) },
-						)
-						evidence = JSON.parse(raw)
-					} catch {
-						// Keep the check untested when the supervisor cannot provide complete evidence.
-					}
-					instance.observations.set(id, evidence)
-					result.observationId = id
-				}
-				return result
-			} finally {
-				instance.commands--
-			}
+			return executeCommand(locked(sandbox), command)
 		},
 		async readFile(sandbox, path, operation): Promise<string> {
-			return checked(
-				locked(sandbox).runtime,
-				guestArguments({ argv: ["cat", "--", validatedPath(path)], timeoutMs: operation.timeoutMs }, undefined),
-				operation,
-				true,
+			return withCommand(locked(sandbox), (runtime) =>
+				checked(
+					runtime,
+					guestArguments({ argv: ["cat", "--", validatedPath(path)], timeoutMs: operation.timeoutMs }, undefined),
+					operation,
+					true,
+				),
 			)
 		},
 		async writeFile(sandbox, path, contents, operation): Promise<void> {
 			const instance = locked(sandbox)
-			const target = validatedPath(path)
-			if (Buffer.byteLength(contents) > 65536) {
-				throw new InspectionError("input-limit", "File exceeds input limit")
-			}
-			checkOperation(operation.signal)
-			const result = await instance.runtime.exec(
-				guestArguments(
-					{ argv: ["sh", "-c", 'cat > "$1"', "write", target], timeoutMs: operation.timeoutMs },
-					undefined,
-				),
-				{ stdin: contents, timeoutSecs: Math.max(1, Math.ceil(operation.timeoutMs / 1000)) },
-			)
-			if (result.exitCode !== 0) {
-				throw new InspectionError("write-failed", "Could not write project file")
-			}
+			return withCommand(instance, async (runtime) => {
+				const target = validatedPath(path)
+				if (Buffer.byteLength(contents) > 65536) {
+					throw new InspectionError("input-limit", "File exceeds input limit")
+				}
+				checkOperation(operation.signal)
+				const result = await runtime.exec(
+					guestArguments(
+						{ argv: ["sh", "-c", 'cat > "$1"', "write", target], timeoutMs: operation.timeoutMs },
+						undefined,
+					),
+					{ stdin: contents, timeoutSecs: Math.max(1, Math.ceil(operation.timeoutMs / 1000)) },
+				)
+				if (result.exitCode !== 0) {
+					throw new InspectionError("write-failed", "Could not write project file")
+				}
+			})
 		},
 		async readAttemptedConnections(sandbox, id): Promise<Observation> {
 			const item = state(sandbox).observations.get(id)

@@ -8,14 +8,15 @@ The TypeScript library owns inspections. The site and MCP server expose the libr
 | Path | Responsibility |
 | --- | --- |
 | `packages/health-code/` | Library workspace. Owns inspection behavior and the public package entry. Read its AGENTS.md for the boundary. |
-| `apps/site/` | Site workspace. Owns browser presentation and interactions. |
+| `apps/web/` | Web application (`@health-code/web`). Owns submission, SQLite persistence, SSE, browser interactions and Report Card publication. |
 | `apps/mcp/` | MCP server workspace. Owns tool definitions and protocol translation. |
+| `evals/` | On-demand, pinned inspection cases and the CarlNotes Baseline inventory for maintainer review. |
 | `scripts/` | Repository checks, preflight, and the developer inspection CLI. Use `bun run inspect <repo-url> [--fake]` for a rolling log and a local JSON Report Card. |
 | `.github/` | CI, CodeQL, weekly dependency updates, and shared Bun setup. |
 | `openspec/` | Specifications and change artifacts. |
 | `.agents/` | Project skills and commands. Claude Code uses the links under `.claude/`. |
 
-The library ships the inspection engine. The site and MCP workspaces reserve their consumer entry points. A workspace imports a sibling package by its public name. Apps never import another app. Packages never depend on an app.
+The library ships the inspection engine. The site and MCP workspaces consume the public library entry. A workspace imports a sibling package by its public name. Apps never import another app. Packages never depend on an app.
 
 ## Route work
 
@@ -25,7 +26,7 @@ The library ships the inspection engine. The site and MCP workspaces reserve the
 | Sandbox creation, network policy, command execution, teardown, or the fake provider | `packages/health-code/` | Sandbox Provider boundary. Use provider names in identifiers only inside their provider. |
 | Package-manager detection, install, bump, typecheck, tests, or upgrade discovery | `packages/health-code/` | Ecosystem Adapter boundary. |
 | Model-facing instructions, evidence interpolation, or model calls | `packages/health-code/` | prompt-authoring, ai-sdk |
-| Live log, timeline, report card presentation, or site interaction | `apps/site/` | jsx-conventions, vercel-react-best-practices, web-design-guidelines |
+| Hosted submission, recovery, SSE, live log, timeline, or Report Card publication | `apps/web/` | jsx-conventions, vercel-react-best-practices, web-design-guidelines |
 | MCP tools, arguments, or protocol responses | `apps/mcp/` | Consume the library through its public entry. |
 | Lint, types, dependency policy, import rules, or test discovery | `scripts/` and root tool configs | See scripts/AGENTS.md and the README Development section. |
 | CI or dependency updates | `.github/` | CI and /ship both invoke `bash scripts/preflight.sh`. |
@@ -42,6 +43,8 @@ Run `bash scripts/preflight.sh` from the repository root before handoff. It stop
 The independent CI advisories job runs `bun run check:advisories` against the registry. Record a reviewed exception in `dependency-advisories.json` with its advisory ID, package, reason, and review date. Remove it once the advisory clears.
 
 ## Working rules
+
+- **Local development.** Start site development and preview sessions with hot reload enabled by default. Use the site’s development command and verify an edit appears in the open browser.
 
 - **Comments.** Use imperative voice for inline comments and third person for JSDoc. Keep a short why for a non-obvious choice. Delete restatements, decision history, NOT-X notes, trailing “since” or “because” justifications, definitions by negation, and notes about other modules. Rewrite a comment when its claim changes.
 - **Code style.** Follow code-style. Use verb-plus-noun names for modules that perform an action and a `to` prefix for cheap synchronous transforms. Write explicit return types. Use an options object for three or more parameters. Use only abbreviations on the skill's whitelist. Write multi-line `if` blocks with braces. Give a second copy one shared home. Review any file past about 400 lines and split distinct responsibilities.

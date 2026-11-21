@@ -11,6 +11,7 @@ import {
 } from "../src/index.ts"
 import { confirmNetworkPolicy, validateRegistryHosts } from "../src/networkPolicy.ts"
 import { guestArguments } from "../src/sandbox/executeGuest.ts"
+import { buildTestCommand } from "../src/sandbox/executeTests.ts"
 import { fixtureCommit, fixtureUrl } from "./providerContract.ts"
 
 test("verifies the complete allowlist before any repository-controlled command", async () => {
@@ -189,5 +190,116 @@ test("keeps coverage incomplete for escaping, cyclic, or replaced link targets",
 		const files = inspectTrace(trace, "", "0 packets dropped by kernel", []).files
 		assert.equal(files.complete, false)
 		assert.match(files.reason ?? "", /symbolic link/)
+	}
+})
+
+test("Bun hardlinks anonymous temporary inodes into the project", () => {
+	const trace = [
+		'2 execve("/usr/bin/env", [], []) = 0',
+		'2 linkat(5</project/.cache/#123>(deleted), "", 6</project/node_modules>, "pkg", AT_EMPTY_PATH) = 0',
+	].join("\n")
+	assert.deepEqual(inspectTrace(trace, "", "0 packets dropped by kernel", []).files, { complete: true, findings: [] })
+})
+
+test("network observation traces all outbound address-bearing calls and keeps unfinished sends inconclusive", () => {
+	const args = guestArguments({ argv: ["true"], timeoutMs: 1000, observe: "network" }, "/evidence")
+	assert.ok(args.includes("trace=execve,connect,sendto,sendmsg,sendmmsg"))
+	const inspect = (name: string): ReturnType<typeof inspectTrace> =>
+		inspectTrace(
+			`1 execve("/usr/bin/env", [], []) = 0\n2 ${name}(3, <unfinished ...>`,
+			"",
+			"0 packets dropped by kernel",
+			[],
+		)
+	assert.equal(inspect("recvfrom").connections.complete, true)
+	assert.equal(inspect("recvfrom").files.complete, true)
+	assert.equal(inspect("write").files.complete, false)
+	assert.equal(inspect("sendto").connections.complete, false)
+})
+
+test("only inventory readers receive the completed read-only snapshot", () => {
+	const base = ["node", "/opt/health-code/project.mjs"]
+	const args = (argv: string[], previous?: string): ReturnType<typeof buildTestCommand> =>
+		buildTestCommand({ command: { argv, timeoutMs: 1000 }, id: "fixture", previous })
+	const tests = args([...base, "tests", "--inventory"])
+	assert.ok(tests.capture)
+	assert.ok(tests.argv.includes("capture-tests"))
+	assert.equal(tests.argv.includes("/inspection-inventory"), false)
+	const read = args([...base, "integrity", "100"], tests.capture).argv
+	assert.deepEqual(read.slice(read.indexOf("/inspection-inventory") - 2, read.indexOf("/inspection-inventory") + 1), [
+		"--ro-bind",
+		tests.capture + "/inventory",
+		"/inspection-inventory",
+	])
+	assert.equal(args(["bun", "run", "test"], tests.capture).argv.includes("/inspection-inventory"), false)
+})
+
+test("pinned runner setup and test-only helpers stay protected outside test folders", async () => {
+	const { protectedTestFiles } = await import("../guest/protectTestSupport.ts")
+	const files: Record<string, string> = {
+		"package.json": JSON.stringify({ scripts: { test: "jest --config ./configuration.json" } }),
+		"configuration.json": JSON.stringify({ rootDir: "./src", setupFiles: ["<rootDir>/jestSetup.ts"] }),
+		"src/jestSetup.ts": "",
+		"src/alternative.ts": "",
+		"pkg/tsconfig.json": '{"extends":["../tsconfig.json","../other.json"],"compilerOptions":{"baseUrl":"."}}',
+		"other.json": '{"compilerOptions":{"paths":{"choice":["one","two"]}}}',
+		"pkg/one.ts": "",
+		"pkg/two.ts": "",
+		"pkg/main.ts": 'import "choice"; import "@support/alternative"',
+		"pkg/main.test.ts": 'import "./two"; import "../src/alternative"',
+
+		"tsconfig.json": '{"extends":"./config/base"}',
+		"config/base.json": '{"compilerOptions":{"baseUrl":"..","paths":{"@support/*":["src/*"]}}}',
+		"bunfig.toml": '[test]\npreload=["./src/bootstrap.ts"]',
+		"src/bootstrap.ts": 'import "./environment"',
+		"src/environment.ts": "",
+		"src/widget.ts": "export const widget = 1",
+		"src/fixtureHelper.ts": "",
+		"src/app.ts": 'import "./widget"',
+		"src/widget.test.ts": 'import "./widget"; import "@support/fixtureHelper"',
+	}
+	const blocked = protectedTestFiles(
+		Object.keys(files),
+		["src/widget.test.ts", "pkg/main.test.ts"],
+		(file) => files[file] ?? "",
+	)
+	assert.ok(blocked.has("src/bootstrap.ts"))
+	assert.ok(blocked.has("src/environment.ts"))
+	assert.ok(blocked.has("src/jestSetup.ts"))
+	assert.ok(blocked.has("configuration.json"))
+	assert.ok(blocked.has("pkg/two.ts"))
+	assert.ok(blocked.has("src/alternative.ts"))
+	assert.equal(blocked.has("pkg/one.ts"), false)
+	assert.ok(blocked.has("src/fixtureHelper.ts"))
+	assert.equal(blocked.has("src/widget.ts"), false)
+	assert.throws(() => protectedTestFiles(["vitest.config.ts"], [], () => "export default loadConfig()"), /Dynamic/)
+})
+
+test("test inventory pages retain all cases and mark the end of a full page", async () => {
+	const { writeInventoryPages } = await import("../guest/measureTests.ts")
+	const { mkdtempSync, readFileSync, rmSync } = await import("node:fs")
+	const { join } = await import("node:path")
+	const { tmpdir } = await import("node:os")
+	const root = mkdtempSync(join(tmpdir(), "test-inventory-"))
+	const directory = join(root, "inventory")
+	const cases = Array.from({ length: 200 }, (_, index) => ({
+		file: "sample.test.ts",
+		name: String(index),
+		status: "passed" as const,
+	}))
+	try {
+		writeInventoryPages(directory, {
+			cases,
+			discoveredFiles: ["sample.test.ts"],
+			counts: { passed: 200, failed: 0, skipped: 0, todo: 0 },
+			testFileErrors: [],
+		})
+		const page = (offset: number): { cases: [string, string, string][]; discoveredFiles?: string[] } =>
+			JSON.parse(readFileSync(join(directory, offset + ".json"), "utf8"))
+		assert.deepEqual(page(0).discoveredFiles, ["sample.test.ts"])
+		assert.equal(page(100).cases[0]?.[1], "100")
+		assert.deepEqual(page(200).cases, [])
+	} finally {
+		rmSync(root, { recursive: true, force: true })
 	}
 })

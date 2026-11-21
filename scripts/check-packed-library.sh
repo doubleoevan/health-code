@@ -28,10 +28,44 @@ import assert from "node:assert/strict"
 import { createFakeSandboxProvider, inspectRepository } from "health-code"
 import { readFileSync } from "node:fs"
 const sandboxProvider = createFakeSandboxProvider(JSON.parse(readFileSync("fixture.json", "utf8")))
-const card = await inspectRepository({repositoryUrl:"https://github.com/example/project",sandboxProvider})
+const card = await inspectRepository({repositoryUrl:"https://github.com/example/project",sandboxProvider,models:{fix:"legacy"}})
 assert.equal(card.version,1)
 assert.equal(card.baseline.install.status,"passed")
 assert.equal(card.timeline.at(-1).type,"inspection.finished")
+const pricing = {inputUsdPerMillion:1,outputUsdPerMillion:2,maxInputTokens:2048}
+const host = {model:{modelId:"fixture",doGenerate(){throw Error("Unexpected model call")}},pricing}
+const route = {protocol:"anthropic",modelId:"fixture",baseUrl:"https://model.example/v1",pricing,
+  credential:{name:"fixture",header:"x-api-key",valueTemplate:"${credential}"}}
+const recording = JSON.parse(readFileSync("fixture.json","utf8"))
+const command = (args,data) => ({argv:["node","/opt/health-code/project.mjs",...args],result:{stdout:JSON.stringify(data)}})
+recording.commands = [recording.commands[0],recording.commands[2],command(["installed-size"],10),
+  command(["tests","--inventory"],{counts:{passed:1,failed:0,todo:0,skipped:0},testFileErrors:[]}),recording.commands[4],
+  command(["integrity","0"],{files:["src.test.ts"],hooks:[],testFileErrors:[],cases:[["src.test.ts","case","passed"]]})]
+const replay = []
+const reportV2 = await inspectRepository({repositoryUrl:"https://github.com/example/project",
+  sandboxProvider:createFakeSandboxProvider(recording),
+  models:{repair:route,featureAdoption:route,releaseSummary:host,featureMatch:host},limits:{maxUpgrades:0},
+  onEvent:event=>{replay.push(event)}})
+assert.equal(reportV2.version,2)
+assert.equal(reportV2.limits.agent.repair.maxTurns,40)
+assert.equal(reportV2.limits.agent.featureAdoption.maxTurns,25)
+const previous = await inspectRepository({repositoryUrl:"https://github.com/example/project",
+  sandboxProvider:createFakeSandboxProvider(recording), models:{releaseSummary:host,featureMatch:host,fix:route,adoption:route},
+  limits:{maxUpgrades:0,agent:{fix:{maxIterations:2},adoption:{maxIterations:0}}}})
+assert.equal(previous.limits.agent.repair.maxTurns,2)
+assert.equal(previous.limits.agent.featureAdoption.maxTurns,0)
+assert.equal(Object.hasOwn(previous.limits.agent,"fix"),false)
+const migrating = await inspectRepository({repositoryUrl:"https://github.com/example/project",
+  sandboxProvider:createFakeSandboxProvider(recording), models:{releaseSummary:host,featureMatch:host,repair:route,adoption:route},
+  limits:{maxUpgrades:0,agent:{fix:{maxTurns:2},repair:{maxIterations:1,maxTurns:3},featureAdoption:{maxIterations:0}}}})
+assert.equal(migrating.limits.agent.repair.maxTurns,1)
+assert.equal(migrating.limits.agent.featureAdoption.maxTurns,0)
+assert.deepEqual(replay,reportV2.timeline)
+assert.equal(replay.at(-1).type,"inspection.finished")
+for(const asset of ["dist/guest.mjs","dist/observe.mjs","dist/agent.mjs","dist/patch.mjs",
+  ...["repair","featureAdoption","releaseSummary","featureMatch"].map(role=>"prompts/"+role+".md")]) {
+  assert.ok(readFileSync("node_modules/health-code/"+asset).length)
+}
 JS
 # Exercise the guest bundles without workspace module resolution.
 mkdir -p standalone/project
@@ -43,8 +77,15 @@ node consumer.mjs
 bun consumer.mjs
 cat > consumer.ts <<'TS'
 import { inspectRepository, type InspectionOptions, type ReportCard } from "health-code"
+import type {InspectionOptionsV2, ReportCardV2} from "health-code"
+export function inspectWithModels(options: InspectionOptionsV2): Promise<ReportCardV2> {
+  return inspectRepository(options)
+}
+export function checkFormerType(options: import("health-code").EnrichedInspectionOptions): Promise<import("health-code").EnrichedReportCard> {
+  return inspectRepository(options)
+}
 export function inspect(options: InspectionOptions): Promise<ReportCard> {
   return inspectRepository(options)
 }
 TS
-"$root/node_modules/.bin/tsc" --strict --noEmit --module nodenext --target es2022 consumer.ts
+"$root/node_modules/.bin/tsc" --types node,json-schema --typeRoots node_modules/health-code/node_modules/@types --strict --noEmit --module nodenext --target es2022 consumer.ts
