@@ -35,6 +35,7 @@ beforeEach(() => {
 				devDependencies: { "test-tool": "1.0.0" },
 			}),
 		)
+
 		// map a private-file alias alongside the public reference
 		write(
 			`${folder}/tsconfig.json`,
@@ -47,6 +48,7 @@ beforeEach(() => {
 			}),
 		)
 	}
+
 	// link the public package as the resolver would find it in a workspace
 	mkdirSync(join(root, "node_modules"))
 	symlinkSync("../packages/health-code", join(root, "node_modules/health-code"))
@@ -140,6 +142,7 @@ test("inherited JSONC paths resolve relative to the declaring config", () => {
 		"references": [{ "path": "../../packages/health-code" },],
 	}`,
 	)
+
 	// resolve the inherited alias from its declaring directory
 	write("apps/web/index.ts", 'import "#library/private.js"')
 	const result = check()
@@ -175,6 +178,7 @@ test("mixed imports count as runtime dependencies and type-only forms stay erase
 			'import { type Config, create } from "test-tool"',
 		].join("\r\n"),
 	)
+
 	// flag only the import that survives transpilation
 	const result = check()
 	expect(result.status).toBe(1)

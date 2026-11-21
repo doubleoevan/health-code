@@ -7,6 +7,7 @@ test("recovery deletes only orphaned deployment allocations across all inventory
 	const live = randomUUID()
 	const orphan = randomUUID()
 	const deleted: string[] = []
+
 	// mix orphaned, live and unrelated runtimes across two pages
 	const makeRuntime = (name: string): { id: string; display_name: string } => ({ id: randomUUID(), display_name: name })
 	const abandoned = makeRuntime(`hc-site-demo-${orphan}`)
@@ -21,6 +22,7 @@ test("recovery deletes only orphaned deployment allocations across all inventory
 		abandoned,
 	]
 	const second = [absent, makeRuntime(`hc-site-demo-${live}`), makeRuntime("hc-site-demo-bad")]
+
 	// record each deletion and tolerate an already absent runtime
 	const request = async (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
 		const url = new URL(String(input))
@@ -28,6 +30,7 @@ test("recovery deletes only orphaned deployment allocations across all inventory
 			deleted.push(url.pathname.split("/").at(-1) ?? "")
 			return new Response(null, { status: url.pathname.endsWith(absent.id) ? 404 : 204 })
 		}
+
 		// return a cursor until the final inventory page
 		const more = !url.searchParams.has("after")
 		return Response.json({
@@ -41,6 +44,7 @@ test("recovery deletes only orphaned deployment allocations across all inventory
 		liveInspectionIds: new Set([live]),
 		fetch: request as typeof fetch,
 	})
+
 	// verify that deletion stays inside the named deployment
 	assert.deepEqual(deleted, [sibling.id, abandoned.id, absent.id])
 	await assert.rejects(
@@ -76,6 +80,7 @@ test("scheduled cleanup preserves live, young and undated runtimes", async () =>
 	const live = randomUUID()
 	const old = new Date(cutoff - 1).toISOString()
 	const recent = new Date(cutoff + 1).toISOString()
+
 	// Include a live sibling and an allocation whose creation event never reached storage.
 	const runtime = (
 		inspection: string,
@@ -126,6 +131,7 @@ test("successive sweeps reclaim an undated orphan after a full lifetime of obser
 	}
 	await reconcileSandboxes({ ...options, createdBefore: Date.now() - 3600000 })
 	assert.equal(deleted, false)
+
 	// Advance beyond the first independently observed lifetime.
 	const observed = firstSeen.get(runtime.id)
 	assert.ok(observed)

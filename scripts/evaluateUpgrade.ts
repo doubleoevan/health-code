@@ -25,7 +25,9 @@ const schema = z.object({
 	reference: z.object({ parent: commit, commit }),
 })
 
-/** Scores the historical TypeScript regression using the public version 2 defaults. */
+/**
+ * Scores the historical TypeScript regression using the public version 2 defaults.
+ */
 export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	// load the pinned upgrade and require both accounts
 	const fixture = schema.parse(
@@ -34,11 +36,13 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	if (!process.env.ANTHROPIC_API_KEY || !process.env.RUNTA_TOKEN) {
 		throw new Error("TypeScript evaluation requires a host model credential and a sandbox account")
 	}
+
 	// configure the host model and its token prices
 	const modelId = "claude-opus-5-5"
 	const baseUrl = "https://api.anthropic.com/v1"
 	const model = createAnthropic({ baseURL: baseUrl, apiKey: process.env.ANTHROPIC_API_KEY })(modelId)
 	const pricing = { inputUsdPerMillion: 4, outputUsdPerMillion: 20, maxInputTokens: 96000 }
+
 	// bind sandbox requests to the registered model credential
 	const route = {
 		protocol: "anthropic" as const,
@@ -52,6 +56,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 		},
 		pricing,
 	}
+
 	// inspect the exact repository revision and dependency upgrade
 	const provider = createSandboxProvider({ revision: fixture.commit })
 	const started = Date.now()
@@ -74,6 +79,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 			if (event.type === "step.finished") {
 				console.error(event.status, `${Math.round(event.durationMs / 1000)}s`)
 			}
+
 			// show agent turns and sandbox lifecycle events
 			if (event.type === "detail" && event.text.startsWith("Agent turn ")) {
 				console.error(event.text)
@@ -83,6 +89,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 			}
 		},
 	})
+
 	// require evidence from the pinned commit
 	const report = card.upgrades[0]
 	if (!report || card.repository.commit !== fixture.commit) {
@@ -95,6 +102,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 				}),
 		)
 	}
+
 	// check that the failure reproduced on both attempts
 	const repeated = [report.typecheck, report.tests].some(
 		(check) =>
@@ -102,6 +110,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 			check.attempts?.length === 2 &&
 			check.attempts.every((attempt) => attempt.status === "failed"),
 	)
+
 	// match source evidence and look for edits to tests
 	const located = report.locators.some(
 		(loc) => loc.file === fixture.expected.locator && loc.url?.includes(fixture.commit),
@@ -109,6 +118,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	const testChanges = report.patches.flatMap((patch) => patch.commits.filter((entry) => entry.flag === "test"))
 	const upgradePatch = report.patches.find((patch) => patch.role === "upgrade")
 	const verified = upgradePatch?.verification
+
 	// score model usage and sandbox time against the shared budget
 	const durationMs = Date.now() - started
 	const sandboxCostUpperBoundUsd =
@@ -121,6 +131,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 		durationMs,
 		sandboxCostUpperBoundUsd,
 	})
+
 	// grade the repair using the final patch checks
 	const score = gradeUpgrade({
 		withinBudget,
@@ -143,6 +154,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	if (upgradePatch) {
 		await writeFile(new URL(filename, directory), upgradePatch.mailbox)
 	}
+
 	// collect the evaluation result and supporting evidence
 	const outcome = {
 		case: fixture.id,
@@ -181,6 +193,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 		sandboxCostUpperBoundUsd,
 		sourceDiff: upgradePatch ? await sourceDiff(upgradePatch, fixture.reference) : null,
 	}
+
 	// write the full comparison and print a compact summary
 	await writeFile(new URL(`typescript-7-${card.inspectionId}.json`, directory), `${JSON.stringify(outcome, null, 2)}\n`)
 	console.log(
@@ -227,6 +240,7 @@ export function gradeUpgrade({
 		declared.every(
 			(dep) => dep.reason.trim() && flagged.some((commit) => commit.sha === dep.commit && commit.reason === dep.reason),
 		)
+
 	// score repair acceptance separately from a located diagnosis
 	return {
 		budgetAcceptance:
@@ -239,6 +253,7 @@ export function gradeUpgrade({
 			green &&
 			report.verdict === "Fixed" &&
 			report.patches.length > 0,
+
 		// credit a diagnosis that identifies the expected migration
 		acceptableDiagnosis:
 			repeated &&
@@ -276,6 +291,7 @@ export async function sourceDiff(
 		// Use an isolated index and object store. Never check out or execute candidate source on the host.
 		git(["clone", "--bare", "--shared", "--", repository, "."])
 		git(["read-tree", patch.base])
+
 		// split the mailbox and apply each change to the temporary index
 		await mkdir(join(directory, "messages"))
 		git(["mailsplit", "-omessages"], patch.mailbox)
@@ -283,6 +299,7 @@ export async function sourceDiff(
 			git(["mailinfo", "message", "change"], await readFile(join(directory, "messages", name), "utf8"))
 			git(["apply", "--cached", "--binary", "--whitespace=nowarn", "change"])
 		}
+
 		// collect source paths changed by either repair
 		const referencePaths = git(["diff", "--name-only", "-z", reference.parent, reference.commit, "--", "*.ts", "*.js"])
 			.split("\0")
@@ -290,6 +307,7 @@ export async function sourceDiff(
 		const candidatePaths = git(["diff", "--cached", "--name-only", "-z", patch.base, "--", "*.ts", "*.js"])
 			.split("\0")
 			.filter(Boolean)
+
 		// compare the candidate index with the reference commit
 		const paths = [...new Set([...referencePaths, ...candidatePaths])]
 		return paths.length

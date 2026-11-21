@@ -44,12 +44,14 @@ export async function setupAccount(
 	const end = Date.now() + setupTimeoutMs
 	const route = configureModels(environment).releaseSummary
 	const origin = modelOrigin(environment)
+
 	// Keep credentials and SDK response bodies out of setup diagnostics.
 	try {
 		await client.check(token)
 	} catch {
 		throw new UserError("Runta account check failed. Check RUNTA_TOKEN and account access.")
 	}
+
 	// register the model key under the selected origin's secret name
 	const name = secretName(origin)
 	try {
@@ -68,14 +70,17 @@ export async function setupAccount(
 		}
 		throw new UserError("Model Request Sandbox verification failed. Register the origin-bound key during setup.")
 	}
+
 	// Forward environment references so the emitted configuration can be shared.
 	const names = ["RUNTA_TOKEN", ...optional.filter((name) => environment[name])]
+
 	// Resolve npm packages from the user's home when a client opens a new checkout.
 	const windows = process.platform === "win32"
 	const command = windows ? "cmd.exe" : "/bin/sh"
 	const args = windows
 		? ["/d", "/c", `cd /d "%USERPROFILE%" && npx -y health-code@${version} mcp`]
 		: ["-c", 'cd "$HOME" && exec npx "$@"', "npx", "-y", `health-code@${version}`, "mcp"]
+
 	// render shared launcher settings in each client's configuration format
 	const env = Object.fromEntries(names.map((name) => [name, toEnvironmentReference(name)]))
 	return [

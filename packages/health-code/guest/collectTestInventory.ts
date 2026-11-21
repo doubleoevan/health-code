@@ -7,11 +7,13 @@ type Suite = {
 	file?: string
 	name?: string
 	testsuite?: Suite[]
+
 	// identify test cases within each reported suite
 	testcase?: {
 		file?: string
 		classname?: string
 		name?: string
+
 		// retain the outcome elements supplied by the reporter
 		failure?: unknown
 		error?: unknown
@@ -29,7 +31,10 @@ function toCaseStatus(test: NonNullable<Suite["testcase"]>[number]): TestCase["s
 				? "todo"
 				: "skipped"
 }
-/** Reconciles the Bun reporter with its separately reported file loading errors. */
+
+/**
+ * Reconciles the Bun reporter with its separately reported file loading errors.
+ */
 export function collectBunInventory(xml: string, stderr: string): TestInventory {
 	if (/<!DOCTYPE/i.test(xml)) {
 		throw new Error("Unexpected report declaration")
@@ -41,6 +46,7 @@ export function collectBunInventory(xml: string, stderr: string): TestInventory 
 		parseAttributeValue: false,
 		isArray: (name) => name === "testsuite" || name === "testcase",
 	}).parse(xml)
+
 	// require a suite list before counting test cases
 	const root = parsed.testsuites
 	if (!Array.isArray(root?.testsuite)) {
@@ -49,6 +55,7 @@ export function collectBunInventory(xml: string, stderr: string): TestInventory 
 	const cases: TestCase[] = []
 	const discoveredFiles = new Set<string>()
 	const counts: TestCounts = { passed: 0, failed: 0, skipped: 0, todo: 0 }
+
 	// visit nested suites and retain their file identities
 	function visit(suite: Suite): void {
 		if (suite.file) {
@@ -61,6 +68,7 @@ export function collectBunInventory(xml: string, stderr: string): TestInventory 
 			if (!test.name) {
 				throw new Error("Unnamed test case")
 			}
+
 			// record the named case and its observed status
 			const status = toCaseStatus(test)
 			cases.push({
@@ -70,6 +78,7 @@ export function collectBunInventory(xml: string, stderr: string): TestInventory 
 			})
 			counts[status]++
 		}
+
 		// descend into suites nested under this one
 		for (const nested of suite.testsuite ?? []) {
 			visit(nested)
@@ -78,12 +87,14 @@ export function collectBunInventory(xml: string, stderr: string): TestInventory 
 	for (const suite of root.testsuite as Suite[]) {
 		visit(suite)
 	}
+
 	// reconcile file discovery errors with the terminal totals
 	const { errorCount, testFileErrors } = readTestFileErrors(stderr)
 	const terminal = /Ran \d+ tests? across \d+ files?\.[^\n]*\s*(?:error: script [^\n]*\s*)?$/.exec(stderr.trimEnd())
 	if (!terminal || Number(root.tests) !== cases.length) {
 		throw new Error("Incomplete Bun test inventory")
 	}
+
 	// isolate the final summary paragraph from earlier output
 	const tail =
 		stderr
@@ -91,6 +102,7 @@ export function collectBunInventory(xml: string, stderr: string): TestInventory 
 			.trimEnd()
 			.split(/\n\s*\n/)
 			.at(-1) ?? ""
+
 	// extract the runner's status counts
 	const observed = Object.fromEntries(
 		[...tail.matchAll(/^\s*(\d+) (pass|skip|todo|fail|error)s?\s*$/gm)].map((match) => [match[2], Number(match[1])]),
@@ -123,12 +135,14 @@ function readTestFileErrors(stderr: string): { errorCount: number; testFileError
 	let file = ""
 	let errorCount = 0
 	const testFileErrors = new Map<string, string>()
+
 	// associate each discovery error with the last file header
 	for (const [i, line] of lines.entries()) {
 		const header = /^([^\s].*\.[cm]?[jt]sx?):$/.exec(line)
 		if (header) {
 			file = projectFile(header[1])
 		}
+
 		// skip diagnostics outside a file loading failure
 		if (line !== "# Unhandled error between tests") {
 			continue
@@ -136,6 +150,7 @@ function readTestFileErrors(stderr: string): { errorCount: number; testFileError
 		if (!file) {
 			throw new Error("Unattributed file loading error")
 		}
+
 		// keep the first useful diagnostic for the current file
 		const diagnostic = lines.slice(i + 1, i + 40).find((entry) => /^(?:\w*Error|error): /.test(entry))
 		testFileErrors.set(file, (diagnostic ?? "Unhandled error between tests").replaceAll("/project/", "").slice(0, 320))
@@ -143,6 +158,7 @@ function readTestFileErrors(stderr: string): { errorCount: number; testFileError
 	}
 	return { errorCount, testFileErrors }
 }
+
 // validate file identities before merging reporters
 function projectFile(value?: string): string {
 	if (
@@ -154,16 +170,20 @@ function projectFile(value?: string): string {
 	) {
 		throw new Error("Unusable test file identity")
 	}
+
 	// use one normalized key per test file
 	return normalize(value)
 }
 
-/** Reads Jest and Vitest case identities and suite-level errors from their JSON reporters. */
+/**
+ * Reads Jest and Vitest case identities and suite-level errors from their JSON reporters.
+ */
 export function collectJsonInventory(text: string, root = process.cwd()): TestInventory {
 	const report = JSON.parse(text)
 	if (!Array.isArray(report.testResults) || !Number.isSafeInteger(report.numTotalTests)) {
 		throw new Error("Incomplete JSON test inventory")
 	}
+
 	// collect case totals and suite failures separately
 	const counts: TestCounts = { passed: 0, failed: 0, skipped: 0, todo: 0 }
 	const cases: TestCase[] = []
@@ -176,12 +196,14 @@ export function collectJsonInventory(text: string, root = process.cwd()): TestIn
 		if (!Array.isArray(suite.assertionResults)) {
 			throw new Error("Missing test identities")
 		}
+
 		// count each named assertion once
 		for (const assertion of suite.assertionResults) {
 			const entry = toJsonCase(file, assertion)
 			counts[entry.status]++
 			cases.push(entry)
 		}
+
 		// retain suite failures without a failing assertion
 		if (
 			suite.status === "failed" &&
@@ -190,6 +212,7 @@ export function collectJsonInventory(text: string, root = process.cwd()): TestIn
 			testFileErrors.push({ file, reason: "Suite failed before reporting a failing test" })
 		}
 	}
+
 	// cross-check the collected counts against the json summary
 	if (
 		cases.length !== report.numTotalTests ||
@@ -198,6 +221,7 @@ export function collectJsonInventory(text: string, root = process.cwd()): TestIn
 	) {
 		throw new Error("JSON test totals disagree")
 	}
+
 	// return stable file and error ordering
 	return {
 		counts,

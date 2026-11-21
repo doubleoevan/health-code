@@ -28,6 +28,7 @@ export class LaunchService {
 		} = environment
 		this.configured = replay || Boolean(key && key.length >= 32 && site && secret && token)
 		this.settings = new LaunchSettings(environment, token)
+
 		// Keep the widget key and verification secret on their respective sides of the request.
 		this.visitorKey = key ?? randomBytes(32).toString("hex")
 		this.challengeKey = site ?? ""
@@ -50,6 +51,7 @@ export class LaunchService {
 			throw new AdmissionError(503, "Paid admission is unavailable.")
 		}
 		const head = await source.resolve(url)
+
 		// Join an existing inspection before challenging or charging its visitor.
 		const key = JSON.stringify([head.repositoryId, head.revision, libraryVersion])
 		const day = toUtcDay()
@@ -57,6 +59,7 @@ export class LaunchService {
 		if (cached) {
 			return cached
 		}
+
 		// Check metadata and the current settings before requesting a paid-work challenge.
 		if (head.sizeKiB > this.settings.current.maxSizeKiB) {
 			throw new AdmissionError(413, "Repository exceeds the hosted size limit.")
@@ -64,6 +67,7 @@ export class LaunchService {
 		if (!workerAvailable() || !this.configured || !this.settings.available) {
 			throw new AdmissionError(503, "Inspection limits are temporarily unavailable. Use the local MCP.")
 		}
+
 		// Derive quota identities only for fresh work.
 		const identity = request.identify()
 		try {
@@ -81,6 +85,7 @@ export class LaunchService {
 			if (!workerAvailable() || !this.settings.available || head.sizeKiB > limits.maxSizeKiB) {
 				throw new AdmissionError(503, "Admission settings changed. Retry.")
 			}
+
 			// Commit admission and enqueue under one SQLite write lock.
 			const result = store.admission.admit({
 				key,

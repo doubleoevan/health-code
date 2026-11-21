@@ -15,6 +15,7 @@ type Options = {
 	token: string
 	request: typeof fetch
 	route: ModelRoute
+
 	// retain separate deadlines for operation and cleanup
 	operation: Operation & { cleanupDeadline?: number }
 	release: () => void
@@ -34,7 +35,9 @@ const receipt = z.object({
 		.catch(undefined),
 })
 
-/** Isolates trusted inference until removal and registry-only egress are verified. */
+/**
+ * Isolates trusted inference until removal and registry-only egress are verified.
+ */
 export async function openCredentialSession(options: Options): Promise<CredentialSession> {
 	const { runtime, route } = options
 	const probePrompt = credentialProbePrompt()
@@ -46,6 +49,7 @@ export async function openCredentialSession(options: Options): Promise<Credentia
 		effort: route.effort,
 		credential: { name: "", header: route.credential.header, valueTemplate: route.credential.valueTemplate },
 	}
+
 	// calculate the time available for revocation or sandbox destruction
 	const remaining = remainingOperation(options.operation)
 	const cleanupEnd = options.operation.cleanupDeadline ?? Date.now() + options.operation.timeoutMs
@@ -53,6 +57,7 @@ export async function openCredentialSession(options: Options): Promise<Credentia
 		const available = deadline - Date.now()
 		return options.destroy({ timeoutMs: available > 0 ? available : Math.max(1, reserveMs) })
 	}
+
 	// track credential state through attachment and revocation
 	const bindingOptions = { token: options.token, request: options.request, runtimeId: runtime.id, route }
 	let bound: Awaited<ReturnType<typeof setCredentialBinding>> | undefined
@@ -108,6 +113,7 @@ export async function openCredentialSession(options: Options): Promise<Credentia
 			if (result.exitCode !== 0 || result.stdoutTruncated) {
 				throw new Error()
 			}
+
 			// accept only a complete structured model receipt
 			return receipt.parse(JSON.parse(result.stdoutText))
 		} catch {
@@ -116,10 +122,12 @@ export async function openCredentialSession(options: Options): Promise<Credentia
 			active = false
 		}
 	}
+
 	// A model-less request cannot generate tokens while the gateway applies a rule.
 	async function awaitGateway(operation: Operation, attached: boolean): Promise<void> {
 		const budget = remainingOperation(operation)
 		let status = 0
+
 		// wait for the gateway to enforce the requested binding state
 		for (let wait = 0; wait < budget().timeoutMs; wait = Math.min(8000, Math.max(500, wait * 2))) {
 			await bounded((signal) => delay(wait, undefined, { signal }), budget())
@@ -128,6 +136,7 @@ export async function openCredentialSession(options: Options): Promise<Credentia
 				await confirmProbe(attached, budget())
 				return
 			}
+
 			// retry only transient or expected authentication statuses
 			if (![0, 400, 401, 403, 422, 429, 502, 503, 504].includes(status)) {
 				break
@@ -147,6 +156,7 @@ export async function openCredentialSession(options: Options): Promise<Credentia
 			}
 		}
 	}
+
 	// share one revocation across concurrent close requests
 	function close(operation: Operation): Promise<void> {
 		closing ??= revoke(operation)
@@ -182,6 +192,7 @@ export async function openCredentialSession(options: Options): Promise<Credentia
 		await checked(runtime, ["sh", "-c", "pgrep -u 65534 >/dev/null; test $? -eq 1"], remaining())
 		await policy([...registryHosts, target.hostname], remaining())
 		await awaitGateway(remaining(), false)
+
 		// attach the secret only after establishing gateway denial
 		bound = await setCredentialBinding({ ...bindingOptions, signal: remaining().signal })
 		await awaitGateway(remaining(), true)

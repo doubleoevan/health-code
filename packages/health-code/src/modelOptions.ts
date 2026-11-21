@@ -8,6 +8,7 @@ import { credentialTarget } from "./sandbox/setCredentialBinding.ts"
  */
 export function validateModels(options: InspectionOptionsV2 | ModelRequestSandboxOptions): void {
 	const { models } = options
+
 	// validate price bounds for each required model role
 	for (const role of ["releaseSummary", "featureMatch", "repair", "featureAdoption"] as const) {
 		const model = models?.[role]
@@ -39,6 +40,7 @@ export function hasModels(
 	if (models === null || typeof models !== "object" || Array.isArray(models)) {
 		throw new InspectionError("invalid-model", "Expected a dictionary of model roles")
 	}
+
 	// select model-backed inspection for structured role settings
 	return Object.values(models).some((value) => typeof value !== "string")
 }
@@ -49,6 +51,7 @@ export function hasModels(
 export function toModelOptions(options: InspectionOptionsV2 | PreviousInspectionOptions): InspectionOptionsV2 {
 	const { models, limits } = options
 	const agent: NonNullable<PreviousInspectionOptions["limits"]>["agent"] = limits?.agent
+
 	// map older model and limit names to current roles
 	return {
 		...options,
@@ -80,6 +83,7 @@ function toTurnLimits(current: PreviousLimits, previous: PreviousLimits): Curren
 		maxCostUsd: lowestLimit(current?.maxCostUsd, previous?.maxCostUsd),
 	}
 }
+
 // apply the lowest supplied limit across compatible option names
 function lowestLimit(...values: (number | undefined)[]): number | undefined {
 	const specified = values.filter((value) => value !== undefined)
@@ -92,10 +96,12 @@ function validateRole(options: InspectionOptionsV2 | ModelRequestSandboxOptions,
 		if (!("credential" in model) || "model" in model) {
 			throw new InspectionError("invalid-model", "Expected a credentialed model request sandbox route")
 		}
+
 		// Validate the complete endpoint before runtime allocation.
 		credentialTarget(model)
 		return
 	}
+
 	// verify that host roles supply a configured model handle
 	if (
 		(role === "releaseSummary" || role === "featureMatch") &&

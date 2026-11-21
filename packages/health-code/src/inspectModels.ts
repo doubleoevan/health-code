@@ -41,6 +41,7 @@ export class ModelInspection {
 	readonly ledger: Ledger
 	readonly matchLimit: number
 	attempt?: { attemptId: string; role: AgentRole }
+
 	// keep pinned usage separate from observations after each installation
 	private readonly installedEvidence = new Map<string, { changelog: string; bytes?: number }>()
 	private readonly pinnedUsage = new Map<string, UsageEvidence>()
@@ -48,6 +49,7 @@ export class ModelInspection {
 	baseInstall?: Observation
 	baseTests?: Observation
 	baseIntegrity?: PatchEvidence["baselineIntegrity"]
+
 	// clamp inspection limits before constructing the model budget
 	readonly meter = new RuntimeMeter()
 	readonly modelRequestSandbox?: ModelRequestSandboxAllocation
@@ -62,6 +64,7 @@ export class ModelInspection {
 		if (!Number.isSafeInteger(this.matchLimit) || this.matchLimit < 0) {
 			throw new InspectionError("invalid-limits", "Invalid feature match limit")
 		}
+
 		// validate both guest routes before allocating sandbox time
 		for (const role of ["repair", "featureAdoption"] as const) {
 			if (!options.models?.[role]?.credential) {
@@ -70,6 +73,7 @@ export class ModelInspection {
 			credentialTarget(options.models[role])
 			agentLimits(role, options.limits)
 		}
+
 		// reserve the sandbox cost before permitting model requests
 		validateModels(options)
 		if (options.callerModelExecution === "modelRequestSandbox") {
@@ -78,6 +82,7 @@ export class ModelInspection {
 			}
 			this.modelRequestSandbox = new ModelRequestSandboxAllocation(options.sandboxProvider.modelRequestSandbox)
 		}
+
 		// Reserve the repository runtime before admitting any inference.
 		const duration = this.limits.maxDurationMs
 		const reserve = options.sandboxProvider.estimateMaxCost(
@@ -92,6 +97,7 @@ export class ModelInspection {
 			usage: [],
 		}
 	}
+
 	// forward version two events using the shared sequence
 	forward(event: InspectionEvent): () => Promise<void> {
 		const next = { ...event, version: 2 as const, sequence: this.timeline.length + 1, ...this.attempt }
@@ -124,6 +130,7 @@ export class ModelInspection {
 	): Promise<unknown> {
 		const configured = this.options.models[role]
 		const { pricing } = configured
+
 		// build a bounded prompt for the selected host role
 		const prompt = await buildPrompt(role, evidence, context.prompts)
 		const output = callerOutputTokens
@@ -182,6 +189,7 @@ export class ModelInspection {
 					if (!("model" in configured)) {
 						throw new InspectionError("invalid-model", "Missing caller model")
 					}
+
 					// Dispatch local handles through the caller’s model client.
 					const { model } = configured
 					const reply = await generateText({
@@ -204,6 +212,7 @@ export class ModelInspection {
 		)
 		return parseAnswer(text)
 	}
+
 	// capture pinned usage before dependency installation changes the tree
 	async captureUsage(adapter: NodeAdapter, selected: UpgradeReport["dependency"][]): Promise<void> {
 		for (const dependency of new Set(selected)) {
@@ -211,6 +220,7 @@ export class ModelInspection {
 				.data(["usage", dependency])
 				.then((value) => usageEvidence.parse(value))
 				.catch(() => ({ usage: [], unresolved: ["Source inventory unavailable"], changelog: "" }))
+
 			// cache missing evidence as an explicit usage limitation
 			this.pinnedUsage.set(dependency, usage)
 		}
@@ -250,6 +260,7 @@ export class ModelInspection {
 				method: "Installed regular-file bytes, deduplicated by device and inode",
 			}
 		}
+
 		// gather release evidence before requesting feature matches
 		const evidence = await context.step("setup", "Read release notes", (op) =>
 			readReleases({ upgrade, githubToken: this.options.githubToken, changelog, signal: op.signal }),
@@ -268,6 +279,7 @@ export class ModelInspection {
 			baseInstall: this.baseInstall,
 			baseTests: this.baseTests,
 		}
+
 		// verify diagnostic locations against the pinned source
 		await locateDiagnostics({
 			repository: card.repository,
@@ -341,6 +353,7 @@ export class ModelInspection {
 			candidate.report.modelUsage.push(...this.ledger.usage.slice(offset))
 		}
 	}
+
 	// assemble the version two report from the measured upgrades
 	card(card: ReportCard): ModelRequestSandboxReportCard {
 		const reports = new Map(this.upgrades.map((upgrade) => [upgradeKey(upgrade), upgrade]))
@@ -367,6 +380,7 @@ export class ModelInspection {
 function upgradeKey(upgrade: Pick<UpgradeReport, "dependency" | "to">): string {
 	return `${upgrade.dependency}@${upgrade.to}`
 }
+
 // initialize unmeasured upgrade evidence with an explicit verdict
 function toUpgradeReport(upgrade: UpgradeReport): UpgradeReportV2 {
 	return {
@@ -386,6 +400,7 @@ function recordEvidenceError(report: UpgradeReportV2, error: unknown, modelReque
 	if (modelRequestSandbox && error instanceof InspectionError && error.code === "credential-binding") {
 		throw error
 	}
+
 	// Record incomplete evidence on the affected Upgrade.
 	report.releaseSummary.text +=
 		error instanceof InspectionError && error.code === "model-budget"

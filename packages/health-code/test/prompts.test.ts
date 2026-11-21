@@ -19,12 +19,14 @@ test("versioned prompt overrides are isolated between concurrent callers", async
 	assert.notEqual(left, right)
 	assert.doesNotMatch(left, /untrusted-data-forged/)
 	assert.equal(first.references.model.length + first.references.handoff.length, 0)
+
 	// Count actual dispatch separately from rendering the downstream handoff.
 	first.record("featureMatch")
 	first.record("featureMatch")
 	second.record("applyPatch")
 	assert.equal(first.references.model[0]?.version, 41)
 	assert.equal(second.template("featureMatch").reference.version, 42)
+
 	// Compare the effective identities retained by the two callers.
 	assert.equal(first.references.model.length, 1)
 	assert.equal(second.references.handoff[0]?.name, "applyPatch")
@@ -38,6 +40,7 @@ test("invalid prompts fail before sandbox availability, including unused overrid
 		checked = true
 	}
 	const options = { repositoryUrl: "https://github.com/example/project", sandboxProvider }
+
 	// Reject unknown roles, unsafe delimiters, repeated placeholders and malformed metadata.
 	const invalid: PromptOverrides[] = [
 		{ unknown: source } as PromptOverrides,

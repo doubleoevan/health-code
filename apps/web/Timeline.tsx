@@ -25,6 +25,10 @@ function toActionLabel(event: Extract<SiteEvent, { type: "sandbox.event" }>): st
 	return event.detail && event.detail !== label ? `${label} ${event.detail}` : label
 }
 function toStepLabel(label: string): string {
+	if (label === "registry") {
+		return "Find available upgrades"
+	}
+
 	// label current and historical agent steps consistently
 	if (label === "fix" || label === "repair") {
 		return "Repair"
@@ -77,6 +81,7 @@ function Output({ event, id }: { event: Extract<SiteEvent, { type: "detail" }>; 
 				}
 			}
 		}
+
 		// cancel the detail request when the disclosure closes
 		void loadOutput()
 		return () => controller.abort()
@@ -101,7 +106,8 @@ function renderEvent(event: SiteEvent, id: string): ReactElement {
 				<span>
 					{toStepLabel(event.summary)}{" "}
 					<small>
-						{event.status} · {(event.durationMs / 1000).toFixed(1)}s
+						{event.summary === "registry" && event.status === "untested" ? "Incomplete" : event.status} ·{" "}
+						{(event.durationMs / 1000).toFixed(1)}s
 					</small>
 				</span>
 			)
@@ -125,12 +131,14 @@ export function Timeline({ events, live, id }: { events: SiteEvent[]; live: bool
 	const list = useRef<HTMLOListElement>(null)
 	const followsTail = useRef(true)
 	const lastSequence = events.at(-1)?.sequence
+
 	// follow the latest event while the reader stays at the bottom
 	useEffect(() => {
 		if (live && lastSequence && list.current && followsTail.current) {
 			list.current.scrollTop = list.current.scrollHeight
 		}
 	}, [live, lastSequence])
+
 	// find the open step and collect the sandbox events
 	const finished = new Set(events.flatMap((event) => (event.type === "step.finished" ? [event.stepId] : [])))
 	const current = events.findLast((event) => event.type === "step.started" && !finished.has(event.stepId))
@@ -141,6 +149,7 @@ export function Timeline({ events, live, id }: { events: SiteEvent[]; live: bool
 			{live && current?.type === "step.started" && (
 				<CurrentStep label={toStepLabel(current.label)} start={current.timestamp} />
 			)}
+
 			{/* pinned sandbox events */}
 			{sandboxEvents.length > 0 && (
 				<aside>
@@ -152,6 +161,7 @@ export function Timeline({ events, live, id }: { events: SiteEvent[]; live: bool
 					</ul>
 				</aside>
 			)}
+
 			{/* chronological inspection log */}
 			<h2>{live ? "Inspection log" : "Full timeline"}</h2>
 			<ol

@@ -19,6 +19,7 @@ const backend = Bun.serve({
 		if (!response.headers.get("Content-Type")?.includes("text/html")) {
 			return response
 		}
+
 		// Inject the same refresh runtime into direct visits and restored report pages.
 		const html = await vite.transformIndexHtml(new URL(request.url).pathname, await response.text())
 		return new Response(html, response)

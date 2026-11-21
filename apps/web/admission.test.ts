@@ -15,6 +15,7 @@ test("atomic admission shares pending work and enforces separate network and bro
 	const limits = toLaunchLimits({ HEALTH_CODE_DAILY_COST_USD: "100", HEALTH_CODE_VISITOR_RUNS: "1" })
 	const now = Date.now()
 	const day = new Date(now).toISOString().slice(0, 10)
+
 	// Record a stable cache identity and a real FIFO row for each miss.
 	function admit(key: string, visitor: string, network: string): { id: string; reused: boolean } {
 		return store.admission.admit({
@@ -30,6 +31,7 @@ test("atomic admission shares pending work and enforces separate network and bro
 	assert.deepEqual(admit("head", "other", "elsewhere"), { ...first, reused: true })
 	assert.throws(() => admit("other", "new-cookie", "network"), /allowance/)
 	assert.throws(() => admit("other", "browser", "new-network"), /allowance/)
+
 	// Reserve both workers at the default inspection ceiling and keep their positions stable.
 	const second = admit("other", "other", "elsewhere")
 	assert.equal(store.position(first.id), 1)
@@ -42,6 +44,7 @@ test("missing receipts retain a reservation across midnight and settlement runs 
 	const store = new InspectionStore(":memory:")
 	const limits = toLaunchLimits({ HEALTH_CODE_DAILY_COST_USD: "5" })
 	const head = { repositoryId: "1", sizeKiB: 1, revision: "a".repeat(40) }
+
 	// Keep yesterday's reservation outstanding while another visitor submits today.
 	const input = {
 		key: "one",
@@ -55,6 +58,7 @@ test("missing receipts retain a reservation across midnight and settlement runs 
 	const today = new Date().toISOString().slice(0, 10)
 	assert.equal(store.admission.liability(today), 5000000)
 	assert.throws(() => store.admission.admit({ ...input, key: "two", now: Date.now() }), /budget/)
+
 	// Settle against the measured model charge and the bounded runtime cost.
 	const usage = {
 		totalUpperBoundUsd: 0.75,
@@ -84,6 +88,7 @@ test("lower ceilings reduce queued holds before the FIFO worker claims them", ()
 	assert.deepEqual(store.admission.workerLimits(id, reduced), reduced)
 	assert.equal(store.admission.canDispatch(2999999), false)
 	assert.equal(store.admission.canDispatch(3000000), true)
+
 	// A subsequent increase cannot exceed the amount still reserved.
 	assert.equal(store.admission.workerLimits(id, settings).maxCostUsd, 3)
 	store.database.close()
@@ -104,6 +109,7 @@ test("ingress identity ignores forwarded chains and admin authentication require
 	assert.deepEqual(first.identity, second.identity)
 	assert.ok(!Object.values(first.identity).includes(first.cookie))
 	assert.throws(() => identifyVisitor(new Request(url, { headers: { "x-forwarded-for": "127.0.0.1" } }), key, false))
+
 	// Rotate the password and reject insecure transport and an empty configured password.
 	const auth = { Authorization: `Basic ${Buffer.from("admin:fixture").toString("base64")}` }
 	assert.equal(verifyAdmin(new Request(url, { headers: auth }), "fixture"), true)
@@ -125,6 +131,7 @@ test("replay submits once and hydrates analytics only for an eligible foreign vi
 	)
 	const app = createSite({ inspections, origin, replay: true, assets: { script: "/client.js", styles: [] } })
 	await inspections.start()
+
 	// Submit concurrent identical requests through the normal public endpoint.
 	const submit = async (): Promise<Response> =>
 		app.request(`${origin}/api/inspections`, {
@@ -138,6 +145,7 @@ test("replay submits once and hydrates analytics only for an eligible foreign vi
 	assert.equal(second.headers.get("location"), path)
 	assert.ok(path)
 	const id = path.split("/").at(-1) ?? ""
+
 	// Inspect the saved report even after paid admissions have been suspended.
 	for (let index = 0; index < 100 && store.state(id) !== "complete"; index++) {
 		await Bun.sleep(5)
@@ -145,6 +153,7 @@ test("replay submits once and hydrates analytics only for an eligible foreign vi
 	assert.equal(store.state(id), "complete")
 	launch.settings.current.dailyMicros = 0
 	assert.equal((await submit()).headers.get("location"), path)
+
 	// Open the report with a fresh visitor cookie.
 	const card = await app.request(origin + path)
 	const cookie = card.headers.get("set-cookie")?.split(";")[0] ?? ""
@@ -157,6 +166,7 @@ test("replay submits once and hydrates analytics only for an eligible foreign vi
 	assert.equal(store.admission.daily()[0]?.counts.includes("shared"), false)
 	await view("Browser")
 	await view("Browser")
+
 	// Check both cohort numerators after a repeated visit.
 	const counts = JSON.parse(store.admission.daily()[0]?.counts ?? "{}")
 	assert.equal(counts.shared, 1)
@@ -196,9 +206,11 @@ test("launch settings retain the last valid snapshot and pause after three minut
 		now += 60000
 		await settings.refresh()
 		assert.equal(settings.current.dailyMicros, 1000000)
+
 		// Reject an incomplete refresh while preserving the lower accepted budget.
 		complete = false
 		await assert.rejects(settings.refresh())
+
 		// Expire the last good snapshot during an outage.
 		assert.equal(settings.current.dailyMicros, 1000000)
 		now += 180000
@@ -223,6 +235,7 @@ test("a budget refusal links to MCP and explains the UTC reset on the home page"
 	assert.equal(response.status, 429)
 	const problem = await response.json()
 	assert.match(problem.message, /00:00 UTC/)
+
 	// Offer the same self-funded path in the API response and the server-rendered page.
 	const home = await (await app.request(origin)).text()
 	assert.ok(home.includes(problem.mcpSetupUrl))
@@ -253,6 +266,7 @@ test("admission resolves the current public commit even when its cache key exist
 				if (String(input).includes("/git/ref/heads/")) {
 					return Response.json({ object: { sha: revision } })
 				}
+
 				// Model GitHub throttling independently of visibility.
 				if (throttled) {
 					return new Response(null, { status: 429 })
@@ -272,18 +286,21 @@ test("admission resolves the current public commit even when its cache key exist
 	const launch = new LaunchService({ HEALTH_CODE_CONCURRENCY: "0", HEALTH_CODE_DAILY_COST_USD: "20" }, true)
 	const inspections = new Inspections(store, { ...createReplaySource(), ...lookup }, 2, launch)
 	await inspections.start()
+
 	// Reuse one identity for submissions at the cutoff.
 	const request = { identify: () => ({ network: "n", visitor: "v" }), challenge: undefined, hostname: "localhost" }
 	const submit = (): Promise<{ id: string; reused: boolean }> => inspections.admit(replayRepositoryUrl, request)
 	const first = await submit()
 	size++
 	assert.deepEqual(await submit(), { ...first, reused: true })
+
 	// Refresh the head before allowing a free hit or accepting a different revision.
 	revision = "b".repeat(40)
 	await assert.rejects(submit(), /size limit/)
 	size--
 	const second = await submit()
 	assert.notEqual(second.id, first.id)
+
 	// Emulate a report produced by the previous library release at the same SHA.
 	store.database
 		.query("UPDATE admissions SET cacheKey=json_set(cacheKey,'$[2]','previous-release') WHERE id=?")
@@ -291,6 +308,7 @@ test("admission resolves the current public commit even when its cache key exist
 	const fresh = await submit()
 	assert.notEqual(fresh.id, second.id)
 	assert.equal((await submit()).id, fresh.id)
+
 	// Revoke visibility before submitting a previously cached head.
 	visible = false
 	await assert.rejects(submit(), /public repository/)
@@ -315,6 +333,7 @@ test("queued visitors see their FIFO position after a disconnect and a worker re
 			return output
 		},
 	}
+
 	// Pause dispatch while both anonymous visitors receive their durable IDs.
 	const launch = new LaunchService({ HEALTH_CODE_CONCURRENCY: "0" }, true)
 	const origin = "https://example.test"
@@ -328,6 +347,7 @@ test("queued visitors see their FIFO position after a disconnect and a worker re
 	const first = await worker.admit("https://github.com/example/first", request)
 	const second = await worker.admit("https://github.com/example/second", request)
 	worker.stop()
+
 	// Reopen the worker over the same durable queue before permitting a single claim.
 	worker = new Inspections(store, source, 2, launch)
 	await worker.start()
@@ -345,12 +365,14 @@ test("queued visitors see their FIFO position after a disconnect and a worker re
 		await reader.cancel()
 		return new TextDecoder().decode(frame.value)
 	}
+
 	// Compare the initial frame with a fresh subscription after the first claim.
 	assert.match(await position(0), /event: position\ndata: 2/)
 	launch.settings.current.concurrency = 1
 	await worker.reap()
 	assert.equal(store.state(first.id), "running")
 	assert.match(await position(0), /event: position\ndata: 1/)
+
 	// Verify that the second worker starts once the first settles.
 	gate.resolve()
 	for (let retry = 0; retry < 100 && store.state(second.id) !== "complete"; retry++) {

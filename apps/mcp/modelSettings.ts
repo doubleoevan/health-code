@@ -48,12 +48,14 @@ export function modelOrigin(environment: NodeJS.ProcessEnv): string {
 		) {
 			throw new Error()
 		}
+
 		// return the normalized origin used to scope model credentials
 		return url.origin
 	} catch {
 		throw new UserError("Set HEALTH_CODE_MODEL_HOST to an HTTPS origin on the standard port.")
 	}
 }
+
 // derive a stable secret name unique to this origin
 export function secretName(origin: string): string {
 	return `health-code-model-${createHash("sha256").update(origin).digest("hex").slice(0, 24)}`

@@ -20,22 +20,26 @@ export function createRepositoryLookup(
 			if (![301, 302, 307, 308].includes(response.status)) {
 				return response
 			}
+
 			// Release the redirect body before following the next location.
 			await response.body?.cancel()
 			const next = toRedirect(url, response.headers.get("location"))
 			if (!next) {
 				break
 			}
+
 			// Retry with the verified same-origin location.
 			url = next
 		}
 		throw new SiteError("GitHub could not verify the repository redirect.")
 	}
+
 	// derive metadata paths under the trusted github api origin
 	const endpoint = (repositoryUrl: string): string => `https://api.github.com/repos${new URL(repositoryUrl).pathname}`
 	return {
 		async resolve(repositoryUrl): Promise<RepositoryHead> {
 			const url = endpoint(repositoryUrl)
+
 			// Check fresh repository visibility before cache lookup.
 			const response = await metadata(url)
 			if (!response.ok) {
@@ -47,6 +51,7 @@ export function createRepositoryLookup(
 				}
 				throw new AdmissionError(503, "GitHub could not verify this repository right now. Please try again.")
 			}
+
 			// Require public metadata and a nonnegative GitHub size.
 			const repo = await response.json()
 			if (
@@ -60,12 +65,14 @@ export function createRepositoryLookup(
 			) {
 				throw new SiteError("A public repository with a known size is required.")
 			}
+
 			// Resolve the actual default branch before cache lookup, including on hits.
 			const branch = await metadata(`${url}/git/ref/heads/${encodeURIComponent(repo.default_branch)}`)
 			if (!branch.ok) {
 				await branch.body?.cancel()
 				throw new SiteError("GitHub could not verify the current commit.")
 			}
+
 			// Accept only the full commit hash returned by GitHub.
 			const revision = (await branch.json()).object?.sha
 			if (typeof revision !== "string" || !/^[a-f0-9]{40}$/.test(revision)) {
@@ -85,15 +92,18 @@ export function createRepositoryLookup(
 					"GitHub couldn’t find a public repository at this URL. Check the address and make sure the repository is public.",
 				)
 			}
+
 			// distinguish transient verification failures from a missing repository
 			if (!response?.ok) {
 				throw new SiteError("GitHub could not verify this repository right now. Please try again.")
 			}
+
 			// require an explicitly public repository before inspection
 			const repository = await response.json()
 			if (repository.private !== false || (repository.visibility !== undefined && repository.visibility !== "public")) {
 				throw new SiteError("This repository must be public before Health Code can inspect it.")
 			}
+
 			// Recheck identity and current size before starting a previously queued checkout.
 			if (
 				admission &&
@@ -115,6 +125,7 @@ export function createRepositoryLookup(
 				await response.body?.cancel()
 				return null
 			}
+
 			// accept only known licenses with osi approval
 			const id: unknown = (await response.json()).license?.spdx_id
 			if (typeof id !== "string" || !Object.hasOwn(licenses, id)) {
@@ -130,6 +141,7 @@ function toRedirect(base: string, location: string | null): string | undefined {
 		return
 	}
 	const next = new URL(location, base)
+
 	// Keep the optional GitHub credential within its approved HTTPS origin.
 	if (next.origin === "https://api.github.com" && !next.username && !next.password) {
 		return next.href

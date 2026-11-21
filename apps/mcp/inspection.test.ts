@@ -36,6 +36,7 @@ test("setup registers and rotates a host-bound secret and prints name-only clien
 			assert.ok(storedKey.startsWith(key))
 		},
 	}
+
 	// parse both clients' settings and check their environment references
 	const setup = { version: "1.2.3", client: fake }
 	const output = await setupAccount({ ...environment, GITHUB_TOKEN: "separate-opt-in" }, setup)
@@ -50,6 +51,7 @@ test("setup registers and rotates a host-bound secret and prints name-only clien
 			env_vars: ["RUNTA_TOKEN", "HEALTH_CODE_SUMMARY_MODEL"],
 		},
 	})
+
 	// verify the version-pinned launcher for this platform
 	if (process.platform === "win32") {
 		assert.equal(entry.command, "cmd.exe")
@@ -58,6 +60,7 @@ test("setup registers and rotates a host-bound secret and prints name-only clien
 		assert.equal(entry.command, "/bin/sh")
 		assert.deepEqual(entry.args, ["-c", 'cd "$HOME" && exec npx "$@"', "npx", "-y", "health-code@1.2.3", "mcp"])
 	}
+
 	// rotate the secret in place and isolate registrations for other origins
 	await setupAccount({ ...environment, ANTHROPIC_API_KEY: `${key}-rotated` }, setup)
 	assert.equal(stored[0], stored[1])
@@ -73,12 +76,14 @@ test("setup registers and rotates a host-bound secret and prints name-only clien
 	assert.notEqual(stored[1], stored[2])
 	await setupAccount({ RUNTA_TOKEN: environment.RUNTA_TOKEN }, setup)
 	assert.equal(stored.length, 3)
+
 	// reject missing and unresolved credentials
 	await assert.rejects(setupAccount({}, setup), /Supply RUNTA_TOKEN/)
 	await assert.rejects(
 		setupAccount({ ...environment, ANTHROPIC_API_KEY: `\${ANTHROPIC_API_KEY}` }, setup),
 		/ANTHROPIC_API_KEY/,
 	)
+
 	// withhold credential-bearing messages from both setup failure paths
 	for (const step of ["check", "store", "probe"]) {
 		const broken = {
@@ -102,6 +107,7 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 	const provider = createFakeSandboxProvider(fixture)
 	const gate = Promise.withResolvers<void>()
 	provider.checkAvailability = () => gate.promise
+
 	// connect the client and server through paired in-memory transports
 	const inspections = new Inspections(store, (options) => inspectRepository({ ...options, sandboxProvider: provider }))
 	const server = createServer(inspections, "1.2.3")
@@ -109,6 +115,7 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 	const [left, right] = InMemoryTransport.createLinkedPair()
 	try {
 		await Promise.all([server.connect(left), client.connect(right)])
+
 		// check the public names and discovery titles together
 		const tools = await client.listTools()
 		assert.deepEqual(Object.fromEntries(tools.tools.map((tool) => [tool.name, tool.title])), {
@@ -121,6 +128,7 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 			assert.ok(tool.title && tool.inputSchema && tool.outputSchema)
 			assert.equal(tool.annotations?.openWorldHint, tool.name === "start_inspection")
 		}
+
 		// capture progress on the initial request
 		const startProgress: string[] = []
 		const first = await client.callTool(
@@ -132,10 +140,12 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 			},
 		)
 		assert.equal(startProgress.length, 1)
+
 		// distinguish concurrent inspections of the same repository
 		const second = await inspections.start(repo)
 		const id = String((first.structuredContent as { inspectionId: string }).inspectionId)
 		assert.notEqual(id, second)
+
 		// capture notifications for the read request separately
 		const readProgress: string[] = []
 		await client.callTool(
@@ -159,12 +169,14 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 		)
 		assert.equal(live.status, "running")
 		assert.ok(progress.length)
+
 		// delay one reader until the report reaches disk
 		const releaseProgress = Promise.withResolvers<void>()
 		const pendingRead = inspections.read(
 			{ inspectionId: id, afterSequence: 0, reportOffset: 0, waitMs: 0 },
 			{ progress: () => releaseProgress.promise },
 		)
+
 		// release allocation and poll to completion
 		gate.resolve()
 		const end = Date.now() + 5000
@@ -178,6 +190,7 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 			})
 		}
 		assert.equal(snapshot.status, "complete")
+
 		// compare the delayed reader with the final snapshot
 		releaseProgress.resolve()
 		assert.equal((await pendingRead).report?.text, snapshot.report?.text)
@@ -185,10 +198,12 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 		assert.equal(readProgress.length, delivered)
 		assert.equal(startProgress.length, 1)
 		assert.ok(snapshot.pinned.some((event) => event.action === "deleted"))
+
 		// reopen the card through a path with a trailing separator
 		const replay = await new InspectionStore(root + sep).load(id)
 		assert.equal(replay.repository.commit, fixture.commit)
 		assert.equal(replay.timeline.at(-1)?.type, "inspection.finished")
+
 		// reject a digest absent from the recovered card
 		const missing = await client.callTool({
 			name: "get_tested_patch",
@@ -209,6 +224,7 @@ test("replay delivers exact Patch pages and durable application results", async 
 	const root = await mkdtemp(join(tmpdir(), "mcp-patches-"))
 	const store = new InspectionStore(root, protect(environment))
 	const inspectionId = randomUUID()
+
 	// use a multibyte patch to exercise text pagination
 	const mailbox = `first line\n${"x".repeat(4095)}🟢\n`
 	const sha256 = toHash(mailbox)
@@ -223,6 +239,7 @@ test("replay delivers exact Patch pages and durable application results", async 
 		prompt: "Verify this Patch.",
 		commits: [],
 	}
+
 	// make the feature patch depend on the tested upgrade tip
 	const feature = {
 		...patch,
@@ -248,6 +265,7 @@ test("replay delivers exact Patch pages and durable application results", async 
 		const first = fetchPatch(saved, { sha256, offset: 0 })
 		const rest = fetchPatch(saved, { sha256, offset: first.nextOffset ?? 0 })
 		assert.equal(toHash(first.text + rest.text), sha256)
+
 		// preserve each reported checkout relationship on the patch handoff
 		for (const relationship of ["equal", "ahead", "behind", "diverged", "unknown"] as const) {
 			const result = fetchPatch(saved, { sha256: feature.digest, offset: 0, checkout: { relationship, dirty: true } })
@@ -262,15 +280,18 @@ test("replay delivers exact Patch pages and durable application results", async 
 			tests: "passed" as const,
 			pullRequest: `${repo}/pull/1`,
 		}
+
 		// reject invalid adaptations, pull requests and patch identities
 		assert.throws(() => validateOutcome(saved, { ...outcome, adaptation: "" }))
 		assert.throws(() => validateOutcome(saved, { ...outcome, pullRequest: "https://example.org" }))
 		assert.throws(() => validateOutcome(saved, { ...outcome, sha256: "c".repeat(64) }))
 		validateOutcome(saved, outcome)
+
 		// deduplicate identical results while retaining different test outcomes
 		await Promise.all([store.record(outcome), store.record(outcome), store.record({ ...outcome, tests: "failed" })])
 		assert.equal((await new InspectionStore(root).outcomes(inspectionId)).length, 2)
 		await assert.rejects(store.record({ ...outcome, adaptation: key }))
+
 		// reject changed bytes under a previously verified digest
 		assert.throws(() =>
 			fetchPatch(
@@ -278,6 +299,7 @@ test("replay delivers exact Patch pages and durable application results", async 
 				{ sha256, offset: 0 },
 			),
 		)
+
 		// stop the handoff for commits that edit tests
 		assert.match(
 			fetchPatch(
@@ -295,15 +317,18 @@ test("replay delivers exact Patch pages and durable application results", async 
 			).action,
 			/Stop/,
 		)
+
 		// reject credentials and corrupt report data on disk
 		await assert.rejects(store.save({ ...card, inspectionId: randomUUID(), exposed: key }))
 		await writeFile(join(root, inspectionId, "card.json"), "partial")
 		await assert.rejects(store.load(inspectionId), /unreadable/)
 		await assert.rejects(store.load("../escape"))
+
 		// reject linked records and ignore unfinished writes
 		const linked = randomUUID()
 		await symlink(join(root, inspectionId), join(root, linked))
 		await assert.rejects(store.load(linked), /unreadable/)
+
 		// confirm that pending records never appear under a finished id
 		await mkdir(join(root, ".pending-example"))
 		await assert.rejects(store.load(randomUUID()), /not found/)
@@ -318,6 +343,7 @@ test("storage failure keeps the completed evidence readable without restarting p
 	const store = new InspectionStore(join(home, "file"))
 	await writeFile(store.root, "occupied")
 	const fixture: SandboxFixture = JSON.parse(await readFile(testRoot, "utf8"))
+
 	// count executions independently of failed save attempts
 	let starts = 0
 	const inspections = new Inspections(store, (options) => {
@@ -332,12 +358,14 @@ test("storage failure keeps the completed evidence readable without restarting p
 		while (status === "running" && Date.now() < deadline) {
 			const view = await inspections.read({ inspectionId: id, afterSequence: 100000, waitMs: 300, reportOffset: 0 })
 			status = view.status
+
 			// require the completed report to remain available in memory
 			if (status === "failed") {
 				assert.match(view.failure ?? "", /memory only/)
 				assert.ok(view.report?.text)
 			}
 		}
+
 		// verify the failed save never starts another inspection
 		assert.equal(status, "failed")
 		assert.equal(starts, 1)

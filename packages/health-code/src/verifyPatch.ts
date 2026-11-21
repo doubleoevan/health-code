@@ -34,6 +34,7 @@ export async function evaluatePatch(
 			throw new Error("Upgrade lacks a confirmed result")
 		}
 		const parent = match ? report.patches[0]?.testedTip : card.repository.commit
+
 		// require a tested upgrade commit before feature adoption
 		if (!parent) {
 			throw new Error("Feature patch requires a verified upgrade")
@@ -48,6 +49,7 @@ export async function evaluatePatch(
 			testChanged: false,
 			expectedCases: [],
 		}
+
 		// restore the verified prerequisite or build the initial upgrade
 		if (match) {
 			await workspace(evidence, { kind: "restore", tip: parent })
@@ -55,6 +57,7 @@ export async function evaluatePatch(
 			await commitUpgrade(evidence, state)
 			state.bumpTip = state.tip
 		}
+
 		// invoke an agent only for a confirmed failure or adoption
 		if (confirmed || match) {
 			attemptStart = Date.now()
@@ -71,6 +74,7 @@ export async function evaluatePatch(
 			report.attemptDurationMs ??= {}
 			report.attemptDurationMs[match ? "featureAdoption" : "repair"] = Date.now() - attemptStart
 		}
+
 		// clear attempt state before evaluating another upgrade
 		engine.attempt = undefined
 		evidence.context.attemptEnd = undefined
@@ -105,18 +109,21 @@ function acceptPatch({
 
 async function preparePatch(evidence: PatchEvidence, state: State, match?: FeatureMatch): Promise<Patch> {
 	const { report } = evidence
+
 	// require an independently resolved initial lockfile
 	if (state.unresolvedBump) {
 		throw new Error("The initial upgrade lockfile could not be independently resolved")
 	}
 	await orderCommits(evidence, state)
 	await workspace(evidence, { kind: "restore", tip: state.tip })
+
 	// verify the restored candidate before exporting replayed mailbox bytes
 	const verification = await verifyTree(evidence, state)
 	const mailbox = await workspace(evidence, { kind: "export", base: state.base, tip: state.tip })
 	if (!mailbox.startsWith("From ") || redact(mailbox) !== mailbox) {
 		throw new Error("Patch replay unavailable")
 	}
+
 	// bind patch identity to the exact exported bytes
 	const digest = createHash("sha256").update(mailbox, "utf8").digest("hex")
 	const role = match ? "feature" : "upgrade"
@@ -139,6 +146,7 @@ async function preparePatch(evidence: PatchEvidence, state: State, match?: Featu
 async function commitUpgrade(evidence: PatchEvidence, state: State): Promise<void> {
 	const { adapter, report } = evidence
 	requireBaseline(evidence)
+
 	// recreate the initial version bump from the baseline
 	await adapter.resetProject()
 	const bumped = await adapter.bumpDependency(report)
@@ -147,6 +155,7 @@ async function commitUpgrade(evidence: PatchEvidence, state: State): Promise<voi
 	if ((!failedInstall && bumped.check.status !== "passed") || !cleanInstall(bumped.observation, evidence.baseInstall)) {
 		throw new Error("Bump installation failed its independent check")
 	}
+
 	// determine the workspace manifests and lockfile affected by the bump
 	const manifests = Object.keys(report.from).map((dir) => (dir === "." ? "package.json" : `${dir}/package.json`))
 	const lock = trackedLockfile(evidence)
@@ -154,6 +163,7 @@ async function commitUpgrade(evidence: PatchEvidence, state: State): Promise<voi
 		await adapter.resetProject()
 	}
 	const expected = new Map<string, unknown>()
+
 	// reconstruct the allowed manifest edits from each committed original
 	for (const file of manifests) {
 		const original = JSON.parse(await workspace(evidence, { kind: "read", file, revision: state.base }))
@@ -164,6 +174,7 @@ async function commitUpgrade(evidence: PatchEvidence, state: State): Promise<voi
 			target: report.to,
 		})
 		expected.set(file, original)
+
 		// write the expected manifest when the initial install failed
 		if (failedInstall) {
 			await workspace(evidence, { kind: "edit", file, contents: JSON.stringify(original, null, 2) + "\n" })
@@ -172,6 +183,7 @@ async function commitUpgrade(evidence: PatchEvidence, state: State): Promise<voi
 	if (failedInstall) {
 		state.unresolvedBump = !(await resolvedUpgradeLock(evidence))
 	}
+
 	// verify each resulting manifest before recording the version change
 	for (const [file, manifest] of expected) {
 		await verifyManifest(evidence, file, manifest)
@@ -187,6 +199,7 @@ async function resolvedUpgradeLock(evidence: PatchEvidence): Promise<boolean> {
 	if (!cleanInstall(resolved.observation, evidence.baseInstall)) {
 		throw new Error("Lockfile resolution observation failed")
 	}
+
 	// require the intended version in every declaring workspace
 	if (resolved.check.status !== "passed") {
 		return false
@@ -195,6 +208,7 @@ async function resolvedUpgradeLock(evidence: PatchEvidence): Promise<boolean> {
 		rethrowInspectionFailure(error, evidence.context)
 		return undefined
 	})
+
 	// validate detected workspace versions against the target
 	const metadata = z.object({ sources: z.record(z.string(), z.record(z.string(), z.string())) }).safeParse(project)
 	const versions = metadata.success ? metadata.data.sources[report.dependency] : undefined
@@ -239,6 +253,7 @@ function recordRejection({
 		confirmed = false
 	}
 	report.verdict = confirmed && actions.length ? "Can't fix" : "Untested"
+
 	// retain the bounded diagnosis and attempted repairs
 	report.diagnosis = { stopReason: reason, actions, breakingChange: report.releaseSummary.text }
 }
@@ -247,6 +262,7 @@ async function orderCommits(evidence: PatchEvidence, state: State): Promise<void
 	if (!first) {
 		throw new Error("Empty patch series")
 	}
+
 	// keep the initial upgrade first and order the remaining commits by role
 	const rank = (commit: State["commits"][number]): number =>
 		commit.flag === "dependency" ? 0 : commit.flag === "test" ? 2 : 1
@@ -254,6 +270,7 @@ async function orderCommits(evidence: PatchEvidence, state: State): Promise<void
 	if (ordered.every((commit, i) => commit === state.commits[i])) {
 		return
 	}
+
 	// ask the protected workspace to rebuild the series in the requested order
 	const answer: unknown = JSON.parse(
 		await workspace(evidence, {
@@ -263,6 +280,7 @@ async function orderCommits(evidence: PatchEvidence, state: State): Promise<void
 			commits: ordered.map((commit) => commit.sha),
 		}),
 	)
+
 	// verify the number and format of the rewritten commit ids
 	if (
 		!Array.isArray(answer) ||
@@ -279,6 +297,7 @@ async function orderCommits(evidence: PatchEvidence, state: State): Promise<void
 			dependency.commit = commit.sha
 		}
 	}
+
 	// point the candidate at the rewritten commit series
 	state.commits = ordered
 	state.tip = answer.at(-1)

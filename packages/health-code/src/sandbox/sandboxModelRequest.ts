@@ -62,6 +62,7 @@ async function post({
 	if (route.protocol === "anthropic") {
 		argv.push("-H", "anthropic-version: 2023-06-01")
 	}
+
 	// Limit the response body before reading the trailing HTTP status.
 	const result = await runtime.exec([...argv, "--", credentialTarget(route).href], {
 		stdin: JSON.stringify(body),
@@ -71,10 +72,12 @@ async function post({
 	if (result.exitCode || result.stdoutTruncated) {
 		throw new InspectionError("model-request-sandbox", "Model request sandbox HTTPS request failed")
 	}
+
 	// Read the optional curl timing locally without passing trace headers to the model.
 	const boundary = result.stdoutText.lastIndexOf("\n")
 	const trailer = result.stdoutText.slice(boundary + 1).split(" ")
 	const status = Number(trailer.pop())
+
 	// Accept a duration only when curl returned the timing field.
 	const secondsElapsed = Number(trailer[0])
 	const timing =
@@ -102,6 +105,7 @@ export async function confirmGateway({
 			body: {},
 			operation: { ...probe, timeoutMs: Math.min(8000, probe.timeoutMs) },
 		}).catch(() => ({ status: 0 }))
+
 		// An empty body gets 401 before binding and a validation error after authentication.
 		if (isCredentialAttached ? [400, 422].includes(status) : status === 401) {
 			return
@@ -109,6 +113,7 @@ export async function confirmGateway({
 		if (![0, 401, 403, 400, 422, 429, 502, 503, 504].includes(status)) {
 			throw new InspectionError("credential-binding", `Model gateway rejected verification (HTTP ${status})`)
 		}
+
 		// Back off only for the unpaid readiness request.
 		await delay(Math.min(wait, remaining().timeoutMs), undefined, { signal: operation.signal })
 	}
@@ -133,6 +138,7 @@ export async function sendSandboxModelRequest({
 	if (status !== 200) {
 		throw new InspectionError("model-request-sandbox", `Model gateway returned HTTP ${status}`)
 	}
+
 	// Decode the same usage fields for each protocol without exporting raw headers.
 	if (route.protocol === "anthropic") {
 		const reply = anthropic.parse(JSON.parse(text))

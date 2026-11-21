@@ -30,6 +30,7 @@ function readTemplate(name: PromptName, source: string | undefined): Template {
 	if (typeof source !== "string" || Buffer.byteLength(source) > 128000) {
 		throw new Error(`Invalid prompt source for ${name}`)
 	}
+
 	// Split the YAML header from the instructions.
 	const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]+)$/.exec(source)
 	if (!match?.[1] || !match[2]) {
@@ -38,12 +39,14 @@ function readTemplate(name: PromptName, source: string | undefined): Template {
 	const { version } = metadata.parse(parse(match[1]))
 	const body = match[2].trim()
 	const placeholder = name === "verifyCredential" ? "" : name === "applyPatch" ? "{{base}}" : "{{evidence}}"
+
 	// Remove the allowed insertion before looking for extra placeholders.
 	const remaining = placeholder ? body.replace(placeholder, "") : body
 	const unsafe = /{{|}}|<\/?untrusted-data-/i.test(remaining)
 	if (!body || !body.includes(placeholder) || unsafe) {
 		throw new Error(`Invalid prompt instructions for ${name}`)
 	}
+
 	// Identify the source supplied by the caller or bundled with the library.
 	return { body, reference: { name, version, sha256: createHash("sha256").update(source).digest("hex") } }
 }
@@ -72,6 +75,7 @@ export class InspectionPrompts {
 			if (customized && name === "verifyCredential" && template.body !== readTemplate(name, source).body) {
 				throw new Error("Invalid credential probe instructions")
 			}
+
 			// Preserve the packaged output contract after caller-supplied instructions.
 			if (name !== "verifyCredential" && name !== "applyPatch" && customized) {
 				const suffix = readTemplate(name, source).body.split("{{evidence}}")[1]?.trim()
@@ -83,6 +87,7 @@ export class InspectionPrompts {
 			this.templates.set(name, template)
 		}
 	}
+
 	// Return the validated template associated with the public name.
 	template(name: PromptName): Template {
 		const template = this.templates.get(name)
@@ -91,6 +96,7 @@ export class InspectionPrompts {
 		}
 		return template
 	}
+
 	// Keep model dispatches separate from downstream patch instructions.
 	record(name: PromptName): void {
 		const target = name === "applyPatch" ? this.rendered : this.dispatched

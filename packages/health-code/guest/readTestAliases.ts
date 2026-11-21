@@ -37,6 +37,7 @@ function matchRules(rules: Rule[], name: string): string[] {
 	if (!rule) {
 		return []
 	}
+
 	// substitute the matched path segment into each configured target
 	const middle = name.slice(rule.prefix.length, name.length - rule.suffix.length)
 	return rule.targets.map((target) => target.replace("*", () => middle))
@@ -45,6 +46,7 @@ function resolveImport({ base, mapping }: AliasConfig, name: string): string[] {
 	const paths = mapping ? matchRules(mapping.rules, name).map((path) => posix.join(base ?? mapping.dir, path)) : []
 	return [...paths, ...(base ? [posix.join(base, name)] : [])]
 }
+
 // parse the pinned configuration with trailing commas enabled
 function readConfig(contents: string): Config {
 	const errors: ParseError[] = []
@@ -55,18 +57,22 @@ function readConfig(contents: string): Config {
 	return config
 }
 
-/** Resolves test imports using pinned TypeScript and JavaScript configuration. */
+/**
+ * Resolves test imports using pinned TypeScript and JavaScript configuration.
+ */
 export function createTestAliasResolver(
 	files: Set<string>,
 	read: (file: string) => string,
 ): (importer: string, name: string) => string[] {
 	const cache = new Map<string, AliasConfig>()
+
 	// memoize resolved configurations across imports
 	function load(file: string, parents: Set<string>): AliasConfig {
 		const cached = cache.get(file)
 		if (cached) {
 			return cached
 		}
+
 		// reject missing parents and cyclic configuration inheritance
 		if (parents.has(file) || !files.has(file)) {
 			throw new Error("Unresolved test path aliases")
@@ -76,6 +82,7 @@ export function createTestAliasResolver(
 		cache.set(file, result)
 		return result
 	}
+
 	// inherit base paths and mappings from local parent configs
 	function resolve(file: string, parents: Set<string>, config: Config): AliasConfig {
 		const dir = posix.dirname(file)
@@ -85,12 +92,14 @@ export function createTestAliasResolver(
 			if (!parent.startsWith(".")) {
 				throw new Error("External test path configuration cannot be verified")
 			}
+
 			// resolve the parent relative to its declaring config
 			const name = posix.join(dir, parent)
 			const inherited = load(files.has(name) ? name : name + ".json", new Set([...parents, file]))
 			base = inherited.base ?? base
 			mapping = inherited.mapping ?? mapping
 		}
+
 		// override inherited defaults with this config's compiler options
 		if (config.compilerOptions?.baseUrl) {
 			base = posix.join(dir, config.compilerOptions.baseUrl)
@@ -100,6 +109,7 @@ export function createTestAliasResolver(
 		}
 		return { base, mapping }
 	}
+
 	// locate the nearest config for an aliased import
 	return (importer, name) => {
 		if (name.startsWith(".") || name.startsWith("node:") || name.startsWith("bun:")) {
@@ -114,6 +124,7 @@ export function createTestAliasResolver(
 			if (file) {
 				return resolveImport(load(file, new Set()), name)
 			}
+
 			// stop searching at the project root
 			if (dir === ".") {
 				return []

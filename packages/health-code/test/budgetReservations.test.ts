@@ -26,20 +26,24 @@ test("budget admission considers turns, elapsed time, cancellation and both cost
 			return reply
 		},
 	}
+
 	// settle the first turn from its reported token usage
 	await paidRequest(request)
 	assert.equal(ledger.remainingMicros, 2984)
 	assert.equal(role.remainingMicros, 1984)
 	assert.equal(role.turns, 1)
+
 	// reject expired attempts and exhausted balances before dispatch
 	await assert.rejects(paidRequest({ ...request, attempt: { ...role, end: Date.now() - 1 } }))
 	await assert.rejects(paidRequest({ ...request, attempt: { ...role, remainingMicros: 0 } }))
 	await assert.rejects(paidRequest({ ...request, ledger: { ...ledger, remainingMicros: 0 } }))
 	assert.equal(calls, 1)
+
 	// consume the last turn and reject a third request
 	await paidRequest(request)
 	await assert.rejects(paidRequest(request))
 	assert.equal(calls, 2)
+
 	// check that cancellation preserves the remaining budget
 	const before = ledger.remainingMicros
 	await assert.rejects(paidRequest({ ...request, attempt: undefined, signal: AbortSignal.abort() }))
@@ -66,6 +70,7 @@ test("prompt history distinguishes refused, failed, repeated and cancelled dispa
 			throw Error("provider failed after dispatch")
 		},
 	}
+
 	// Pre-dispatch refusals and requests cancelled before admission consume no template.
 	await assert.rejects(paidRequest({ ...request, signal: AbortSignal.abort() }))
 	await assert.rejects(
@@ -78,6 +83,7 @@ test("prompt history distinguishes refused, failed, repeated and cancelled dispa
 		}),
 	)
 	assert.deepEqual(context.prompts.references.model, [])
+
 	// Keep the failed probe once, even when the caller retries it.
 	await assert.rejects(paidRequest(request))
 	await assert.rejects(paidRequest(request))

@@ -50,6 +50,7 @@ test("the production capability replaces and verifies the complete route before 
 				if (op.stdin === "{}") {
 					return { exitCode: 0, stdoutText: `{}\n${bindings.length ? "400" : "401"}` }
 				}
+
 				// Paid calls require the read-back binding for the exact route.
 				assert.deepEqual(bindings[0]?.environment, [])
 				assert.deepEqual(bindings[0]?.files, [])
@@ -89,6 +90,7 @@ test("the production capability replaces and verifies the complete route before 
 			if (url.pathname === "/v2/secrets") {
 				return Response.json({ data: [{ id: "stored", display_name: "registered" }] })
 			}
+
 			// Track revision-checked replacements separately from metadata reads.
 			if (init?.method === "PATCH") {
 				assert.equal(Number(url.searchParams.get("expected_revision")), revision++)
@@ -106,6 +108,7 @@ test("the production capability replaces and verifies the complete route before 
 		const name = `health-code-${randomUUID()}-relay`
 		const operation = { timeoutMs: 5000 }
 		const first = route("https://one.example/v1")
+
 		// Exercise startup with both a matching and an unexpected policy.
 		const open = provider.open(name, first, operation)
 		if (mismatch) {
@@ -113,13 +116,16 @@ test("the production capability replaces and verifies the complete route before 
 			assert.equal(paid, 0)
 		} else {
 			await open
+
 			// Reject an output ceiling above the configured limit.
 			const input = { role: "featureMatch" as const, route: first, prompt: "data", output: 1024 }
 			await assert.rejects(provider.send(name, { ...input, output: 1025 }, operation), /Invalid sandbox model request/)
+
 			// Changing the caller's object must not change the binding already cached by the provider.
 			first.credential.name = "unknown"
 			await assert.rejects(provider.send(name, input, operation), /verification failed/)
 			await provider.close(name, operation)
+
 			// Restore the registered credential before testing a change of origin.
 			first.credential.name = "registered"
 			await provider.open(name, first, operation)
@@ -129,6 +135,7 @@ test("the production capability replaces and verifies the complete route before 
 			assert.deepEqual(transitions, ["one.example", "revoke", "one.example", "revoke", "two.example"])
 			assert.equal(paid, 2)
 		}
+
 		// Verify that teardown revokes the final binding.
 		const closing = provider.close(name, operation)
 		await assert.rejects(
@@ -169,6 +176,7 @@ test("a lost create response and a restarted owner reconcile only the exact mode
 			},
 		},
 	} as unknown as Runta
+
 	// Each factory call represents a fresh owner with no in-memory allocation record.
 	const capability = (): ReturnType<typeof createModelRequestSandbox> =>
 		createModelRequestSandbox({ sdk: () => sdk, runtimeName: (id) => id, token: "fixture", request: fetch })

@@ -18,7 +18,9 @@ const reviewed = z.array(
 	}),
 )
 
-/** Lists open high and critical advisories and exceptions that no longer match the audit. */
+/**
+ * Lists open high and critical advisories and exceptions that no longer match the audit.
+ */
 export function toAdvisoryViolations(output: string, allowlistText: string): string[] {
 	// index reviewed exceptions by package and advisory
 	const advisories = audit.parse(JSON.parse(output))
@@ -26,6 +28,7 @@ export function toAdvisoryViolations(output: string, allowlistText: string): str
 	const allowed = new Set(entries.map((entry) => toAdvisoryKey(entry.packageName, entry.advisoryId)))
 	const listed = new Set<string>()
 	const violations: string[] = []
+
 	// compare each registry finding with its reviewed exception
 	for (const [name, findings] of Object.entries(advisories)) {
 		for (const finding of findings) {
@@ -38,6 +41,7 @@ export function toAdvisoryViolations(output: string, allowlistText: string): str
 			}
 		}
 	}
+
 	// report exceptions whose advisories have cleared
 	return [
 		...violations,
@@ -52,10 +56,12 @@ function toAdvisoryKey(packageName: string, id: string): string {
 if (import.meta.main) {
 	const result = Bun.spawnSync(["bun", "audit", "--json"], { stdout: "pipe", stderr: "pipe" })
 	const output = result.stdout.toString().trim()
+
 	// Bun also exits one when it successfully reports advisories.
 	if (result.exitCode !== 0 && (result.exitCode !== 1 || !output || output === "{}")) {
 		throw new Error("bun audit could not complete the registry check")
 	}
+
 	// print every unreviewed finding and stale exception
 	const violations = toAdvisoryViolations(output, readFileSync("dependency-advisories.json", "utf8"))
 	if (violations.length > 0) {

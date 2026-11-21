@@ -9,9 +9,11 @@ import {
 } from "./contracts.ts"
 import { InspectionPrompts } from "./readPrompt.ts"
 
-const defaults = { setup: 300000, detect: 60000, install: 180000, typecheck: 120000, tests: 180000 }
+const defaults = { setup: 300000, detect: 60000, registry: 180000, install: 180000, typecheck: 120000, tests: 180000 }
 
-/** Redacts credentials before evidence crosses the library boundary. */
+/**
+ * Redacts credentials before evidence crosses the library boundary.
+ */
 export function redact(text: string): string {
 	return text
 		.replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[redacted]@")
@@ -27,11 +29,14 @@ export function redact(text: string): string {
 		.replace(/((?:token|password|secret|api[_-]?key)\s*[=:]\s*)[^\s,;]+/gi, "$1[redacted]")
 }
 
-/** Scrubs repository-controlled identifiers as well as output before publishing JSON. */
+/**
+ * Scrubs repository-controlled identifiers as well as output before publishing JSON.
+ */
 export function redactEvidence<T>(value: T): T {
 	if (typeof value === "string") {
 		return redact(value) as T
 	}
+
 	// redact strings recursively inside arrays and objects
 	if (Array.isArray(value)) {
 		return value.map(redactEvidence) as T
@@ -55,7 +60,9 @@ export function checkOperation(signal?: AbortSignal): void {
 	}
 }
 
-/** Bounds promises even when a callback or transport ignores cancellation. */
+/**
+ * Bounds promises even when a callback or transport ignores cancellation.
+ */
 export async function bounded<T>(work: (signal: AbortSignal) => Promise<T>, options: Operation): Promise<T> {
 	// combine the command deadline with caller cancellation
 	const timeout = AbortSignal.timeout(Math.max(1, Math.min(2147483647, Math.floor(options.timeoutMs))))
@@ -65,6 +72,7 @@ export async function bounded<T>(work: (signal: AbortSignal) => Promise<T>, opti
 	if (signal.aborted || options.timeoutMs <= 0) {
 		throw reason()
 	}
+
 	// arrange for cancellation to reject pending work
 	let rejectAbort: () => void = () => {}
 	const interrupted = new Promise<never>((_, reject) => {
@@ -79,7 +87,9 @@ export async function bounded<T>(work: (signal: AbortSignal) => Promise<T>, opti
 	}
 }
 
-/** Reserves teardown time for each possibly allocated runtime. */
+/**
+ * Reserves teardown time for each possibly allocated runtime.
+ */
 export function cleanupAllowance(durationMs: number): number {
 	return Math.min(60000, Math.max(1, Math.floor(durationMs / 4)))
 }
@@ -92,12 +102,14 @@ export class InspectionContext {
 	readonly cleanupMs: number
 	readonly end: number
 	readonly maximum: number
+
 	// track nested deadlines and delivery failures
 	private readonly timeouts: Record<Stage, number>
 	private deliveryFailed = false
 	private groupEnd?: number
 	private detectionEnd?: number
 	attemptEnd?: number
+
 	// retain teardown and upgrade state for event delivery
 	cleaningUp = false
 	setupComplete = false
@@ -113,6 +125,7 @@ export class InspectionContext {
 		const cost = limits.maxCostUsd ?? 0.25
 		this.maximum = limits.maxUpgrades ?? 6
 		this.timeouts = { ...defaults, ...limits.timeouts }
+
 		// validate numeric limits before admitting work
 		if (
 			!Number.isSafeInteger(this.maximum) ||
@@ -122,6 +135,7 @@ export class InspectionContext {
 		) {
 			throw new InspectionError("invalid-limits", "Invalid inspection limits")
 		}
+
 		// Reserve teardown time before admitting any paid work.
 		const budgetMicros = Math.floor(cost * 1000000)
 		let low = 0
@@ -138,6 +152,7 @@ export class InspectionContext {
 				high = middle - 1
 			}
 		}
+
 		// reserve a portion of the affordable window for cleanup
 		this.cleanupMs = cleanupAllowance(low)
 		this.end = this.started + low
@@ -146,6 +161,7 @@ export class InspectionContext {
 		const remaining = this.end - Date.now()
 		return remaining > 0 ? Math.min(this.cleanupMs, remaining) : this.cleanupMs
 	}
+
 	// share the detection deadline across detection operations
 	operation(stage: Stage): Operation {
 		if (stage === "detect") {
@@ -177,6 +193,7 @@ export class InspectionContext {
 			...(this.upgradeId ? { upgradeId: this.upgradeId } : {}),
 		})
 		this.timeline.push(event)
+
 		// deliver the event after appending it to the timeline
 		const callback = this.observe?.(event) ?? (() => this.options.onEvent?.(structuredClone(event)))
 		await this.deliver(callback)
@@ -185,6 +202,7 @@ export class InspectionContext {
 		if (this.deliveryFailed) {
 			throw new InspectionError("event-delivery", "Inspection event callback failed")
 		}
+
 		// surface caller cancellation before the next operation
 		if (this.options.signal?.aborted) {
 			throw new InspectionError("cancelled", "Inspection interrupted")
@@ -194,6 +212,7 @@ export class InspectionContext {
 		if (this.deliveryFailed || (!this.options.onEvent && !this.observe)) {
 			return
 		}
+
 		// bound event delivery by the remaining inspection window
 		try {
 			const remaining = this.end - Date.now() - (this.cleaningUp ? 0 : this.cleanupMs)
@@ -210,7 +229,10 @@ export class InspectionContext {
 			throw new InspectionError("event-delivery", "Inspection event callback failed")
 		}
 	}
-	/** All child operations inherit this deadline. The group settles before its caller continues. */
+
+	/**
+	 * Applies a shared deadline to a group of inspection operations.
+	 */
 	async group<T>(stage: Stage, label: string, work: () => Promise<T>): Promise<T> {
 		// restrict nested work to the enclosing group's deadline
 		const previous = this.groupEnd
@@ -219,6 +241,7 @@ export class InspectionContext {
 			return await this.track(label, async () => {
 				const result = await work()
 				this.assertActive()
+
 				// recheck the group deadline after its work returns
 				if (this.operation(stage).timeoutMs <= 0) {
 					throw new InspectionError("deadline", "Patch verification deadline reached")
@@ -230,6 +253,7 @@ export class InspectionContext {
 			this.groupEnd = previous
 		}
 	}
+
 	// track each stage with a bounded operation
 	async step<T>(
 		stage: Stage,
@@ -254,6 +278,7 @@ export class InspectionContext {
 		this.assertActive()
 		const start = Date.now()
 		const stepId = String(this.timeline.length + 1)
+
 		// bind the completion event to this step's start
 		const finish = (result: "passed" | "failed" | "untested"): Promise<void> =>
 			this.emit({ type: "step.finished", stepId, status: result, summary: label, durationMs: Date.now() - start })
@@ -267,6 +292,7 @@ export class InspectionContext {
 			await finish("failed").catch(() => undefined)
 			throw error
 		}
+
 		// publish the result before enforcing the outer deadline
 		await finish(status?.(value) ?? "passed")
 		this.assertActive()

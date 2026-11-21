@@ -11,6 +11,7 @@ export type ModelRequestSandboxFixture = {
 	fail?: "open" | "send" | "close"
 	usdPerMinute?: number
 }
+
 /**
  * Returns a provider fixture that records model request sandbox activity and replays model replies.
  */
@@ -39,11 +40,13 @@ export function createFakeModelRequestSandbox(fixture?: ModelRequestSandboxFixtu
 				if (!state) {
 					throw new InspectionError("model-request-sandbox", "Fixture model request sandbox absent")
 				}
+
 				// Record when the fixture selects a different credential route.
 				if (JSON.stringify(state.route) !== JSON.stringify(request.route)) {
 					modelRequestSandboxEvents.push({ id, action: "switch" })
 				}
 				state.route = request.route
+
 				// Keep the snapshot independent of subsequent caller mutation.
 				modelRequestSandboxEvents.push({ id, action: "send", request: structuredClone(request) })
 				const reply = fixture?.replies?.[state.index++]

@@ -18,6 +18,7 @@ export type ModelRequestSandboxEvent =
 	| (Omit<Extract<InspectionEventV2, { type: "sandbox.event" }>, "action"> & {
 			action: "model-request-sandbox-started"
 	  })
+
 // Opt-in callbacks may receive the Model Request Sandbox startup event.
 export type ModelRequestSandboxOptions = Omit<InspectionOptionsV2, "models" | "onEvent" | "callerModelExecution"> & {
 	callerModelExecution: "modelRequestSandbox"
@@ -27,6 +28,7 @@ export type ModelRequestSandboxOptions = Omit<InspectionOptionsV2, "models" | "o
 
 export type ModelRequestSandboxReportCard = Omit<ReportCardV2, "timeline"> & { timeline: ModelRequestSandboxEvent[] }
 export type SandboxModelRequest = { role: CallerModelRole; route: ModelRoute; prompt: string; output: number }
+
 // Providers own the credential binding and one isolated runtime per name.
 export interface ModelRequestSandbox {
 	estimateMaxCost(durationMs: number): number
@@ -67,6 +69,7 @@ export function snapshotSandboxModelRequest(request: SandboxModelRequest): Sandb
 	) {
 		throw new InspectionError("invalid-sandbox-model-request", "Invalid sandbox model request")
 	}
+
 	// Keep the verified route independent of later caller mutations.
 	return { role: request.role, route: structuredClone(request.route), prompt: request.prompt, output: request.output }
 }
@@ -75,6 +78,7 @@ export type RuntimeCharge = {
 	resource: "repository" | "modelRequestSandbox"
 	id: string
 	durationMs: number
+
 	// Price elapsed time using the provider’s independent rounding policy.
 	upperBoundUsd: number
 	reservedUpperBoundUsd?: number
@@ -94,6 +98,7 @@ export class ModelRequestSandboxAllocation {
 	private opening?: Promise<void>
 	private queue = Promise.resolve()
 	constructor(readonly provider: ModelRequestSandbox) {}
+
 	// Check the first request’s budget before reserving the runtime.
 	async ready({
 		context,
@@ -106,6 +111,7 @@ export class ModelRequestSandboxAllocation {
 		context: InspectionContext
 		ledger: Ledger
 		requestMicros: number
+
 		// Publish startup only after verifying the first route.
 		start: (name: string) => Promise<void>
 		route: ModelRoute
@@ -114,6 +120,7 @@ export class ModelRequestSandboxAllocation {
 		if (!this.opening) {
 			const operation = context.operation("setup")
 			const lifetime = context.end - Date.now() + context.cleanupMs
+
 			// Admit the first model request and the sibling runtime together.
 			const reserve = Math.ceil(this.provider.estimateMaxCost(lifetime) * 1e6)
 			if (
@@ -125,6 +132,7 @@ export class ModelRequestSandboxAllocation {
 			) {
 				throw new InspectionError("model-budget", "Model Request Sandbox exceeds the Inspection budget")
 			}
+
 			// Retain the cleanup identity even when the create response is lost.
 			checkOperation(operation.signal)
 			ledger.remainingMicros -= reserve
@@ -132,6 +140,7 @@ export class ModelRequestSandboxAllocation {
 			this.name = name
 			allocated(name, reserve / 1e6)
 			const timeoutMs = Math.min(operation.timeoutMs, 60000)
+
 			// Share a single cold start with concurrent first requests.
 			this.opening = bounded((signal) => this.provider.open(name, route, { timeoutMs, signal }), {
 				...operation,
@@ -152,6 +161,7 @@ export class ModelRequestSandboxAllocation {
 			throw new InspectionError("model-request-sandbox-startup", "Model Request Sandbox startup could not be verified")
 		}
 	}
+
 	// Serialize role changes, even if callers start both roles concurrently.
 	send(request: SandboxModelRequest, operation: Operation): Promise<ModelReply> {
 		const result = this.queue.then(() => {
@@ -161,6 +171,7 @@ export class ModelRequestSandboxAllocation {
 			}
 			return this.provider.send(this.name, request, operation)
 		})
+
 		// Release the queue after either outcome.
 		this.queue = result.then(
 			() => {},

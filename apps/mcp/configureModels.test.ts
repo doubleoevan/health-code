@@ -7,6 +7,7 @@ test("all four roles use origin-bound routes and ignore an inherited model key",
 	const environment = { RUNTA_TOKEN: "synthetic-sandbox-token", ANTHROPIC_API_KEY: "synthetic-model-key" }
 	const models = configureModels(environment)
 	assert.deepEqual(models, configureModels({ RUNTA_TOKEN: environment.RUNTA_TOKEN }))
+
 	// capture the secret name registered by setup
 	let registered = ""
 	await setupAccount(environment, {
@@ -19,12 +20,14 @@ test("all four roles use origin-bound routes and ignore an inherited model key",
 			},
 		},
 	})
+
 	// compare both guest routes with the registered secret reference
 	for (const route of Object.values(models)) {
 		assert.equal(route.credential.name, registered)
 		assert.equal(route.modelId, "claude-opus-5-5")
 		assert.ok(!JSON.stringify(route).includes(environment.ANTHROPIC_API_KEY))
 	}
+
 	// require explicit pricing for a custom model route
 	assert.throws(() => configureModels({ ...environment, HEALTH_CODE_REPAIR_MODEL: "custom" }), /bounds/)
 	const custom = configureModels({

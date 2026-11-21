@@ -22,6 +22,7 @@ function toUsage(receipts: UpgradeReportV2["modelUsage"]): UpgradeCard["usage"] 
 	if (!receipts.length) {
 		return undefined
 	}
+
 	// total only the usage measurements supplied by the model
 	const sum = (field: "costUsd" | "reservedUsd" | "outputTokens"): number | undefined => {
 		const values = receipts.flatMap((receipt) => receipt[field] ?? [])
@@ -45,6 +46,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 	const agent = report.version === 2 ? report.limits?.agent : undefined
 	const blobs = new Map<string, Uint8Array>()
 	const featureDigests = new Set<string>()
+
 	// collect links and bytes from the same verified patch series
 	function collectPatches(sources: UpgradeReportV2["patches"]): PatchLink[] {
 		const patches: PatchLink[] = []
@@ -55,10 +57,12 @@ export function publishReport(output: InspectionOutput, license: string | null):
 			if (digest !== patch.digest) {
 				throw new Error("Patch verification failed")
 			}
+
 			// count distinct feature patches even when downloads are withheld
 			if (patch.role === "feature") {
 				featureDigests.add(digest)
 			}
+
 			// publish downloadable bytes and prompts only for licensed repositories
 			if (license) {
 				blobs.set(digest, bytes)
@@ -75,6 +79,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 		}
 		return patches
 	}
+
 	// project both report versions into the public card format
 	const upgrades = report.upgrades.map((upgrade, index): UpgradeCard => {
 		const upgradeV2 = report.version === 2 ? report.upgrades[index] : undefined
@@ -106,6 +111,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 					callSites: match.callSites?.map(toCitation),
 					adoptionOutcome: match.disposition,
 				})) ?? [],
+
 			// link newly added dependencies to the patch containing their commit
 			addedDependencies: upgradeV2?.newDependencies.map((dependency) => ({
 				...dependency,
@@ -119,6 +125,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 			patches,
 		}
 	})
+
 	// retain the source report separately from its public projection
 	return {
 		original: report,
@@ -134,6 +141,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 				agent?.repair?.maxTurns !== undefined && agent.featureAdoption?.maxTurns !== undefined
 					? { repair: agent.repair.maxTurns, featureAdoption: agent.featureAdoption.maxTurns }
 					: undefined,
+			registryLookupIssue: report.selection.registryLookupIssue,
 			detection: "reason" in report.packageManager ? report.packageManager.reason : undefined,
 			license,
 			upgrades,

@@ -8,14 +8,23 @@ export const libraryVersion: string = JSON.parse(
 ).version
 
 export type {
-	/** @deprecated Use InspectionEventV2. */
+	/**
+	 * @deprecated Use InspectionEventV2.
+	 */
 	InspectionEventV2 as EnrichedInspectionEvent,
-	/** @deprecated Use ReportCardV2. */
+	/**
+	 * @deprecated Use ReportCardV2.
+	 */
 	ReportCardV2 as EnrichedReportCard,
-	/** @deprecated Use UpgradeReportV2. */
+	/**
+	 * @deprecated Use UpgradeReportV2.
+	 */
 	UpgradeReportV2 as EnrichedUpgradeReport,
 } from "./agentContracts.ts"
-/** @deprecated Use InspectionOptionsV2 with repair and featureAdoption. */
+
+/**
+ * @deprecated Use InspectionOptionsV2 with repair and featureAdoption.
+ */
 export type EnrichedInspectionOptions =
 	| import("./agentContracts.ts").PreviousInspectionOptions
 	| import("./agentContracts.ts").InspectionOptionsV2

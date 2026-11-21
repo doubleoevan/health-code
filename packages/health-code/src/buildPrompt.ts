@@ -10,11 +10,13 @@ export async function buildPrompt(
 ): Promise<string> {
 	// Resolve the effective source for this inspection.
 	const content = prompts.template(role).body
+
 	// remove embedded fence markers before serializing redacted evidence
 	const nonce = randomUUID()
 	const serialized = JSON.stringify(redactEvidence(evidence), (_key, value: unknown) =>
 		typeof value === "string" ? value.replace(/<\/?untrusted-data-[A-Za-z0-9_-]*>?/gi, "") : value,
 	).replaceAll(String.fromCharCode(96), "\\u0060")
+
 	// cap the evidence in bytes before enclosing it in a fresh fence
 	const bytes = Buffer.from(serialized)
 	const material =
@@ -24,7 +26,9 @@ export async function buildPrompt(
 	return content.replace("{{evidence}}", () => `<untrusted-data-${nonce}>\n${material}\n</untrusted-data-${nonce}>`)
 }
 
-/** Parses a single structured answer, including JSON fenced for display. */
+/**
+ * Parses a single structured answer, including JSON fenced for display.
+ */
 export function parseAnswer(text: string): unknown {
 	const fence = String.fromCharCode(96).repeat(3)
 	const answer = text.trim()

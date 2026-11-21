@@ -1,5 +1,5 @@
 import type { InspectionOptionsV2, PreviousInspectionOptions, ReportCardV2 } from "./agentContracts.ts"
-import { NodeAdapter, ProjectEvidenceError, pending, skippedUpgrade } from "./checkProject.ts"
+import { NodeAdapter, ProjectEvidenceError, pending, RegistryDeadlineError, skippedUpgrade } from "./checkProject.ts"
 import { bounded, InspectionContext, redactEvidence } from "./collectEvents.ts"
 import { InspectionError, type InspectionOptions, type ReportCard, type Sandbox } from "./contracts.ts"
 import { ModelInspection } from "./inspectModels.ts"
@@ -11,7 +11,9 @@ import { sizeBytes } from "./readUpgradeEvidence.ts"
 import { toRepositoryUrl } from "./toRepositoryUrl.ts"
 import { readIntegrity } from "./verifyCandidate.ts"
 
-/** Inspects a pinned repository and releases its sandbox before returning the card. */
+/**
+ * Inspects a pinned repository and releases its sandbox before returning the card.
+ */
 export function inspectRepository(options: ModelRequestSandboxOptions): Promise<ModelRequestSandboxReportCard>
 export function inspectRepository(options: InspectionOptionsV2 | PreviousInspectionOptions): Promise<ReportCardV2>
 export function inspectRepository(options: InspectionOptions): Promise<ReportCard>
@@ -22,6 +24,7 @@ export async function inspectRepository(
 	const engine = createEngine(input)
 	const options = toCheckOptions(input, engine)
 	const repositoryUrl = toRepositoryUrl(options.repositoryUrl)
+
 	// Validate the requested pin before allocating either runtime.
 	if (input.revision !== undefined && !/^[0-9a-f]{40}$/.test(input.revision)) {
 		throw new InspectionError("invalid-revision", "Expected a full commit SHA")
@@ -34,6 +37,7 @@ export async function inspectRepository(
 	if (engine) {
 		engine.ledger.end = context.end - context.cleanupMs
 	}
+
 	// retain the allocation identity for cleanup on all exit paths
 	const provider = options.sandboxProvider
 	let allocation: Sandbox | undefined
@@ -55,6 +59,7 @@ export async function inspectRepository(
 				provider.estimateMaxCost(context.end - context.started + (engine?.modelRequestSandbox ? context.cleanupMs : 0)),
 			)
 			const created = await provider.createSandbox(allocation.id, config)
+
 			// Some providers return an opaque ID after confirming the named allocation.
 			if (lifetime) {
 				lifetime.id = created.id
@@ -62,6 +67,7 @@ export async function inspectRepository(
 			allocation = created
 			return created
 		})
+
 		// publish the sandbox lifecycle events before checkout
 		for (const action of ["created", "credentials-withheld"] as const) {
 			await context.emit({ type: "sandbox.event", sandboxId: sandbox.id, action })
@@ -76,6 +82,7 @@ export async function inspectRepository(
 			provider.setNetworkPolicy(sandbox, registryHosts, { ...config, timeoutMs: Math.min(10000, config.timeoutMs) }),
 		)
 		await context.emit({ type: "sandbox.event", sandboxId: sandbox.id, action: "network-locked" })
+
 		// inspect the pinned project under the registry policy
 		context.setupComplete = true
 		card = await inspectProject(context, sandbox, { url: repositoryUrl, commit }, engine)
@@ -83,12 +90,14 @@ export async function inspectRepository(
 		failure = asFailure(error)
 	} finally {
 		context.cleaningUp = true
+
 		// release allocated resources even if setup failed
 		failure = await releaseAllocations({ context, allocation, engine, failure })
 	}
 	if (failure || !card) {
 		return failInspection(context, failure, engine)
 	}
+
 	// emit completion after teardown succeeds
 	try {
 		await context.emit({
@@ -102,6 +111,7 @@ export async function inspectRepository(
 		recordFailureEvidence({ error: failed, context, engine })
 		throw failed
 	}
+
 	// Include every prompt dispatched before cleanup completed.
 	card.promptVersions = context.prompts.references
 	return engine ? engine.card(redactEvidence(card)) : redactEvidence(card)
@@ -116,6 +126,7 @@ function createEngine(
 	) {
 		throw new InspectionError("invalid-model", "Unknown caller model execution mode")
 	}
+
 	// Preserve the legacy overload when the caller omits structured models.
 	if ("callerModelExecution" in input && input.callerModelExecution === "modelRequestSandbox") {
 		return new ModelInspection(input)
@@ -135,23 +146,27 @@ async function releaseAllocations({
 	failure?: InspectionError
 }): Promise<InspectionError | undefined> {
 	const provider = context.options.sandboxProvider
+
 	// Track independent cleanup obligations for the repository and its sibling.
 	const releases: { id: string; close: (op: import("./contracts.ts").Operation) => Promise<void> }[] = []
 	if (allocation) {
 		const sandbox = allocation
 		releases.push({ id: sandbox.id, close: (op) => provider.destroySandbox(sandbox, op) })
 	}
+
 	// Include a model request sandbox whose creation reply may have been lost.
 	if (engine?.modelRequestSandbox?.name) {
 		const { name, provider } = engine.modelRequestSandbox
 		releases.push({ id: name, close: (op) => provider.close(name, op) })
 	}
+
 	// Attempt both deletions even if one transport or event callback fails.
 	const results = await Promise.all(
 		releases.map(async ({ id, close }) => {
 			const timeoutMs = context.cleanupWindow()
 			try {
 				await bounded((signal) => close({ timeoutMs, signal }), { timeoutMs })
+
 				// Stop billing time only after acknowledgement.
 				engine?.meter.deleted(id)
 				return true
@@ -166,6 +181,7 @@ async function releaseAllocations({
 		failure.cleanupId = unresolved[0]
 		failure.cleanupIds = unresolved
 	}
+
 	// Publish acknowledged deletions before the terminal event.
 	for (const [index, { id }] of releases.entries()) {
 		if (results[index]) {
@@ -275,6 +291,7 @@ async function inspectProject(
 			card.selection.selected.map((upgrade) => upgrade.dependency),
 		)
 		card.baseline.install = await adapter.install()
+
 		// capture installation evidence for baseline comparisons
 		if (engine) {
 			engine.baseInstall = adapter.lastObservation
@@ -283,17 +300,20 @@ async function inspectProject(
 		if (card.baseline.install.status === "passed") {
 			card.baseline.typecheck = await adapter.typecheck()
 			card.baseline.tests = await adapter.test()
+
 			// retain baseline test coverage for independent patch checks
 			if (engine) {
 				engine.baseTests = adapter.lastObservation
 				engine.baseIntegrity = await readIntegrity(adapter).catch(() => undefined)
 			}
 		}
+
 		// check the selected upgrades before ranking feature adoption
 		await inspectSelected(context, adapter, card, sandbox, engine)
 		await engine?.adopt()
 	} catch (error) {
 		let reason: string
+
 		// distinguish missing project evidence from fatal inspection failures
 		if (error instanceof ProjectEvidenceError) {
 			reason = error.message
@@ -302,9 +322,15 @@ async function inspectProject(
 		} else {
 			throw error
 		}
+
 		// preserve the reason that detection or inspection stopped
 		if ("reason" in card.packageManager) {
 			card.packageManager = { reason }
+		}
+
+		// Surface a busy registry command in the partial Report Card.
+		if (error instanceof RegistryDeadlineError) {
+			card.selection.registryLookupIssue = reason
 		}
 		card.selection.skipped.push(reason)
 		card.upgrades.push(...card.selection.selected.slice(card.upgrades.length).map((u) => skippedUpgrade(u, reason)))
@@ -324,12 +350,14 @@ async function inspectSelected(
 ): Promise<void> {
 	for (const upgrade of card.selection.selected) {
 		context.upgradeId = `${upgrade.dependency}@${upgrade.to}`
+
 		// identify upgrades blocked by an unavailable baseline or deadline
 		const blocked =
 			card.baseline.install.status !== "passed" ||
 			(adapter.project?.typecheck !== "none" && card.baseline.typecheck.status !== "passed")
 		const report = skippedUpgrade(upgrade, blocked ? "baseline-unavailable" : "inspection-deadline")
 		card.upgrades.push(report)
+
 		// run checks only for upgrades with a usable baseline
 		if (!blocked) {
 			await inspectUpgrade({

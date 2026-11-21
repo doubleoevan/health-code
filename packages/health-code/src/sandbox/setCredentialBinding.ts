@@ -36,6 +36,7 @@ type Options = {
 	request: typeof fetch
 	token: string
 	runtimeId: string
+
 	// scope attachment or removal to a single model route
 	route: ModelRoute
 	remove?: Binding
@@ -43,7 +44,9 @@ type Options = {
 }
 const origin = "https://api.runta.com"
 
-/** Sets and verifies the runtime's single scoped egress credential. */
+/**
+ * Sets and verifies the runtime's single scoped egress credential.
+ */
 export async function setCredentialBinding(options: Options): Promise<Binding> {
 	// Switch this integration to runtime.secrets.setSecretStub when the TypeScript SDK ships it.
 	const target = credentialTarget(options.route)
@@ -60,6 +63,7 @@ export async function setCredentialBinding(options: Options): Promise<Binding> {
 		}
 		return response.json()
 	}
+
 	// read the runtime revision and verify its network configuration
 	const runtimePath = `/v2/runtimes/${encodeURIComponent(options.runtimeId)}`
 	const read = async (): Promise<z.infer<typeof metadata>["data"]> => {
@@ -69,6 +73,7 @@ export async function setCredentialBinding(options: Options): Promise<Binding> {
 		}
 		return data
 	}
+
 	// compare the complete existing binding set before changing it
 	const before = await read()
 	const expected = options.remove ? [options.remove] : []
@@ -110,10 +115,13 @@ export async function setCredentialBinding(options: Options): Promise<Binding> {
 	return binding
 }
 
-/** Resolves the exact authenticated inference endpoint for the caller's protocol. */
+/**
+ * Resolves the exact authenticated inference endpoint for the caller's protocol.
+ */
 export function credentialTarget(route: ModelRoute): URL {
 	const base = URL.parse(route.baseUrl)
 	const { header, valueTemplate, name } = route.credential ?? {}
+
 	// require an https endpoint without embedded credentials
 	if (
 		base?.protocol !== "https:" ||
@@ -136,6 +144,7 @@ export function credentialTarget(route: ModelRoute): URL {
 	) {
 		throw new InspectionError("invalid-model-route", "Invalid scoped credential route")
 	}
+
 	// append the protocol's exact inference path
 	base.pathname =
 		base.pathname.replace(/\/$/, "") + (route.protocol === "anthropic" ? "/messages" : "/chat/completions")

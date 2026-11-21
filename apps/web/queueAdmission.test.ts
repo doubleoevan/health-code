@@ -154,6 +154,7 @@ test("a sweep started before a failed deletion cannot reopen admission", async (
 	})
 	await entered.promise
 	const earlierSweep = worker.reap()
+
 	// Simulate a deletion failure arriving after the older sweep took its snapshot.
 	const failure = new InspectionError("cleanup-failed", "Fixture cleanup failed")
 	failure.cleanupId = "fixture"
@@ -247,6 +248,7 @@ test("an unreadable funding gate pauses dispatch and preserves the durable FIFO 
 test("a failed deletion pauses paid work even when settlement must retry", async () => {
 	const store = new InspectionStore(":memory:")
 	const failedWrite = Promise.withResolvers<void>()
+
 	// Fail the first write, then allow the original reservation to settle.
 	const settle = store.admission.settle.bind(store.admission)
 	store.admission.settle = () => {

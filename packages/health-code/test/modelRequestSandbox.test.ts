@@ -42,6 +42,7 @@ test("model request sandbox admission rejects mixed options before creating eith
 		inspectRepository({ ...options, sandboxProvider: { ...provider, modelRequestSandbox: undefined } }),
 		/capability/,
 	)
+
 	// JavaScript callers can pass conflicting representations that the overload rules out.
 	const mixed = { ...role, model: {} }
 	await assert.rejects(
@@ -65,6 +66,7 @@ test("one opening is shared and unaffordable or expired work creates no model re
 	const starting = { context, ledger, requestMicros: 1, allocated: () => {}, start: async () => {}, route }
 	await assert.rejects(modelRequestSandbox.ready(starting), /budget/)
 	assert.deepEqual(provider.modelRequestSandboxEvents, [])
+
 	// Reserve the two-minute runtime and its cleanup grace only once.
 	ledger.remainingMicros = 100000
 	await Promise.all([modelRequestSandbox.ready(starting), modelRequestSandbox.ready(starting)])
@@ -165,6 +167,7 @@ test("both HTTPS protocols use fixed argv and bounded stdin, reject redirects an
 				assert.deepEqual(JSON.parse(args.stdin).messages, [{ role: "user", content: prompt }])
 				assert.ok(!args.stdin.includes(modelCallId))
 				calls.push(String(argv.at(-1)))
+
 				// Respond with protocol-specific text and metering fields.
 				const body =
 					protocol === "anthropic"
@@ -269,6 +272,7 @@ test("local and model request sandbox requests use equivalent fenced evidence, v
 	)
 	const localPrompt = localPrompts[0] ?? ""
 	const remotePrompt = provider.modelRequestSandboxEvents.find((event) => event.request)?.request?.prompt ?? ""
+
 	// Compare the templates after allowing only the per-call nonce to differ.
 	const fence = /untrusted-data-[a-f\d-]{36}/g
 	assert.notEqual(localPrompt, remotePrompt)

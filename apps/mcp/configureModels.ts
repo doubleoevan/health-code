@@ -20,6 +20,7 @@ function priceBound(setting: string | undefined, fallback: number | undefined): 
 export function configureModels(environment: NodeJS.ProcessEnv): SandboxModelRoutes {
 	const origin = modelOrigin(environment)
 	const baseUrl = `${origin}/v1`
+
 	// apply built-in pricing only to the default model and origin
 	function pricing(modelId: string): Pricing {
 		const known = modelId === defaultModel && origin === defaultOrigin
@@ -29,6 +30,7 @@ export function configureModels(environment: NodeJS.ProcessEnv): SandboxModelRou
 			maxInputTokens: 65536,
 		}
 	}
+
 	// All four roles refer to the stored credential for this origin.
 	function route(role: keyof SandboxModelRoutes): SandboxModelRoutes["repair"] {
 		const modelId = environment[roleVariables[role]] || defaultModel

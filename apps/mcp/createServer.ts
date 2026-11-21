@@ -43,6 +43,7 @@ export function createServer(inspections: Inspections, version: string): McpServ
 			const readable = [summary, ...(lines ?? [])].map((line) =>
 				stripVTControlCharacters(line).replace(/[\p{Cc}\p{Cf}]/gu, " "),
 			)
+
 			// Escape terminal controls while keeping canonical bytes in structured content.
 			const printable = body.replace(/[\u007f-\u009f\p{Cf}]/gu, (character) =>
 				character
@@ -50,6 +51,7 @@ export function createServer(inspections: Inspections, version: string): McpServ
 					.map((unit) => `\\u${unit.charCodeAt(0).toString(16).padStart(4, "0")}`)
 					.join(""),
 			)
+
 			// check the summary and rendered details together before delivery
 			const text = [...readable, printable].join("\n")
 			inspections.store.guard(text)

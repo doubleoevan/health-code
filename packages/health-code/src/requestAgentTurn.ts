@@ -28,6 +28,7 @@ export async function requestAgentTurn({
 		throw new InspectionError("credential-binding", "Provider lacks a verified credential capability")
 	}
 	const route = engine.options.models[role]
+
 	// cap verification and generation by the attempt and inspection deadlines
 	const operation = {
 		timeoutMs: Math.max(1, Math.min(120000, budget.end - Date.now(), engine.ledger.end - Date.now())),
@@ -56,6 +57,7 @@ export async function requestAgentTurn({
 		if (!started) {
 			await engine.emitAgentStarted(context, sandbox)
 		}
+
 		// charge the full model turn against the same attempt budget
 		return await context.step("setup", agentRoleLabels[role], (step) =>
 			paidRequest({

@@ -17,6 +17,7 @@ export function translate(error: unknown): Error {
 	}
 	return failure
 }
+
 // translate rejected sdk requests into inspection errors
 export async function providerRequest<T>(request: Promise<T>): Promise<T> {
 	try {
@@ -25,12 +26,14 @@ export async function providerRequest<T>(request: Promise<T>): Promise<T> {
 		throw translate(error)
 	}
 }
+
 // share one deadline across successive runtime operations
 export function remainingOperation(options: Operation): () => Operation {
 	const end = Date.now() + options.timeoutMs
 	return () => {
 		checkOperation(options.signal)
 		const timeoutMs = end - Date.now()
+
 		// reject expired operations before contacting the provider
 		if (timeoutMs <= 0) {
 			throw new InspectionError("deadline", "Inspection interrupted")
@@ -85,6 +88,7 @@ export async function checked(
 	if (result.stdoutTruncated && requireFullOutput) {
 		throw new InspectionError("output-limit", "Project file exceeds the read limit")
 	}
+
 	// surface bounded diagnostics for unsuccessful guest commands
 	if (result.exitCode !== 0) {
 		throw new InspectionError("sandbox-command", `Sandbox operation failed: ${redact(result.stderr).slice(-600)}`)
@@ -96,6 +100,7 @@ export function availabilityReason(status?: number): SandboxUnavailableError["re
 	if (status === 401) {
 		return "authentication"
 	}
+
 	// distinguish insufficient permission from invalid authentication
 	if (status === 403) {
 		return "permission"
@@ -103,7 +108,9 @@ export function availabilityReason(status?: number): SandboxUnavailableError["re
 	return "unavailable"
 }
 
-/** Quotes one independently rounded provider runtime with its allocated resources. */
+/**
+ * Quotes one independently rounded provider runtime with its allocated resources.
+ */
 export function runtimeCost({
 	durationMs,
 	vcpus,
@@ -116,7 +123,9 @@ export function runtimeCost({
 	return (Math.ceil(durationMs / 60000) / 60) * (vcpus * 0.0504 + (memoryMib / 1024) * 0.0162 + 256 * 0.000108)
 }
 
-/** Identifies create responses that could not have allocated a new runtime. */
+/**
+ * Identifies create responses that could not have allocated a new runtime.
+ */
 export function refusedAllocation(error: unknown): boolean {
 	return error instanceof ApiError && [400, 401, 403, 409, 422].includes(error.statusCode ?? 0)
 }

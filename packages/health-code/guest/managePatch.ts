@@ -5,7 +5,9 @@ import { dirname, join, resolve } from "node:path"
 import type { PatchOperation } from "../src/agentContracts.ts"
 import { protectedTestFiles } from "./protectTestSupport.ts"
 
-/** Executes a protected Git operation outside the repository process. */
+/**
+ * Executes a protected Git operation outside the repository process.
+ */
 export function managePatch(root: string, request: PatchOperation): string | null {
 	const source = join(root, "source")
 	const work = join(root, "work")
@@ -39,6 +41,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			{ cwd: root, env, input, maxBuffer: 4 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] },
 		)
 	}
+
 	// validate object ids before passing them to git
 	function sha(value: string): string {
 		if (!/^[a-f0-9]{40}$/.test(value)) {
@@ -53,6 +56,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			file.startsWith("/") ||
 			file
 				.split("/")
+
 				// reject paths traversing private or reserved directories
 				.some(
 					(p) =>
@@ -70,6 +74,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			throw new Error("Unsafe patch path")
 		}
 	}
+
 	// resolve edits only to bounded regular working files
 	function pathFor(file: string): string {
 		validateFile(file)
@@ -79,6 +84,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 		}
 		return path
 	}
+
 	// key the protected test inventory by its pinned test paths
 	function protectSource(file: string, tests: string[]): void {
 		const cache = join(root, "test-support-" + createHash("sha256").update(JSON.stringify(tests)).digest("hex"))
@@ -90,6 +96,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 				.filter((entry) => /^100(?:644|755) blob /.test(entry))
 				.map((entry) => entry.slice(entry.indexOf("\t") + 1))
 			let bytes = 0
+
 			// trace test dependencies within a bounded source budget
 			const blocked = protectedTestFiles(files, tests, (path) => {
 				const local = join(source, path)
@@ -99,6 +106,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 				}
 				return readFileSync(local, "utf8")
 			})
+
 			// persist the computed protection set for repeated edits
 			writeFileSync(cache, JSON.stringify([...blocked]), { mode: 0o400 })
 		}
@@ -113,6 +121,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			const contents = readFileSync(pathFor(file))
 			const previous = git(["ls-tree", "-z", request.parent, "--", file]).toString()
 			const mode = previous.split(" ")[0] || "100644"
+
 			// preserve supported git modes when recording changed blobs
 			if (!["100644", "100755"].includes(mode)) {
 				throw new Error("Unsupported file type")
@@ -120,11 +129,13 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			const blob = git(["hash-object", "-w", "--stdin"], contents).toString().trim()
 			git(["update-index", "--add", "--cacheinfo", `${mode},${sha(blob)},${file}`])
 		}
+
 		// validate the subject before creating the commit
 		const tree = git(["write-tree"]).toString().trim()
 		if (!request.subject.trim() || request.subject.length > 240 || /[\r\n]/.test(request.subject)) {
 			throw new Error("Invalid commit subject")
 		}
+
 		// reject a tree identical to its parent
 		if (
 			tree ===
@@ -134,6 +145,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 		) {
 			throw new Error("Empty patch commit")
 		}
+
 		// create the commit from the checked index tree
 		return git(["commit-tree", sha(tree), "-p", request.parent, "-m", request.subject])
 			.toString()
@@ -145,6 +157,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 		const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(mailbox)
 		const temp = mkdtempSync(join(root, "replay-"))
 		const cleanEnv = { ...env, GIT_INDEX_FILE: join(temp, ".git/index") }
+
 		// isolate replay in a temporary checkout and private index
 		const local = (args: string[], input?: Buffer): Buffer =>
 			execFileSync(
@@ -160,6 +173,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			if (local(["rev-parse", "HEAD^{tree}"]).toString() !== git(["rev-parse", `${tip}^{tree}`]).toString()) {
 				throw new Error("Patch replay differs")
 			}
+
 			// return the replayed mailbox and remove the temporary clone
 			return text
 		} finally {
@@ -175,12 +189,14 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 				throw new Error("Untracked patch source")
 			}
 			const blob = git(["show", `${request.revision}:${request.file}`])
+
 			// bound the blob before returning it to the model
 			if (blob.length > 65536) {
 				throw new Error("File too large")
 			}
 			return blob.toString("utf8")
 		}
+
 		// apply the same read limit to working files
 		const file = pathFor(request.file)
 		if (lstatSync(file).size > 65536) {
@@ -194,6 +210,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			.toString()
 			.trim()
 			.split("\n")
+
 		// require a permutation of the entire commit series
 		if (
 			chain.length !== commits.length ||
@@ -202,6 +219,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 		) {
 			throw new Error("Invalid commit sequence")
 		}
+
 		// rebuild the requested series on its base
 		let parent = base
 		const revisions: string[] = []
@@ -212,10 +230,12 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			git(["apply", "--cached", "--whitespace=nowarn", "--binary", "-"], diff)
 			const tree = sha(git(["write-tree"]).toString().trim())
 			const subject = git(["show", "-s", "--format=%s", revision]).toString().trim()
+
 			// link the recreated commit to its new parent
 			parent = sha(git(["commit-tree", tree, "-p", parent, "-m", subject]).toString().trim())
 			revisions.push(parent)
 		}
+
 		// verify that reordering preserves the final tree
 		if (!git(["rev-parse", `${tip}^{tree}`]).equals(git(["rev-parse", `${parent}^{tree}`]))) {
 			throw new Error("Reordered tree differs")
@@ -233,6 +253,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 				const name = path.split("/").at(-1) ?? ""
 				return (name === ".env" || name.startsWith(".env.")) && name !== ".env.example"
 			})
+
 		// remove private paths before materializing the tree
 		if (excluded.length) {
 			git(["update-index", "--force-remove", "-z", "--stdin"], excluded.join("\0") + "\0")
@@ -247,6 +268,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 		if (Buffer.byteLength(request.contents) > 65536) {
 			throw new Error("File too large")
 		}
+
 		// validate the location and novelty of a proposed test
 		if (request.createTest) {
 			validateFile(request.file)
@@ -259,12 +281,14 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			) {
 				throw new Error("Unsupported new test path")
 			}
+
 			// create new tests exclusively to preserve existing files
 			writeFileSync(path, request.contents, { flag: "wx", mode: 0o644 })
 		} else {
 			writeFileSync(pathFor(request.file), request.contents)
 		}
 	}
+
 	// dispatch the requested protected patch operation
 	switch (request.kind) {
 		case "order":
@@ -273,12 +297,14 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			return commit(request)
 		case "export":
 			return replay(request.base, request.tip)
+
 		// verify tracked contents against the sanitized index
 		case "verify": {
 			const excluded = loadProjectIndex(request.tip)
 			if (excluded.some((file) => lstatSync(join(work, file), { throwIfNoEntry: false }))) {
 				throw new Error("Excluded environment file reappeared")
 			}
+
 			// compare the working tree with the expected tree object
 			const tree = sha(git(["write-tree"]).toString().trim())
 			git([`--work-tree=${work}`, "diff", "--quiet", "--no-ext-diff", "--no-textconv", tree, "--"])
@@ -290,12 +316,14 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			rmSync(work, { recursive: true, force: true })
 			execFileSync("mkdir", ["-p", work])
 			git([`--work-tree=${work}`, "checkout-index", "--all", "--force", `--prefix=${work}/`])
+
 			// reject reserved directories supplied by the repository
 			for (const name of [".health-code", ".git"]) {
 				if (existsSync(join(work, name))) {
 					throw new Error("Reserved project path")
 				}
 			}
+
 			// prepare writable guest state for the unprivileged runner
 			execFileSync("mkdir", ["-p", join(work, ".health-code/home"), join(work, ".health-code/tmp")])
 			execFileSync("chown", ["-R", "--no-dereference", "65534:65534", work])
@@ -304,6 +332,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 		case "read": {
 			return readSource(request)
 		}
+
 		// apply a bounded edit to the working copy
 		case "edit":
 			editFile(request)
@@ -311,6 +340,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 	}
 	throw new Error("Unknown patch operation")
 }
+
 // process one protected patch request from standard input
 if (process.argv[1] === "/opt/health-code/patch.mjs") {
 	try {

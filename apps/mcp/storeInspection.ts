@@ -49,6 +49,7 @@ export function protect(environment: NodeJS.ProcessEnv): (text: string) => void 
 	const secrets = [environment.ANTHROPIC_API_KEY, environment.RUNTA_TOKEN, environment.GITHUB_TOKEN].filter(
 		(key): key is string => Boolean(key),
 	)
+
 	// screen both raw credentials and their serialized forms
 	return (text) => {
 		if (secrets.some((key) => text.includes(key) || text.includes(JSON.stringify(key).slice(1, -1)))) {
@@ -82,6 +83,7 @@ export class InspectionStore {
 		if (!stat.isFile() || stat.size > 64 * 1024 * 1024) {
 			throw new UserError("Inspection record has an unsupported size or type.")
 		}
+
 		// check stored text for configured credentials before parsing
 		const text = await readFile(path, "utf8")
 		this.guard(text)
@@ -96,6 +98,7 @@ export class InspectionStore {
 		if (Buffer.byteLength(text) > 64 * 1024 * 1024) {
 			throw new UserError("Report Card exceeds local storage limit.")
 		}
+
 		// stage the card and its result directory with private permissions
 		await mkdir(this.root, { recursive: true, mode: 0o700 })
 		const temp = await mkdtemp(join(this.root, ".pending-"))
@@ -111,6 +114,7 @@ export class InspectionStore {
 	async load(id: string): Promise<SavedCard> {
 		return (await this.snapshot(id)).card
 	}
+
 	// read the card together with the exact text used for paging
 	async snapshot(id: string): Promise<Snapshot> {
 		try {
@@ -120,11 +124,13 @@ export class InspectionStore {
 			if (!stat.isFile() || stat.size > 64n * 1024n * 1024n) {
 				throw new UserError("Report Card has an unsupported size or type.")
 			}
+
 			// Reuse one immutable card across cursor reads until its on-disk identity changes.
 			const identity = [id, stat.dev, stat.ino, stat.size, stat.ctimeNs, stat.mtimeNs].join("/")
 			if (this.lastSnapshot?.identity === identity) {
 				return this.lastSnapshot.snapshot
 			}
+
 			// validate a changed file before replacing the cached snapshot
 			const text = await readFile(path, "utf8")
 			this.guard(text)
@@ -132,6 +138,7 @@ export class InspectionStore {
 			if (card.inspectionId !== id || card.timeline.some((event) => event.inspectionId !== id)) {
 				throw new Error()
 			}
+
 			// cache the original text beside the validated card
 			const snapshot = { card, text }
 			this.lastSnapshot = { identity, snapshot }
@@ -150,6 +157,7 @@ export class InspectionStore {
 		this.guard(text)
 		const folder = this.folder(outcome.inspectionId)
 		await this.checkPath(folder)
+
 		// prepare a private results directory beneath the inspection root
 		const directory = join(folder, "results")
 		await mkdir(directory, { recursive: true, mode: 0o700 })
@@ -157,6 +165,7 @@ export class InspectionStore {
 		const temp = join(directory, `.pending-${randomUUID()}`)
 		try {
 			await writeFile(temp, text, { mode: 0o600, flag: "wx" })
+
 			// Publish a complete immutable record, even when two clients retry together.
 			await link(temp, join(directory, `${toHash(text)}.json`))
 		} catch (error) {
@@ -183,12 +192,14 @@ export class InspectionStore {
 			throw error
 		}
 		const results: Outcome[] = []
+
 		// verify each record against its inspection id and content-addressed filename
 		for (const name of names) {
 			const record = outcomeSchema.parse(await this.read(join(directory, name)))
 			if (record.inspectionId !== id || name !== `${toHash(JSON.stringify(record))}.json`) {
 				throw new UserError("Saved Patch result is unreadable.")
 			}
+
 			// retain only results whose identity checks succeeded
 			results.push(record)
 		}

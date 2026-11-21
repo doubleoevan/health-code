@@ -22,6 +22,7 @@ test("per-call SDK telemetry is isolated and excludes raw content", async () => 
 			}),
 	})
 	const prompt = { name: "repair" as const, version: 1, sha256: "a".repeat(64) }
+
 	// Capture only what the caller's tracer receives from each dispatch.
 	const run = async (events: unknown[], fails: boolean): Promise<void> => {
 		const tracer = {
@@ -37,6 +38,7 @@ test("per-call SDK telemetry is isolated and excludes raw content", async () => 
 				}
 			},
 		} as unknown as Tracer
+
 		// Exercise the SDK callback with a local provider response.
 		const traced = traceGeneration({ tracer, role: "repair", prompt })
 		const result = await generateText({
@@ -48,6 +50,7 @@ test("per-call SDK telemetry is isolated and excludes raw content", async () => 
 		traced?.finish("complete", result.usage)
 		assert.equal(result.text, payload)
 	}
+
 	// Compare independent caller traces after both promises settle.
 	const left: unknown[] = [],
 		right: unknown[] = []
@@ -76,6 +79,7 @@ test("a cancelled paid request closes only its caller span and records the dispa
 		telemetry,
 	})
 	const controller = new AbortController()
+
 	// Cancel after entering the guest transport so the receipt remains outstanding.
 	await assert.rejects(
 		paidRequest({

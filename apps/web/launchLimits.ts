@@ -6,6 +6,7 @@ export type LaunchLimits = {
 	dailyMicros: number
 	maxSizeKiB: number
 	maxUpgrades: number
+
 	// Per-inspection and per-attempt USD ceilings.
 	maxCostUsd: number
 	repairUsd: number
@@ -22,6 +23,7 @@ export function toLaunchLimits(environment: Record<string, string | undefined>):
 		}
 		return parsed
 	}
+
 	// Validate the complete replacement before exposing it to admission.
 	const limits = {
 		dailyVisitorInspections: number("VISITOR_RUNS", 3),
@@ -58,10 +60,12 @@ export class LaunchSettings {
 		this.current = toLaunchLimits(environment)
 		this.refreshed = token ? 0 : Date.now()
 	}
+
 	// Permit a short outage after a successful limits refresh.
 	get available(): boolean {
 		return !this.token || Date.now() - this.refreshed < 180000
 	}
+
 	// Expose the last accepted refresh time to the operator.
 	get updated(): string | null {
 		return this.refreshed ? new Date(this.refreshed).toISOString() : null
@@ -70,8 +74,10 @@ export class LaunchSettings {
 		if (!this.token) {
 			return
 		}
+
 		// Read only the dedicated limits configuration using its read-only token.
 		const values = await readConfiguration(this.token, this.request)
+
 		// Require the entire limits snapshot before replacing the last accepted configuration.
 		const required = [
 			"VISITOR_RUNS",

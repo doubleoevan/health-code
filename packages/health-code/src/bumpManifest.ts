@@ -4,6 +4,7 @@ export type Manifest = {
 	packageManager?: string
 	workspaces?: string[] | { packages: string[] }
 	scripts?: { test?: string }
+
 	// list editable dependency sections in the manifest
 	dependencies?: Record<string, string>
 	devDependencies?: Record<string, string>
@@ -43,6 +44,7 @@ export function bumpManifest({
 			changed = true
 		}
 	}
+
 	// report whether the manifest requires writing
 	return changed
 }

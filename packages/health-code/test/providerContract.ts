@@ -42,15 +42,18 @@ export async function providerContract(provider: SandboxProvider): Promise<void>
 		assert.equal(await provider.prepareRepository(allocated, fixtureUrl, options), fixtureCommit)
 		await provider.setNetworkPolicy(allocated, ["registry.npmjs.org"], options)
 		await provider.resetProject(allocated, options)
+
 		// verify a file round trip in the restored project
 		await provider.writeFile(allocated, "contract.txt", "first", options)
 		assert.equal(await provider.readFile(allocated, "contract.txt", options), "first")
+
 		// observe a command that writes outside the project
 		const result = await provider.executeCommand(allocated, { argv: controlCommand, timeoutMs: 15000, observe: true })
 		assert.equal(result.exitCode, 0, result.stderr)
 		assert.equal(result.stdout, "stdout")
 		assert.equal(result.stderr, "stderr")
 		assert.ok(result.observationId)
+
 		// check that file observation retains a transient write
 		const writes = await provider.readFileChanges(allocated, result.observationId)
 		assert.ok(writes.complete, JSON.stringify(writes))
@@ -59,18 +62,21 @@ export async function providerContract(provider: SandboxProvider): Promise<void>
 			JSON.stringify(writes),
 		)
 		assert.equal((await provider.readAttemptedConnections(allocated, result.observationId)).complete, true)
+
 		// exercise registry access and a blocked external destination
 		const allowed = await provider.executeCommand(allocated, { argv: registryCommand, timeoutMs: 15000 })
 		assert.equal(allowed.exitCode, 0, allowed.stderr)
 		const outside = await provider.executeCommand(allocated, { argv: outsideCommand, observe: true, timeoutMs: 10000 })
 		assert.notEqual(outside.exitCode, 0, "Registry policy admitted an off-list request")
 		assert.ok(outside.observationId)
+
 		// match the blocked request to its network evidence
 		const network = await provider.readAttemptedConnections(allocated, outside.observationId)
 		assert.ok(
 			network.findings.some((f) => f.kind === "connection" && f.destination === "example.com"),
 			JSON.stringify(network),
 		)
+
 		// bound a long-running command and check that reset removes temporary files
 		const timeout = await provider.executeCommand(allocated, { argv: ["sleep", "5"], timeoutMs: 1000 })
 		assert.notEqual(timeout.exitCode, 0)

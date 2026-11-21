@@ -15,6 +15,7 @@ test("record requires a complete pinned Baseline and scores only reviewed measur
 		const fixture = JSON.parse(await readFile(new URL("../evals/carlnotes-baseline.json", import.meta.url), "utf8"))
 		const seed = { ...fixture, review: "unmeasured", expected: null }
 		await writeFile(path, JSON.stringify(seed))
+
 		// build a complete inspection with one test file error
 		const counts = { passed: 1, failed: 0, skipped: 1, todo: 0 }
 		const inventory = { counts, testFileErrors: [{ file: "missing.test.ts", reason: "Missing dependency" }] }
@@ -25,11 +26,13 @@ test("record requires a complete pinned Baseline and scores only reviewed measur
 			baseline: { install: passed, tests: { ...passed, inventory } },
 			timeline: [{ type: "sandbox.event", action: "deleted" }],
 		} as unknown as ReportCard
+
 		// reject incomplete evidence and preserve the seed
 		await assert.rejects(openBaseline(path, false), /awaits review/)
 		const record = await openBaseline(path, true)
 		await assert.rejects(record.finish({ ...card, timeline: [] }), /Incomplete Baseline/)
 		assert.deepEqual(JSON.parse(await readFile(path, "utf8")), seed)
+
 		// record the complete inventory for review
 		await record.finish(card)
 		const pending = JSON.parse(await readFile(path, "utf8"))
@@ -41,12 +44,14 @@ test("record requires a complete pinned Baseline and scores only reviewed measur
 			review: "reviewed",
 			expected: { counts, exclusions: inventory.testFileErrors },
 		})
+
 		// score current and historical inventory field names
 		await writeFile(path, reviewed)
 		const score = await openBaseline(path, false)
 		await score.finish(card)
 		const historicalCard = JSON.parse(JSON.stringify(card).replace('"testFileErrors":', '"exclusions":'))
 		assert.deepEqual(await score.finish(historicalCard), inventory)
+
 		// reject drift without rewriting the reviewed case
 		inventory.testFileErrors = []
 		await assert.rejects(score.finish(card), /drift/)

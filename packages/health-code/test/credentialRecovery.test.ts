@@ -14,6 +14,7 @@ for (const failure of ["interrupted attachment", "failed restoration", "unavaila
 		let releases = 0
 		let hosts: string[] = []
 		let generations = 0
+
 		// simulate policy updates and host readback
 		const runtime = {
 			id: "runtime",
@@ -44,11 +45,13 @@ for (const failure of ["interrupted attachment", "failed restoration", "unavaila
 				}
 			},
 		} as unknown as Runtime
+
 		// serve the named secret and the runtime's current binding
 		const request = async (input: Request | string | URL, init?: RequestInit): Promise<Response> => {
 			if (String(input).endsWith("secrets")) {
 				return Response.json({ data: [{ id: "fixture", display_name: "stored" }] })
 			}
+
 			// interrupt attachment after the binding update when requested
 			if (init?.method === "PATCH") {
 				configuration = JSON.parse(String(init.body)).secret_configuration
@@ -57,9 +60,11 @@ for (const failure of ["interrupted attachment", "failed restoration", "unavaila
 					controller.abort()
 				}
 			}
+
 			// return the configuration revision for readback
 			return Response.json({ data: { id: "runtime", revision, secret_configuration: configuration } })
 		}
+
 		// open the credential session with observable release and destruction
 		const operation = { timeoutMs: 2000, signal: controller.signal }
 		const connect = (): ReturnType<typeof openCredentialSession> =>
@@ -82,6 +87,7 @@ for (const failure of ["interrupted attachment", "failed restoration", "unavaila
 					deletions++
 				},
 			})
+
 		// verify cleanup when attachment or process verification fails
 		if (failure !== "failed restoration") {
 			await assert.rejects(connect())
@@ -97,6 +103,7 @@ for (const failure of ["interrupted attachment", "failed restoration", "unavaila
 			await assert.rejects(closing, /policy mismatch/)
 			await assert.rejects(session.close(operation), /policy mismatch/)
 		}
+
 		// require one destruction and no subsequent use of the runtime
 		assert.equal(generations, 0)
 		assert.equal(releases, 0)

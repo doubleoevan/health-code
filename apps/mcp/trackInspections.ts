@@ -30,12 +30,14 @@ export const readOutput = z.object({
 	results: z.array(outcomeSchema),
 	failure: z.string().optional(),
 })
+
 // accept either supported event and report format from the inspection engine
 export type Inspect = (options: {
 	repositoryUrl: string
 	signal: AbortSignal
 	onEvent: (event: InspectionEvent | ModelRequestSandboxEvent) => void
 }) => Promise<ReportCard | ModelRequestSandboxReportCard>
+
 // retain live progress until the report is saved
 type State = {
 	events: Event[]
@@ -44,6 +46,7 @@ type State = {
 	failure?: string
 	reportText?: string
 }
+
 // track cancellation and cursors for each read request
 type ReadRequest = { progress?: (step: string) => Promise<void>; signal?: AbortSignal }
 type Read = { inspectionId: string; afterSequence: number; waitMs: number; reportOffset: number }
@@ -52,6 +55,7 @@ export function textPage(text: string, offset: number): { text: string; nextOffs
 	if (offset > text.length || (offset > 0 && /[\uDC00-\uDFFF]/u.test(text.charAt(offset)))) {
 		throw new UserError("Invalid text cursor.")
 	}
+
 	// leave the entire surrogate pair for the next page when it crosses the boundary
 	let end = Math.min(text.length, offset + 4096)
 	if (end < text.length && /[\uD800-\uDBFF]/u.test(text.charAt(end - 1))) {
@@ -74,9 +78,11 @@ export function toEventLine(event: Event): string {
 			return `Starting · ${event.label}`
 		case "step.finished":
 			return String(event.summary)
+
 		// show detail output with its source stream
 		case "detail":
 			return `${event.stream} · ${event.text}`
+
 		// label inspection lifecycle events separately from individual steps
 		case "inspection.started":
 			return "Inspection started"
@@ -86,6 +92,7 @@ export function toEventLine(event: Event): string {
 			return "Inspection finished"
 	}
 }
+
 // truncate long detail text only in event previews
 function toPreview(event: Event): Event {
 	// bound detail previews while preserving the original event
@@ -106,6 +113,7 @@ export class Inspections {
 		readonly store: InspectionStore,
 		private inspect: Inspect,
 	) {}
+
 	// cancel every active job and await sandbox teardown
 	async close(): Promise<void> {
 		for (const controller of this.jobs.keys()) {
@@ -128,17 +136,20 @@ export class Inspections {
 						// Validate before publishing an event or waking a polling client.
 						this.store.guard(JSON.stringify(input))
 						const event = eventSchema.parse(input)
+
 						// publish the inspection id as soon as the library announces it
 						if (!id && event.type === "inspection.started") {
 							id = event.inspectionId
 							this.active.set(id, state)
 							accepted.resolve(id)
 						}
+
 						// bind all subsequent events to the accepted inspection
 						if (event.inspectionId !== id) {
 							throw new UserError("Inspection event identity mismatch.")
 						}
 						state.events.push(event)
+
 						// expose the latest step while the inspection is running
 						if (event.type === "step.started") {
 							state.step = String(event.label)
@@ -156,6 +167,7 @@ export class Inspections {
 				}
 				this.store.guard(JSON.stringify(card))
 				const saved = cardSchema.parse(card)
+
 				// retry storage writes without repeating the inspection
 				for (let attempt = 0; ; attempt++) {
 					try {
@@ -170,6 +182,7 @@ export class Inspections {
 						await delay(100)
 					}
 				}
+
 				// switch readers to persistent storage after publication
 				state.status = "complete"
 				this.active.delete(id)
@@ -177,6 +190,7 @@ export class Inspections {
 			.catch((error: unknown) => {
 				state.status = "failed"
 				state.step = "Finished"
+
 				// expose only recognized errors in the terminal state
 				state.failure =
 					error instanceof UserError
@@ -186,6 +200,7 @@ export class Inspections {
 								? "Model Request Sandbox verification failed. Run health-code mcp setup for this model origin."
 								: `Inspection failed (${error.code}).`
 							: "Inspection failed."
+
 				// screen the failure message before delivery
 				try {
 					this.store.guard(state.failure)
@@ -194,6 +209,7 @@ export class Inspections {
 				}
 				accepted.reject(new UserError(state.failure))
 			})
+
 			// release the cancellation handle when the job settles
 			.finally(() => {
 				this.jobs.delete(controller)
@@ -208,6 +224,7 @@ export class Inspections {
 		const deadline = Date.now() + input.waitMs
 		let step = state?.step ?? "Reading saved Report Card"
 		await progress?.(step)
+
 		// Wait only while the reader has caught up to the live event sequence.
 		while (
 			state?.status === "running" &&
@@ -215,6 +232,7 @@ export class Inspections {
 			Date.now() < deadline
 		) {
 			await delay(Math.min(50, deadline - Date.now()), undefined, { signal })
+
 			// notify the waiting client when the active step changes
 			state = this.active.get(input.inspectionId)
 			if (state && state.step !== step) {
@@ -230,11 +248,13 @@ export class Inspections {
 		const saved = state ? undefined : await this.store.snapshot(input.inspectionId)
 		const report = saved?.text ?? state?.reportText
 		const timeline = state?.events ?? saved?.card.timeline ?? []
+
 		// page events while pinning sandbox activity across the whole timeline
 		const events = timeline.filter((event) => event.sequence > input.afterSequence).slice(0, 8)
 		const pinned = timeline
 			.filter((event) => event.type === "sandbox.event")
 			.map((event) => ({ sequence: event.sequence, action: event.action }))
+
 		// return recorded outcomes alongside the next event cursor
 		const nextSequence = events.at(-1)?.sequence ?? input.afterSequence
 		const results = state ? [] : await this.store.outcomes(input.inspectionId)

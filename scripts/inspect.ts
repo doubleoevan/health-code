@@ -23,6 +23,7 @@ function toLogLines(event: Exclude<LogEvent, { type: "step.started" }>): string[
 			return [`${event.summary} ${event.status} (${event.durationMs} ms)`]
 		case "sandbox.event":
 			return [`◆ ${event.action}${event.detail ? ` ${event.detail}` : ""}`]
+
 		// label each line of captured command output
 		case "detail": {
 			const lines = event.text
@@ -30,12 +31,14 @@ function toLogLines(event: Exclude<LogEvent, { type: "step.started" }>): string[
 				.split(/\r?\n/)
 				.filter(Boolean)
 				.map((line) => `  ${event.stream} ${line}`)
+
 			// mark incomplete output at the end of its stream
 			if (event.truncated) {
 				lines.push(`  ${event.stream} output truncated`)
 			}
 			return lines
 		}
+
 		// report the terminal inspection outcome
 		case "inspection.finished":
 			return [`Inspection finished · ${event.inspected} upgrade(s)`]
@@ -62,6 +65,7 @@ function toActiveStep(event: LogEvent, current: string): string {
 		case "inspection.finished":
 		case "inspection.failed":
 			return ""
+
 		// preserve the active step across detail events
 		default:
 			return current
@@ -82,12 +86,14 @@ export function createInspectionLog(output: Output): (event: LogEvent) => void {
 		if (event.type === "step.started" && !output.isTTY) {
 			output.write(`${active}\n`)
 		}
+
 		// write permanent log lines for completed work and output
 		if (event.type !== "step.started") {
 			for (const line of toLogLines(event)) {
 				output.write(`${toPrintable(line)}\n`)
 			}
 		}
+
 		// redraw the current step within the terminal width
 		if (output.isTTY) {
 			output.write(Bun.wrapAnsi(active, Math.max(2, (output.columns ?? 80) - 1), { hard: true }).split("\n")[0] ?? "")
@@ -97,6 +103,7 @@ export function createInspectionLog(output: Output): (event: LogEvent) => void {
 
 async function main(args: string[]): Promise<void> {
 	const [repositoryUrl, flag, ...remaining] = args
+
 	// reject extra arguments before selecting a provider
 	if (
 		!repositoryUrl ||
@@ -106,6 +113,7 @@ async function main(args: string[]): Promise<void> {
 	) {
 		throw new Error("Usage: bun run inspect <repo-url> [--fake]")
 	}
+
 	// select the recorded or live sandbox provider
 	const fake = flag === "--fake"
 	const recording = new URL("./fixtures/recorded/inspection.json", import.meta.url)
@@ -113,6 +121,7 @@ async function main(args: string[]): Promise<void> {
 	if (fake) {
 		console.log("Fixture mode · replaying recorded evidence")
 	}
+
 	// forward process cancellation to the inspection
 	const controller = new AbortController()
 	const cancel = (): void => controller.abort()
@@ -125,6 +134,7 @@ async function main(args: string[]): Promise<void> {
 			onEvent: createInspectionLog(process.stdout),
 			signal: controller.signal,
 		})
+
 		// save the report privately under its inspection id
 		await mkdir("logs", { recursive: true })
 		const path = join("logs", `${card.inspectionId + (fake ? ".fake" : "")}.json`)
@@ -142,6 +152,7 @@ async function main(args: string[]): Promise<void> {
 		process.off("SIGTERM", cancel)
 	}
 }
+
 // map command failures to a nonzero exit status
 if (import.meta.main) {
 	main(process.argv.slice(2)).catch((error: unknown) => {

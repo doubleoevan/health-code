@@ -20,6 +20,7 @@ test("guest project files allow internal links and protect files outside the pro
 		): Promise<{ exitCode: number | null; stdoutText: string; stderrText: string; durationMs: number }> {
 			const [script, , mode, target] = argv.slice(-4)
 			assert.ok(script && mode && target)
+
 			// Run the provider's Python program with this fixture as its project mount.
 			const outcome = spawnSync(
 				"python3",
@@ -33,10 +34,12 @@ test("guest project files allow internal links and protect files outside the pro
 		await mkdir(root)
 		await writeFile(join(folder, "other"), "private")
 		await writeFile(join(root, "owned"), "original")
+
 		// Both names stay usable when their descriptor resolves to a project file.
 		await symlink("owned", join(root, "link"))
 		await writeProjectFile({ runtime, path: "link", contents: "updated", operation })
 		assert.equal(await readProjectFile({ runtime, path: "owned", operation }), "updated")
+
 		// Confirm a refused write preserves the original file.
 		await symlink("../other", join(root, "external"))
 		await assert.rejects(readProjectFile({ runtime, path: "external", operation }))

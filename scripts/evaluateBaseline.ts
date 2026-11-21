@@ -33,6 +33,7 @@ export async function openBaseline(
 			// parse the observed test inventory
 			const parsed = testInventorySummarySchema.safeParse(card.baseline.tests.inventory)
 			const observed = parsed.data
+
 			// require a complete inspection of the pinned baseline
 			if (
 				card.repository.commit !== fixture.commit ||
@@ -57,6 +58,7 @@ export async function openBaseline(
 						}),
 				)
 			}
+
 			// normalize file order before recording or comparing results
 			const sorted = {
 				...observed,
@@ -71,6 +73,7 @@ export async function openBaseline(
 						`${JSON.stringify({ ...JSON.parse(original), review: "pending-review", expected: sorted }, null, "\t")}\n`,
 						{ flag: "wx" },
 					)
+
 					// preserve concurrent changes to the case file
 					if ((await readFile(path, "utf8")) !== original) {
 						throw new Error("Case file changed during measurement")

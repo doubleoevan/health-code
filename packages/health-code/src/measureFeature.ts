@@ -16,6 +16,7 @@ function measure({ files, tests, symbol }: Scope): { lines: number; nodes: numbe
 			tokens: true,
 		})
 		const occupied = new Set<number>()
+
 		// count occupied source lines from parsed tokens
 		for (const token of ast.tokens ?? []) {
 			if (typeof token.type !== "string" && token.type.label !== "eof") {
@@ -28,6 +29,7 @@ function measure({ files, tests, symbol }: Scope): { lines: number; nodes: numbe
 			if (value && typeof value === "object" && typeof value.type === "string") {
 				nodes++
 			}
+
 			// count calls only when the callee names the affected symbol
 			if (
 				value?.type === "CallExpression" &&
@@ -36,14 +38,19 @@ function measure({ files, tests, symbol }: Scope): { lines: number; nodes: numbe
 			) {
 				calls++
 			}
+
 			// continue traversing children of the current syntax node
 			return value
 		})
 	}
+
 	// return production size and symbol usage together
 	return { lines, nodes, calls }
 }
-/** Measures an adoption against the accepted upgrade's production source. */
+
+/**
+ * Measures an adoption against the accepted upgrade's production source.
+ */
 export function measureFeature(options: {
 	before: Map<string, string>
 	after: Map<string, string>
@@ -57,6 +64,7 @@ export function measureFeature(options: {
 	}
 	const before = measure({ files: options.before, tests: options.tests, symbol: options.symbol })
 	const after = measure({ files: options.after, tests: options.tests, symbol: options.symbol })
+
 	// compare deprecated calls before measuring code reduction
 	if (before.calls > after.calls && options.symbol) {
 		return { kind: "deprecated-call", before: before.calls, after: after.calls, name: options.symbol }
@@ -64,6 +72,7 @@ export function measureFeature(options: {
 	if (before.lines > after.lines && before.nodes > after.nodes) {
 		return { kind: "production-lines", before: before.lines, after: after.lines }
 	}
+
 	// reject changes without a measured production benefit
 	throw new Error("Feature did not reduce production code, a deprecated call or a direct dependency")
 }

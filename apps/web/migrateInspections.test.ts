@@ -31,12 +31,14 @@ test("an online pre-migration backup restores a legacy report and its permanent 
 			)
 			.run(report.repository.url, JSON.stringify(report))
 		previous.query("INSERT INTO patches VALUES(?,?)").run(digest, bytes)
+
 		// Exercise the on-disk upgrade with committed changes still present in the WAL.
 		const migrated = new InspectionStore(path)
 		previous.close()
 		assert.deepEqual(migrated.snapshot("legacy")?.card, report)
 		assert.deepEqual(Buffer.from(migrated.patch(digest) ?? []), bytes)
 		migrated.database.close()
+
 		// Start a fresh worker directly on the backup and re-open the same evidence.
 		const backup = readdirSync(folder).find((name) => name.endsWith(".backup"))
 		assert.ok(backup)

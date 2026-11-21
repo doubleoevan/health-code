@@ -18,12 +18,12 @@ export async function modelRequestSandboxFixture(
 	restore: () => void
 }> {
 	// load recorded commands for the inspected project
-
 	const fixture: SandboxFixture = JSON.parse(
 		await readFile(new URL("../../../scripts/fixtures/recorded/inspection.json", import.meta.url), "utf8"),
 	)
 	const [detect, registry, install, , report, bump] = fixture.commands
 	assert.ok(detect && registry && install && report && bump)
+
 	// prepare matching source and release evidence for the fixture
 	const source = "index.ts"
 	const summarySource = "https://github.com/example/widget/releases/tag/v1.3.0"
@@ -36,8 +36,10 @@ export async function modelRequestSandboxFixture(
 			connections: evidence,
 		}
 	}
-	// replay a passing test inventory before and after the bump
+
 	const size = command(["installed-size"], 100)
+
+	// replay a passing test inventory before and after the bump
 	const tests = command(["tests", "--inventory"], {
 		counts: { passed: 1, failed: 0, skipped: 0, todo: 0 },
 		testFileErrors: [],
@@ -53,6 +55,7 @@ export async function modelRequestSandboxFixture(
 		changelog: "",
 		unresolved: [],
 	})
+
 	// order guest responses to match the inspection phases
 	const commands = [
 		detect,
@@ -96,6 +99,7 @@ export async function modelRequestSandboxFixture(
 		},
 		commands: commands.map((entry) => ({ ...entry, connections: evidence })),
 	})
+
 	// emulate the patch workspace at its inspected and upgraded revisions
 	const mailbox = "From abc fixture\nSubject: [PATCH] upgrade widget\n"
 	provider.patchWorkspace = async (_sandbox, request) => {
@@ -104,6 +108,7 @@ export async function modelRequestSandboxFixture(
 				return "b".repeat(40)
 			case "export":
 				return mailbox
+
 			// return revision-specific manifest and source contents
 			case "read":
 				if (request.file === "package.json") {
@@ -111,6 +116,7 @@ export async function modelRequestSandboxFixture(
 				}
 				assert.equal(request.file, source)
 				return "widget()"
+
 			// acknowledge verification and restoration of the fixture
 			case "verify":
 				return request.tip
@@ -120,6 +126,7 @@ export async function modelRequestSandboxFixture(
 				throw new Error("Unexpected workspace operation")
 		}
 	}
+
 	// record the lifetime of the host-bound credential session
 	const phases: string[] = []
 	provider.openCredentialSession = async (_sandbox, route) => {
@@ -127,6 +134,7 @@ export async function modelRequestSandboxFixture(
 		assert.equal(route.baseUrl, "https://api.anthropic.com/v1")
 		assert.ok(!JSON.stringify(route).includes("obsolete-key-never-forward"))
 		phases.push("open")
+
 		// supply model replies with measured token usage
 		const reply = { modelId: route.modelId, inputTokens: 1, outputTokens: 1 }
 		return {
@@ -144,17 +152,20 @@ export async function modelRequestSandboxFixture(
 			},
 		}
 	}
+
 	// intercept requests and check credentials at each destination
 	const requested: string[] = []
 	const request = mock.method(globalThis, "fetch", async (input: string | URL, init?: RequestInit) => {
 		const url = new URL(input)
 		const headers = new Headers(init?.headers)
+
 		// keep registry lookups anonymous
 		if (url.hostname === "registry.npmjs.org") {
 			assert.equal(headers.get("authorization"), null)
 			requested.push("registry")
 			return Response.json({ repository: "https://github.com/example/widget" })
 		}
+
 		// check anonymous REST requests and authenticated GraphQL requests
 		if (url.hostname === "api.github.com") {
 			if (!githubToken) {

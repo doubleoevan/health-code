@@ -33,6 +33,7 @@ export function scoreBudget(options: {
 	) {
 		return false
 	}
+
 	// check each agent role against its own budget
 	for (const role of ["repair", "featureAdoption"] as const) {
 		const bound = expected.agent[role]
@@ -52,6 +53,7 @@ export function scoreBudget(options: {
 			return false
 		}
 	}
+
 	// include sandbox time in the total cost check
 	return within(totalCost(modelUsage) + sandboxCostUpperBoundUsd, limits.maxCostUsd)
 }
@@ -79,6 +81,7 @@ function validReceipt(receipt: ModelUsage): boolean {
 		)
 	)
 }
+
 // include reserved charges when the final price is unavailable
 function totalCost(receipts: ModelUsage[]): number {
 	return receipts.reduce((sum, item) => sum + (item.costUsd ?? item.reservedUsd ?? Infinity), 0)

@@ -55,15 +55,18 @@ export function createModelRequestSandbox({
 	async function selectRoute({ state, runtime, route, operation }: SelectRouteOptions): Promise<void> {
 		const remaining = remainingOperation(operation)
 		const target = credentialTarget(route)
+
 		// Scope all control-plane writes to the selected runtime.
 		const bindingOptions = { request, token: token ?? "", runtimeId: runtime.id, signal: operation.signal }
 		if (state.poisoned) {
 			throw new InspectionError("credential-binding", "Model request sandbox binding unavailable")
 		}
+
 		// Reuse a verified binding across requests for the same route.
 		if (state.bound && isDeepStrictEqual(state.bound.route, route)) {
 			return
 		}
+
 		// A failed transition renders this runtime unusable until deletion.
 		state.poisoned = true
 		if (state.bound) {
@@ -71,17 +74,20 @@ export function createModelRequestSandbox({
 			await confirmGateway({ runtime, route: state.bound.route, isCredentialAttached: false, operation: remaining() })
 			delete state.bound
 		}
+
 		// Replace the entire network policy before introducing any credential.
 		checkOperation(operation.signal)
 		await runtime.egress.setPolicy({ mode: "allowlist", allowedHosts: [target.hostname], deniedHosts: [] })
 		confirmNetworkPolicy([target.hostname], await runtime.egress.get())
 		await confirmGateway({ runtime, route, isCredentialAttached: false, operation: remaining() })
 		const binding = await setCredentialBinding({ ...bindingOptions, route })
+
 		// Keep the verified binding rule so teardown can revoke it.
 		state.bound = { route, binding }
 		await confirmGateway({ runtime, route, isCredentialAttached: true, operation: remaining() })
 		state.poisoned = false
 	}
+
 	// Resolve the recorded name only when the original create reply is unavailable.
 	async function findAllocation({
 		name,
@@ -96,6 +102,7 @@ export function createModelRequestSandbox({
 		for (let wait = 250; ; wait = Math.min(wait * 2, 2000)) {
 			checkOperation(signal)
 			const matches = (await sdk().runtimes.list()).filter((item) => item.displayName === runtimeName(name))
+
 			// A timed-out create can still land after the current inventory snapshot.
 			if (matches.length > 1) {
 				throw new InspectionError("cleanup-failed", "Model Request Sandbox ownership could not be confirmed")
@@ -103,6 +110,7 @@ export function createModelRequestSandbox({
 			if (matches.length || (!creationPending && !state)) {
 				return matches[0]
 			}
+
 			// Wait for an ambiguous create to appear in inventory.
 			await delay(wait, undefined, { signal })
 		}
@@ -116,6 +124,7 @@ export function createModelRequestSandbox({
 			if (!isModelRequestSandboxName(name) || allocations.has(name) || deletions.has(name)) {
 				throw new InspectionError("invalid-name", "Expected a unique Model Request Sandbox name")
 			}
+
 			// Capture the route before asynchronous startup begins.
 			const selected = structuredClone(route)
 			credentialTarget(selected)
@@ -132,6 +141,7 @@ export function createModelRequestSandbox({
 				wait: false,
 				timeoutMs: Math.min(60000, operation.timeoutMs),
 			})
+
 			// Track partial creation before awaiting the provider reply.
 			const state: Allocation = { opening, stop: new AbortController() }
 			allocations.set(name, state)
@@ -140,11 +150,13 @@ export function createModelRequestSandbox({
 			state.busy = bounded(
 				async (signal) => {
 					const remaining = remainingOperation({ timeoutMs, signal })
+
 					// A definitive refusal releases this name without deleting another owner’s runtime.
 					const runtime = await opening.catch((error: unknown) => {
 						state.refused = refusedAllocation(error)
 						throw error
 					})
+
 					// Verify the inherited policy before enabling the first model destination.
 					await runtime.waitUntilReady({ timeoutMs: remaining().timeoutMs })
 					checkOperation(signal)
@@ -160,12 +172,14 @@ export function createModelRequestSandbox({
 			if (!state || state.stop.signal.aborted) {
 				throw new InspectionError("model-request-sandbox", "Model Request Sandbox unavailable")
 			}
+
 			// Bound input before committing any network or model spend.
 			const modelRequest = snapshotSandboxModelRequest(input)
 			credentialTarget(modelRequest.route)
 			const signal = operation.signal ? AbortSignal.any([operation.signal, state.stop.signal]) : state.stop.signal
 			const timeoutMs = Math.min(sandboxModelCallTimeoutMs, operation.timeoutMs)
 			const previous = state.busy
+
 			// Queue the actual dispatch so an expired caller cannot send a late request.
 			return bounded(
 				async (signal) => {
@@ -181,6 +195,7 @@ export function createModelRequestSandbox({
 								"Model Request Sandbox route verification failed before dispatch",
 							)
 						}
+
 						// Dispatch only after the active route has passed verification.
 						return sendSandboxModelRequest({
 							runtime,
@@ -198,6 +213,7 @@ export function createModelRequestSandbox({
 			if (!isModelRequestSandboxName(name)) {
 				throw new InspectionError("invalid-name", "Invalid Model Request Sandbox identity")
 			}
+
 			// Concurrent callers share one remote deletion.
 			const active = deletions.get(name)
 			if (active) {
@@ -205,11 +221,13 @@ export function createModelRequestSandbox({
 			}
 			const state = allocations.get(name)
 			state?.stop.abort()
+
 			// Leave an existing runtime alone after a definitive create rejection.
 			if (state?.refused) {
 				allocations.delete(name)
 				return
 			}
+
 			// Resolve by the exact owner-recorded name after a lost create response or restart.
 			const deletion = bounded(async (signal) => {
 				const runtime = await findAllocation({
@@ -218,6 +236,7 @@ export function createModelRequestSandbox({
 					creationPending: operation.creationPending === true,
 					signal,
 				})
+
 				// Skip deletion when the recorded runtime has already been reclaimed.
 				if (!runtime) {
 					return
@@ -249,6 +268,7 @@ export function createModelRequestSandbox({
 					}
 				})
 			}, operation)
+
 				// Retain ownership after a failed deletion so recovery can retry.
 				.then(() => {
 					allocations.delete(name)

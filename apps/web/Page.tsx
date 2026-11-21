@@ -67,6 +67,7 @@ function Home({ replay, paused }: { replay: boolean; paused?: boolean }): ReactE
 				AI agents try your dependency upgrades inside a Runta sandbox. The network is locked, real keys stay outside,
 				and successful attempts return tested patches.
 			</p>
+
 			{/* public repository submission */}
 			{paused && (
 				<p role="status">
@@ -99,6 +100,7 @@ function Home({ replay, paused }: { replay: boolean; paused?: boolean }): ReactE
 					</button>
 				</div>
 				{verification && <Challenge siteKey={verification.siteKey} onToken={verified} onFailure={retry} />}
+
 				{/* submission error */}
 				{error && (
 					<p role="alert">
@@ -123,17 +125,20 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 		if (!live) {
 			return
 		}
+
 		// resume after the last event in the server snapshot
 		const after = snapshot.events.at(-1)?.sequence ?? 0
 		const stream = new EventSource(`/api/inspections/${snapshot.id}/events?after=${after}`)
 		stream.addEventListener("position", (event) => setPosition(JSON.parse(event.data)))
 		stream.onopen = () => setDisconnected(false)
 		stream.onerror = () => setDisconnected(true)
+
 		// append only events newer than the displayed sequence
 		stream.addEventListener("inspection", (message) => {
 			const event: SiteEvent = JSON.parse(message.data)
 			setEvents((previous) => (event.sequence > (previous.at(-1)?.sequence ?? 0) ? [...previous, event] : previous))
 		})
+
 		// load the final report when the stream ends
 		stream.addEventListener("terminal", () => {
 			stream.close()
@@ -166,6 +171,7 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 					</p>
 				</>
 			)}
+
 			{/* connection status and event timeline */}
 			{disconnected && <p role="status">Reconnecting to the inspection…</p>}
 			<Timeline id={snapshot.id} events={events} live={live} />
@@ -185,6 +191,7 @@ export function Page({ snapshot, url, replay, paused }: PageProps): ReactElement
 				</Link>
 				{replay && <small>Developer replay · example evidence</small>}
 			</div>
+
 			{/* repository form or inspection view */}
 			{snapshot ? <Inspection snapshot={snapshot} url={url} /> : <Home replay={replay} paused={paused} />}
 		</main>

@@ -65,6 +65,7 @@ test("the advisory job runs independently of preflight", () => {
 	const workflow = Bun.YAML.parse(readFileSync(".github/workflows/ci.yml", "utf8")) as {
 		jobs: Record<string, { needs?: string | string[]; steps: { run?: string }[] }>
 	}
+
 	// require the registry job to report failures independently of the offline gate
 	expect(workflow.jobs.advisories?.steps.map((step) => step.run)).toContain("bun run check:advisories")
 	expect(JSON.stringify(workflow.jobs.advisories)).not.toContain("continue-on-error")

@@ -6,6 +6,7 @@ import { collectBunInventory, collectJsonInventory } from "./collectTestInventor
 
 export function writeInventoryPages(directory: string, inventory: TestInventory): void {
 	mkdirSync(directory)
+
 	// write fixed-size inventory pages with file metadata on the first page
 	for (let offset = 0; offset <= inventory.cases.length; offset += 100) {
 		const page = {
@@ -21,13 +22,16 @@ export function writeInventoryPages(directory: string, inventory: TestInventory)
 	}
 }
 
-/** The separate filesystem limits reporter output without restricting the project's own test files. */
+/**
+ * Runs tests and captures their reporter output on a size-limited filesystem.
+ */
 export function measureTests(directory: string, argv: string[]): number {
 	// require the supervisor's capture directory and a test command
 	const [file, ...args] = argv
 	if (!file || !/^\/var\/lib\/health-code\/tests-[a-f0-9-]{36}$/.test(directory)) {
 		throw new Error("Invalid test capture")
 	}
+
 	// mount a size-limited filesystem for reporter output
 	mkdirSync(directory, { mode: 0o700 })
 	const raw = join(directory, "raw")
@@ -39,6 +43,7 @@ export function measureTests(directory: string, argv: string[]): number {
 		writeFileSync(report, "", { flag: "wx" })
 		chmodSync(report, 0o666)
 		const execution = spawnSync(file, args, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 })
+
 		// reject interrupted or incomplete test executions
 		if (execution.error || execution.signal || execution.status === null) {
 			throw new Error("Test process did not finish")
@@ -46,10 +51,12 @@ export function measureTests(directory: string, argv: string[]): number {
 		if (execution.status !== 0) {
 			process.stderr.write(execution.stderr.slice(-60000))
 		}
+
 		// preserve the runner status when it produces no report
 		if (!statSync(report).size) {
 			return execution.status
 		}
+
 		// reconcile the report with the runner's terminal evidence
 		const text = readFileSync(report, "utf8")
 		const inventory = text.trimStart().startsWith("<")
@@ -57,6 +64,7 @@ export function measureTests(directory: string, argv: string[]): number {
 			: collectJsonInventory(text, "/project")
 		writeInventoryPages(join(directory, "inventory"), inventory)
 		copyFileSync(report, join(directory, "report"))
+
 		// return captured totals and unmount temporary storage
 		console.log(JSON.stringify({ counts: inventory.counts, testFileErrors: inventory.testFileErrors }))
 		return execution.status

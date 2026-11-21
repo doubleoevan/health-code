@@ -36,6 +36,7 @@ export async function inspectUpgrade({
 			return second.check
 		})
 	}
+
 	// stop further checks when installation evidence is incomplete
 	const reason = installationReason(report.observation)
 	if (reason || report.install.status !== "passed") {
@@ -43,6 +44,7 @@ export async function inspectUpgrade({
 		report.tests = report.typecheck = untested(reason ?? "install-failed")
 		return
 	}
+
 	// capture installed evidence before comparing test and typecheck results
 	await afterInstall?.()
 	if (!(await checkStages(adapter, report, baseline))) {
@@ -69,6 +71,7 @@ async function checkStages(adapter: EcosystemAdapter, report: UpgradeReport, bas
 		const interrupted =
 			checked.status === "untested" &&
 			["inspection-deadline", "confirmation-install-unavailable"].includes(checked.reason)
+
 		// retain the observation or deadline reason that stopped the stage
 		const reason = installationReason(report.observation) ?? (interrupted ? checked.reason : undefined)
 		if (reason) {
@@ -76,6 +79,7 @@ async function checkStages(adapter: EcosystemAdapter, report: UpgradeReport, bas
 			if (stage === "typecheck") {
 				report.tests = untested(reason)
 			}
+
 			// stop before running another stage after a blocking finding
 			return false
 		}
@@ -96,12 +100,14 @@ async function repeatCheck(
 	if (install.check.status !== "passed" || installationReason(install.observation)) {
 		return untested("confirmation-install-unavailable", install.check.evidence)
 	}
+
 	// rerun the failed stage with its build prerequisites
 	if (stage === "typecheck") {
 		return adapter.typecheck()
 	}
 	if (adapter.project?.typecheck !== "none") {
 		const typecheck = await adapter.typecheck()
+
 		// preserve a missing confirmation build as untested
 		if (typecheck.status !== "passed") {
 			return untested("confirmation-build-unavailable", typecheck.evidence)

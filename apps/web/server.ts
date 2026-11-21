@@ -21,6 +21,7 @@ const runtime = await startInspections({
 	},
 })
 let app = application(runtime)
+
 // Resolve the active worker for each request while preserving open report streams.
 Bun.serve({
 	hostname: process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1",

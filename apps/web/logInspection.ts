@@ -13,6 +13,7 @@ export function logInspection(input: {
 		const verdict = upgrade.verdict ?? "Unavailable"
 		counts[verdict] = (counts[verdict] ?? 0) + 1
 	}
+
 	// Restrict terminal records to public identity and bounded accounting evidence.
 	const { usage } = input
 	console.info(

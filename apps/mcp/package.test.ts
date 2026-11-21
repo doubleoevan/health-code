@@ -17,6 +17,7 @@ function checkStderr(key: string): (chunk: Buffer | string) => void {
 	return (chunk) => {
 		const output = suffix + chunk.toString()
 		assert.ok(!output.includes(key), "Server stderr disclosed the model key.")
+
 		// Carry a possible key prefix into the next stream chunk.
 		suffix = output.slice(Math.max(0, output.length - key.length + 1))
 	}
@@ -35,6 +36,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 	const home = join(scratch, "home")
 	const installed = join(home, "node_modules", "health-code")
 	const id = randomUUID()
+
 	// bind the fixture mailbox to its expected digest
 	const mailbox = "Subject: [PATCH] adopt feature\n\nverified fixture\n"
 	const sha256 = toHash(mailbox)
@@ -71,6 +73,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			env: tokenOnly ? { HOME: home, PATH: settings.PATH, RUNTA_TOKEN: token } : { ...settings, RUNTA_TOKEN: token },
 			stderr: "pipe",
 		})
+
 		// inspect server diagnostics throughout the client session
 		transport.stderr?.on("data", checkStderr(modelKey))
 		const client = new Client({ name: "package-test", version: "1" })
@@ -106,6 +109,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			assert.deepEqual((recovered.structuredContent as { results: unknown[] }).results.length, 1)
 			const response = await replay.callTool({ name: "start_inspection", arguments: { repositoryUrl } })
 			assert.ok(!response.isError)
+
 			// poll the accepted id until the report is complete
 			const accepted = response.structuredContent as { inspectionId: string }
 			let cursor = 0
@@ -118,11 +122,13 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 				})
 				assert.ok(!read.isError)
 				assert.ok(!JSON.stringify(read).includes(modelKey))
+
 				// advance the event cursor only after checking the tool result
 				const details = read.structuredContent as { status: string; nextSequence: number }
 				status = details.status
 				cursor = details.nextSequence
 			}
+
 			// Read the saved artifact from the packed server’s private store.
 			assert.equal(status, "complete")
 			const text = await readFile(join(home, ".health-code", "inspections", accepted.inspectionId, "card.json"), "utf8")
@@ -151,6 +157,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 
 	async function archivePath(workspace: string, name: string): Promise<string> {
 		const artifacts = process.env.HEALTH_CODE_RELEASE_ARTIFACTS
+
 		// Exercise the exact files being staged when invoked by the release workflow.
 		if (artifacts) {
 			const manifest = JSON.parse(await readFile(join(artifacts, name + ".json"), "utf8"))
@@ -159,6 +166,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		const directory = join(scratch, name + "-archive")
 		await mkdir(directory)
 		execFileSync("npm", ["pack", "--silent", "--pack-destination", directory], { cwd: workspace, env: settings })
+
 		// Lifecycle scripts may also write to npm's output stream.
 		const archives = (await readdir(directory)).filter((file) => file.endsWith(".tgz"))
 		assert.equal(archives.length, 1)
@@ -169,12 +177,14 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 
 	try {
 		const archive = await archivePath(releaseWorkspace, "health-code")
+
 		// unpack the tarball under its public package name
 		await mkdir(installed, { recursive: true })
 		execFileSync("tar", ["-xf", archive, "-C", installed, "--strip-components=1"])
 		const packed = JSON.parse(await readFile(join(installed, "package.json"), "utf8"))
 		assert.equal(packed.name, "health-code")
 		assert.equal(packed.bin["health-code"], "dist/mcp/cli.js")
+
 		// compare the release manifest with the private app's runtime pins
 		const workspace = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"))
 		const { [packed.name]: selfReference, ...runtime } = workspace.dependencies
@@ -186,6 +196,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			join(home, "package.json"),
 			JSON.stringify({ private: true, dependencies: { "health-code": packed.version } }),
 		)
+
 		// link declared dependencies for an offline installation
 		for (const name of Object.keys(packed.dependencies)) {
 			const path = join(installed, "node_modules", name)
@@ -193,6 +204,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			await symlink(await realpath(join(releaseWorkspace, "node_modules", name)), path)
 		}
 		execFileSync("npm", ["rebuild", "--ignore-scripts", "health-code"], { cwd: home, env: settings })
+
 		// Install the scoped release beside the exact library used by the original command.
 		const directory = fileURLToPath(new URL(".", import.meta.url))
 		const scopedArchive = await archivePath(directory, "mcp")
@@ -201,6 +213,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		execFileSync("tar", ["-xf", scopedArchive, "-C", scoped, "--strip-components=1"])
 		const manifest = JSON.parse(await readFile(join(scoped, "package.json"), "utf8"))
 		assert.equal(manifest.dependencies["health-code"], packed.version)
+
 		// Start stdio through the scoped executable in an account-free consumer.
 		const transport = new StdioClientTransport({
 			command: "node",
@@ -217,6 +230,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		} finally {
 			await scopedClient.close()
 		}
+
 		// Exercise the pinned SDK against a local fetch double at the executable boundary.
 		const intercept = join(scratch, "setup-transport.mjs")
 		await writeFile(
@@ -244,6 +258,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
  }
  `,
 		)
+
 		// exercise failed and successful setup through the installed command
 		let entry: { command: string; args: string[] } | undefined
 		for (const denied of ["yes", "no"]) {
@@ -261,11 +276,13 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 				entry = JSON.parse(`{${setup.stdout.split("\n")[2]}}`)["health-code"]
 				assert.ok(entry?.args.join(" ").includes(`health-code@${packed.version} mcp`))
 			}
+
 			// inspect both output streams for either credential
 			assert.ok(!(setup.stdout + setup.stderr).includes(modelKey))
 			assert.ok(!(setup.stdout + setup.stderr).includes(settings.RUNTA_TOKEN))
 			assert.equal(setup.stdout.includes("mcp_servers.health-code"), denied === "no")
 		}
+
 		// Launch the shipped command and read an independent session's recorded evidence.
 		const mailboxDir = join(home, ".health-code", "inspections", id)
 		await mkdir(join(mailboxDir, "results"), { recursive: true })
@@ -280,6 +297,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			prompt: "Verify SHA-256, branch, apply and test.",
 			commits: [],
 		}
+
 		// put the feature patch on top of the tested upgrade tip
 		const featureMail = "Subject: [PATCH] use the feature\n\nfeature fixture\n"
 		const featureDigest = toHash(featureMail)
@@ -303,6 +321,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		}
 		await writeFile(join(mailboxDir, "card.json"), JSON.stringify(card))
 		assert.ok(entry)
+
 		// Start from a separate checkout and resolve the installed package from the temporary home.
 		const checkout = join(scratch, "checkout")
 		await mkdir(checkout)
@@ -318,6 +337,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 				name: "get_tested_patch",
 				arguments: { inspectionId: id, sha256: featureDigest, checkout: { relationship: "ahead", dirty: false } },
 			})
+
 			// verify the selected patch digest and its prerequisite
 			const selectedPatch = selected.structuredContent as { prerequisiteSha256: string; text: string; sha256: string }
 			assert.equal(selectedPatch.prerequisiteSha256, sha256)
@@ -333,6 +353,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 				tests: "passed",
 				pullRequest: `${repositoryUrl}/pull/2`,
 			}
+
 			// record an application result and reject a credential-bearing retry
 			const report = await client.callTool({ name: "report_patch_result", arguments: outcome })
 			assert.ok(!report.isError)

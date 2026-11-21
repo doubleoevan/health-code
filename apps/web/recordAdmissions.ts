@@ -9,6 +9,7 @@ type DailyActivity = {
 	completed: number
 	counts: string
 	modelMicros: number
+
 	// Keep bounded runtime charges separate from measured model cost.
 	sandboxUpperMicros: number
 	pendingMicros: number
@@ -55,6 +56,7 @@ export class AdmissionLedger {
 			.query("INSERT INTO launch_counts VALUES(?,?,1) ON CONFLICT(day,kind) DO UPDATE SET count=count+1")
 			.run(day, kind)
 	}
+
 	// Include a live claim when joining an identical submission.
 	reuse(key: string, day: string): { id: string; reused: true } | null {
 		const id = this.cache(key)
@@ -67,12 +69,14 @@ export class AdmissionLedger {
 
 	handleRejection(input: { key: string; day: string; error: unknown }): { id: string; reused: true } {
 		const { error, day, key } = input
+
 		// Join work admitted while the visitor was verifying, even if limits have changed.
 		if (error instanceof AdmissionError) {
 			const joined = this.reuse(key, day)
 			if (joined) {
 				return joined
 			}
+
 			// Record a cap hit outside the rejected transaction only for a cache miss.
 			if (error.cap) {
 				this.count(error.cap, day)
@@ -87,6 +91,7 @@ export class AdmissionLedger {
 			WHERE cacheKey=? AND state IN ('queued','running','complete') LIMIT 1`)
 			.get(key)?.id
 	}
+
 	// Carry unsettled holds across UTC budget windows.
 	liability(day: string): number {
 		return (
@@ -96,6 +101,7 @@ export class AdmissionLedger {
 				.get(day)?.total ?? 0
 		)
 	}
+
 	// Apply the quota independently to the browser and its network.
 	checkAllowance({ visitor, network }: Visitor, limits: LaunchLimits, day: string): void {
 		const counts = this.database
@@ -106,6 +112,7 @@ export class AdmissionLedger {
 		if (Math.max(counts?.v ?? 0, counts?.n ?? 0) >= limits.dailyVisitorInspections) {
 			throw new AdmissionError(429, "Your daily inspection allowance is used. It resets at 00:00 UTC.", "visitorHits")
 		}
+
 		// Preserve prior-day unsettled liabilities across the UTC boundary.
 		const hold = Math.ceil(limits.maxCostUsd * 1e6)
 		if (hold <= 0 || this.liability(day) + hold > limits.dailyMicros) {
@@ -128,6 +135,7 @@ export class AdmissionLedger {
 		// Attribute a new inspection to its admission day.
 		const { key, head, limits, identity, enqueue, now } = input
 		const day = toUtcDay(now)
+
 		// Serialize the cache recheck, both quota buckets and the spend reservation.
 		return this.database
 			.transaction(() => {
@@ -135,6 +143,7 @@ export class AdmissionLedger {
 				if (cached) {
 					return cached
 				}
+
 				// Debit both pseudonymous counters only for newly accepted work.
 				const { visitor, network } = identity
 				this.checkAllowance(identity, limits, day)
@@ -146,6 +155,7 @@ export class AdmissionLedger {
 					)
 					.run(id, key, head.revision, visitor, network, day, JSON.stringify(limits), hold)
 				this.count("starts", day)
+
 				// Attribute at most one conversion to the viewer's original cohort.
 				const cohort = this.database
 					.query<{ day: string; firstSeen: number }, [string]>("SELECT * FROM foreign_views WHERE visitor=?")
@@ -159,6 +169,7 @@ export class AdmissionLedger {
 			})
 			.immediate()
 	}
+
 	// Release the hold when verification stops before paid work.
 	release(id: string): void {
 		this.database
@@ -190,6 +201,7 @@ export class AdmissionLedger {
 		if (!row) {
 			throw new Error("Missing durable launch reservation")
 		}
+
 		// Apply only the budget still reserved for this queued inspection.
 		const saved: LaunchLimits = JSON.parse(row.settings)
 		return {
@@ -229,6 +241,7 @@ export class AdmissionLedger {
 		if (money.some((value) => !Number.isFinite(value) || value < 0)) {
 			return
 		}
+
 		// Store a conservative upper bound separately from measured model charges.
 		this.database
 			.query("UPDATE admissions SET settled=?,settledDay=date('now'),model=?,sandbox=? WHERE id=? AND settled IS NULL")
@@ -251,10 +264,12 @@ export class AdmissionLedger {
 				if (!author?.visitor || author.visitor === visitor) {
 					return
 				}
+
 				// Count a shared report in its completion cohort and a viewer on first contact.
 				if (this.database.query("INSERT OR IGNORE INTO shared_reports VALUES(?,?)").run(id, author.completed).changes) {
 					this.count("shared", author.completed)
 				}
+
 				// Deduplicate the viewer across all eligible report visits.
 				if (this.database.query("INSERT OR IGNORE INTO foreign_views VALUES(?,?,?)").run(visitor, day, now).changes) {
 					this.count("viewers", day)

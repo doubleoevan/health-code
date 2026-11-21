@@ -18,18 +18,22 @@ export async function probeModelRequestSandbox({
 }): Promise<void> {
 	const name = toModelRequestSandboxName(randomUUID())
 	const price = route.pricing
+
 	// Price the probe and its maximum runtime before creating anything.
 	const cost =
 		modelRequestSandbox.estimateMaxCost(setupTimeoutMs) +
 		(price.fixedUsd ?? 0) +
 		(price.inputUsdPerMillion * price.maxInputTokens + price.outputUsdPerMillion) / 1e6
+
 	// Enforce a setup budget independent of any Inspection.
 	if (!Number.isFinite(cost) || cost > 15) {
 		throw new UserError("Setup probe exceeds the default $15 Inspection ceiling. Check model pricing.")
 	}
+
 	// Check the remaining work window before claiming a cleanup identity.
 	const startup = sandboxOperation({ end, cap: 60000, reserve: 15000 })
 	let failure: UserError | undefined
+
 	// Setup gets exactly one paid inference and keeps time for independent cleanup.
 	try {
 		await modelRequestSandbox.open(name, route, startup)
@@ -38,6 +42,7 @@ export async function probeModelRequestSandbox({
 			{ role: "releaseSummary", route, prompt: "Reply OK.", output: 1 },
 			sandboxOperation({ end, cap: setupTimeoutMs, reserve: 15000 }),
 		)
+
 		// Accept only usage covered by the setup reservation.
 		const input = reply.inputTokens ?? -1
 		if (!Number.isSafeInteger(input) || input < 0 || input > price.maxInputTokens || reply.outputTokens !== 1) {
@@ -55,6 +60,7 @@ export async function probeModelRequestSandbox({
 			failure = modelRequestSandboxCleanupError(name)
 		}
 	}
+
 	// Surface any outstanding cleanup before returning success.
 	if (failure) {
 		throw failure

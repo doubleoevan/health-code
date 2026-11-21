@@ -1,6 +1,6 @@
 # Sandbox guest tools
 
-`project.ts` is the entry for dependency discovery, Baseline and Upgrade commands. `inventory.ts` reads lockfiles, workspace manifests, and environment variable names. `selectRegistryVersions.ts` selects stable registry versions, including older candidates for repositories with a minimum release age. `readTestReport.ts` translates JUnit and JSON test results into comparable identities.
+`project.ts` is the entry for dependency discovery, Baseline and Upgrade commands. `inventory.ts` reads lockfiles, workspace manifests, and environment variable names. `fetchRegistryVersions.ts` looks up at most 16 packages concurrently with an eight-second timeout and an 8 MiB response limit per request. The guest reserves time to return completed lookups before the host deadline. `selectRegistryVersions.ts` selects stable registry versions, including older candidates for repositories with a minimum release age. `readTestReport.ts` translates JUnit and JSON test results into comparable identities.
 
 `observe.ts` interprets the protected network and filesystem evidence after an Install Check. `trackFileLinks.ts` follows recorded in-project symlink targets for metadata changes. Unknown targets and ambiguous changes to writable mappings leave filesystem coverage incomplete. The library build bundles the project, observer, agent and patch tools for Node. Verify them using the recorded projects and the shared live provider contract.
 

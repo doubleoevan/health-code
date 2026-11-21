@@ -8,7 +8,9 @@ import type { PromptReference } from "./readPrompt.ts"
 export type GenerationTelemetry = NonNullable<Parameters<typeof generateText>[0]["telemetry"]>
 type TelemetryIntegration = Exclude<NonNullable<GenerationTelemetry["integrations"]>, readonly unknown[]>
 
-/** Tracks one model dispatch using the caller's tracer and bounded attributes. */
+/**
+ * Tracks one model dispatch using the caller's tracer and bounded attributes.
+ */
 export function traceGeneration(options: { tracer?: Tracer; role: ModelRole; prompt: PromptReference }):
 	| {
 			modelCallId: string
@@ -28,6 +30,7 @@ export function traceGeneration(options: { tracer?: Tracer; role: ModelRole; pro
 	let attempted = false
 	let span: Span | undefined
 	const { tracer, role, prompt } = options
+
 	// Keep raw requests, provider headers, responses and errors outside the trace.
 	function start(): void {
 		if (attempted) {

@@ -17,6 +17,7 @@ export function jsonCaseName(assertion: Assertion): string {
 			? JSON.stringify([...assertion.ancestorTitles, assertion.title])
 			: assertion.title
 	}
+
 	// fall back to the runner's full name when no title parts are available
 	if (typeof assertion.fullName !== "string") {
 		throw new Error("Missing test identity")
@@ -28,10 +29,12 @@ export function caseMatchesTitle(identity: string | undefined, title: string): b
 	if (!identity) {
 		return false
 	}
+
 	// compare plain titles directly and decode structured identities separately
 	if (!identity.startsWith("[")) {
 		return identity === title || identity.endsWith(` > ${title}`)
 	}
+
 	// compare the leaf title in an encoded suite path
 	try {
 		const parts: unknown = JSON.parse(identity)

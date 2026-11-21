@@ -19,12 +19,15 @@ export type Workspace = {
 	matchPaths: PathsMatcher | null
 }
 
-/** Reads the workspace's dependency declarations and TypeScript resolution settings. */
+/**
+ * Reads the workspace's dependency declarations and TypeScript resolution settings.
+ */
 export function readWorkspace(folder: string): Workspace {
 	// load the manifest and resolve inherited typescript settings
 	const manifest: Manifest = JSON.parse(readFileSync(resolve(folder, "package.json"), "utf8"))
 	const configPath = resolve(folder, "tsconfig.json")
 	const config = parseTsconfig(configPath)
+
 	// group dependencies by runtime visibility and resolve reference paths
 	return {
 		folder,

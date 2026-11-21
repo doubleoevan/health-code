@@ -17,11 +17,13 @@ test("personal recovery protects live owners and ignores unrecorded or malformed
 	const modelRequestSandbox = recordOwnership(fake.modelRequestSandbox, folder)
 	const name = `health-code-${randomUUID()}-relay`
 	const deadName = `health-code-${randomUUID()}-relay`
+
 	// A live owner keeps its journal entry until acknowledged deletion.
 	const operation = { timeoutMs: 30000 }
 	try {
 		await modelRequestSandbox.open(name, route, operation)
 		assert.deepEqual(await readdir(folder), [`${process.pid}.${name}`])
+
 		// A PID beyond the system allocation range is a confirmed dead owner.
 		await writeFile(join(folder, `99999999.${deadName}`), "")
 		await writeFile(join(folder, `99999999.${deadName}-lookalike`), "")
@@ -54,18 +56,21 @@ test("setup sends a single one-token probe and withholds success until deletion"
 			route,
 			end: Date.now() + 120000,
 		})
+
 		// Require confirmed deletion before setup can succeed.
 		if (fail) {
 			await assert.rejects(check, fail === "close" ? /cleanup failed.*health-code-/ : /verification failed/)
 		} else {
 			await check
 		}
+
 		// Count only authenticated inference requests.
 		const requests = fake.modelRequestSandboxEvents.filter((item) => item.action === "send")
 		assert.equal(requests.length, fail === "open" ? 0 : 1)
 		if (requests.length) {
 			assert.equal(requests[0]?.request?.output, 1)
 		}
+
 		// Check cleanup after every probe outcome.
 		assert.equal(fake.modelRequestSandboxEvents.at(-1)?.action, "close")
 	}
@@ -77,12 +82,14 @@ test("recovery shares the setup deadline and identifies the model request sandbo
 	const now = Date.now
 	const end = now() + 120000
 	let clock = end - 120000
+
 	// Five deletions would need 150 seconds if each received the full allowance.
 	const slices: number[] = []
 	try {
 		for (let index = 0; index < 5; index++) {
 			await writeFile(join(folder, `99999999.health-code-${randomUUID()}-relay`), "")
 		}
+
 		// Advance the simulated clock by exactly the allowance for each successful deletion.
 		Date.now = () => clock
 		fake.modelRequestSandbox.close = async (_, operation) => {
@@ -94,12 +101,14 @@ test("recovery shares the setup deadline and identifies the model request sandbo
 			folder,
 			end,
 		}).catch((error: Error) => error.message)
+
 		// Leave the first unattempted model request sandbox recoverable by name.
 		const records = await readdir(folder)
 		assert.equal(records.length, 1)
 		const name = records[0]?.slice("99999999.".length)
 		assert.ok(name && remaining?.includes(name))
 		assert.deepEqual(slices, [30000, 30000, 30000, 30000])
+
 		// Hide upstream errors and keep the same record for a later recovery.
 		fake.modelRequestSandbox.close = async () => {
 			throw new Error("upstream diagnostic")
@@ -121,6 +130,7 @@ test("rotating the token preserves the verified organization scope", async () =>
 		const account = new Headers(init?.headers).get("authorization") === "Bearer other" ? "two" : "one"
 		return Response.json({ organization_id: account })
 	}) as typeof fetch
+
 	// Account boundaries survive a change of credential.
 	const first = await organizationFolder({ token: "initial", end, request })
 	assert.equal(await organizationFolder({ token: "rotated", end, request }), first)

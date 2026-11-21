@@ -13,6 +13,7 @@ export function identifyVisitor(
 	if (!isIP(address)) {
 		throw new AdmissionError(503, "Visitor verification is temporarily unavailable.")
 	}
+
 	// Canonicalize the ingress address before deriving its daily quota bucket.
 	const ip = new SocketAddress({ address, family: isIP(address) === 6 ? "ipv6" : "ipv4" }).address
 	const digest = (value: string): string => createHmac("sha256", secret).update(value).digest("hex")
@@ -39,6 +40,7 @@ export async function verifyChallenge(
 		await response?.body?.cancel()
 		throw new AdmissionError(503, "Verification is temporarily unavailable. Retry or use the MCP.")
 	}
+
 	// Bind the single-use response to this hostname and form action.
 	const result = await response.json()
 	if (result.success !== true || result.hostname !== hostname || result.action !== "inspect") {
@@ -61,11 +63,13 @@ export function verifyAdmin(request: Request, password?: string, origin?: string
 	if (!password || !isSecureRequest(request, origin)) {
 		return false
 	}
+
 	// Require the configured credentials before processing Basic authentication.
 	const auth = request.headers.get("Authorization")
 	if (!auth?.startsWith("Basic ")) {
 		return false
 	}
+
 	// Compare fixed-length digests so even a wrong-length password follows the same path.
 	const digest = (value: string): Buffer => createHash("sha256").update(value).digest()
 	const supplied = Buffer.from(auth.slice(6), "base64").toString("utf8")

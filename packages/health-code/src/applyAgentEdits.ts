@@ -33,6 +33,7 @@ export async function applyDecision({
 	testFiles: Set<string>
 }): Promise<void> {
 	state.actions.push(edit.reason)
+
 	// prepare dependency changes before evaluating file edits
 	await prepareDependencies({ state, evidence, edit, match })
 	const created = new Set(
@@ -47,6 +48,7 @@ export async function applyDecision({
 			)
 			.map((proposal) => proposal.file),
 	)
+
 	// separate source changes from proposed test changes
 	const permittedTests = new Set([...testFiles, ...state.expectedCases.map((entry) => entry.file), ...created])
 	const changed = prepareEdits(edit, state, created)
@@ -60,6 +62,7 @@ export async function applyDecision({
 	) {
 		throw new Error("Edits to test support files require independently comparable assertions")
 	}
+
 	// apply source edits with the pinned test harness protected
 	for (const [file, contents] of sources) {
 		await workspace(evidence, { kind: "edit", file, contents, protectTests: [...testFiles] })
@@ -72,6 +75,7 @@ export async function applyDecision({
 			sources.map(([file]) => file),
 		)
 	}
+
 	// update in-memory source after committing the changes
 	for (const [file, contents] of sources) {
 		state.files.set(file, contents)
@@ -97,6 +101,7 @@ async function addDependency(
 	if (state.dependencies.some((entry) => entry.name === dep.name && entry.version === dep.version)) {
 		return
 	}
+
 	// restore the committed candidate before modifying its manifest
 	await workspace(evidence, { kind: "restore", tip: state.tip })
 	const manifest = JSON.parse(await workspace(evidence, { kind: "read", file: "package.json", revision: state.tip }))
@@ -104,6 +109,7 @@ async function addDependency(
 		throw new Error("Dependency already present")
 	}
 	manifest.dependencies = { ...manifest.dependencies, [dep.name]: dep.version }
+
 	// reinstall to verify the proposed dependency addition
 	await workspace(evidence, { kind: "edit", file: "package.json", contents: `${JSON.stringify(manifest, null, 2)}\n` })
 	const install = await adapter.refreshInstallation()
@@ -115,6 +121,7 @@ async function addDependency(
 				.slice(-600)}`,
 		)
 	}
+
 	// check lifecycle changes before recording the dependency commit
 	requireBaseline(evidence)
 	verifyLifecycleHooks(evidence.baselineIntegrity.hooks, await adapter.data(["lifecycle"]))
@@ -143,12 +150,14 @@ async function proveBehavior({
 	state: State
 	file: string
 	contents: string
+
 	// identify the assertion and the cited behavior change
 	name: string
 	behaviorChange: z.infer<typeof decision>["behaviorChange"]
 }): Promise<void> {
 	requireBaseline(evidence)
 	const { adapter, card, baselineIntegrity, report, baseInstall } = evidence
+
 	// locate the confirmed failure in the upgrade report
 	const failingCase =
 		report.tests.status === "failed" &&
@@ -157,6 +166,7 @@ async function proveBehavior({
 				(test.workspace === "." ? test.file : test.workspace + "/" + test.file) === file &&
 				caseMatchesTitle(test.name, name),
 		)
+
 	// find the release evidence named by the model
 	const note = evidence.releaseNotes?.find(
 		(note) =>
@@ -168,6 +178,7 @@ async function proveBehavior({
 	)
 	const original = await workspace(evidence, { kind: "read", file, revision: card.repository.commit })
 	const symbol = behaviorChange?.symbol
+
 	// require the old source and release evidence to support the change
 	if (
 		!state.bumpTip ||
@@ -180,12 +191,14 @@ async function proveBehavior({
 	) {
 		throw new Error("Existing assertion lacks confirmed failure and cited release behavior")
 	}
+
 	// test each version with its opposing expectation
 	async function requireFailure(tip: string, replacement?: string): Promise<void> {
 		await workspace(evidence, { kind: "restore", tip })
 		if (replacement !== undefined) {
 			await workspace(evidence, { kind: "edit", file, contents: replacement })
 		}
+
 		// require an observed install before comparing behavior
 		const install = await adapter.install()
 		if (
@@ -195,6 +208,7 @@ async function proveBehavior({
 		) {
 			throw new Error("Behavior comparison installation failed")
 		}
+
 		// require a failing result for the targeted assertion
 		const tests = await adapter.test()
 		if (tests.status !== "failed" || !hasCase(await readIntegrity(adapter), file, name, "failed")) {
@@ -212,6 +226,7 @@ async function proveBehavior({
 
 async function removeDependency(evidence: PatchEvidence, state: State, name: string): Promise<void> {
 	const file = "package.json"
+
 	// remove dependencies from the committed manifest
 	await workspace(evidence, { kind: "restore", tip: state.tip })
 	const manifest = JSON.parse(await workspace(evidence, { kind: "read", file, revision: state.tip }))
@@ -219,6 +234,7 @@ async function removeDependency(evidence: PatchEvidence, state: State, name: str
 	if (!present.length) {
 		throw new Error("Dependency is absent from the root manifest")
 	}
+
 	// delete each declaration before refreshing the lockfile
 	for (const section of present) {
 		delete manifest[section][name]
@@ -233,12 +249,14 @@ async function removeDependency(evidence: PatchEvidence, state: State, name: str
 	) {
 		throw new Error("Dependency removal install failed")
 	}
+
 	// verify and commit the manifest together with the lockfile
 	await verifyManifest(evidence, file, manifest)
 	const lock = trackedLockfile(evidence)
 	await recordCommit(evidence, state, `build: remove ${name}`, [file, lock])
 	state.removedDependency = name
 }
+
 // permit new test files beside a discovered test
 function adjacentTest(file: string, tests: Set<string>): boolean {
 	const suffix = file.match(/\.(?:test|spec)\.[cm]?[jt]sx?$/)?.[0]
@@ -246,6 +264,7 @@ function adjacentTest(file: string, tests: Set<string>): boolean {
 }
 function prepareEdits(edit: z.infer<typeof decision>, state: State, created: Set<string>): Map<string, string> {
 	const changed = new Map<string, string>()
+
 	// resolve each edit against the latest proposed contents
 	for (const proposed of edit.edits) {
 		const original =
@@ -258,6 +277,7 @@ function prepareEdits(edit: z.infer<typeof decision>, state: State, created: Set
 		) {
 			throw new Error("Edit outside permitted source")
 		}
+
 		// distinguish whole-file additions from contextual replacements
 		if ("contents" in proposed) {
 			changed.set(proposed.file, proposed.contents)
@@ -301,6 +321,7 @@ async function reviewTests({
 	changed: Map<string, string>
 	testFiles: Set<string>
 	state: State
+
 	// bind test changes to their upgrade evidence
 	match?: FeatureMatch
 	evidence: PatchEvidence
@@ -319,6 +340,7 @@ async function reviewTests({
 			}
 			await proveBehavior({ evidence, state, file, contents, name: review.name, behaviorChange })
 		}
+
 		// commit the reviewed test change separately from source edits
 		await workspace(evidence, { kind: "edit", file, contents, createTest })
 		await recordCommit(
@@ -356,6 +378,7 @@ async function prepareDependencies({
 	for (const addition of [...(edit.dependencies ?? []), ...(edit.dependency ? [edit.dependency] : [])]) {
 		await addDependency(evidence, state, addition)
 	}
+
 	// allow removal only while adopting a replacement feature
 	if (edit.removeDependency) {
 		if (!match || edit.removeDependency === evidence.report.dependency) {

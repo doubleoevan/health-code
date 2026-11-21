@@ -43,6 +43,7 @@ test("the paid entry point routes each credential and closes the guest binding o
 		assert.deepEqual(phases, ["open", "verify", "generate", "close"])
 		assert.ok(card.timeline.some((event) => event.type === "sandbox.event" && event.action === "agent-started"))
 		assert.ok(!Object.values(environment).some((value) => JSON.stringify(card).includes(value)))
+
 		// recover the exact mailbox and library prompt by digest
 		const patch = fetchPatch(cardSchema.parse(card), { sha256: toHash(mailbox), offset: 0 })
 		assert.equal(patch.text, mailbox)
@@ -64,6 +65,7 @@ test("failed inspections delete both runtimes independently and preserve all unr
 		const { provider, restore } = await modelRequestSandboxFixture(createFakeSandboxProvider)
 		const controller = new AbortController()
 		const cleanupAttemptIds: string[] = []
+
 		// Simulate a Model Request Sandbox deletion failure.
 		const close = provider.modelRequestSandbox.close
 		provider.modelRequestSandbox.close = async (name, op): Promise<void> => {
@@ -73,6 +75,7 @@ test("failed inspections delete both runtimes independently and preserve all unr
 			}
 			await close(name, op)
 		}
+
 		// Record each repository sandbox cleanup attempt.
 		const destroy = provider.destroySandbox
 		provider.destroySandbox = async (sandbox, op): Promise<void> => {
@@ -82,6 +85,7 @@ test("failed inspections delete both runtimes independently and preserve all unr
 			}
 			await destroy(sandbox, op)
 		}
+
 		// Keep the requested identity when allocation cannot return a handle.
 		if (failure === "partial create") {
 			provider.modelRequestSandbox.open = async () => {
@@ -100,6 +104,7 @@ test("failed inspections delete both runtimes independently and preserve all unr
 							if (failure === "callback") {
 								throw new Error("Delivery failed")
 							}
+
 							// Abort work while leaving both cleanup obligations active.
 							if (failure === "cancellation") {
 								controller.abort()
@@ -111,6 +116,7 @@ test("failed inspections delete both runtimes independently and preserve all unr
 			)
 			await assert.rejects(inspection, (error: unknown) => {
 				assert.ok(error instanceof InspectionError)
+
 				// A failed startup ends the Inspection before later Upgrades can request the same model request sandbox.
 				if (failure === "partial create") {
 					assert.equal(error.code, "model-request-sandbox-startup")
@@ -128,6 +134,7 @@ test("failed inspections delete both runtimes independently and preserve all unr
 					assert.deepEqual(error.cleanupIds, unresolved)
 					assert.equal(error.cleanupId, unresolved[0])
 					assert.equal(error.runtimeUsage?.totalUpperBoundUsd, undefined)
+
 					// Retain an independent reservation for each outstanding runtime.
 					assert.deepEqual(
 						error.runtimeUsage?.runtimes.filter((item) => !item.deleted).map((item) => item.id),
@@ -139,6 +146,7 @@ test("failed inspections delete both runtimes independently and preserve all unr
 							.every((item) => item.reservedUpperBoundUsd !== undefined),
 					)
 				}
+
 				// Require the typed failure for every scenario.
 				return true
 			})

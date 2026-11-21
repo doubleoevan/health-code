@@ -21,6 +21,7 @@ function toTree(text: string): Node[] {
 function testName(statement: Node): string | undefined {
 	// identify direct named test declarations
 	const call = statement.expression
+
 	// require a direct call to test or it
 	if (
 		!isNode(call) ||
@@ -30,6 +31,7 @@ function testName(statement: Node): string | undefined {
 	) {
 		return
 	}
+
 	// require a literal title and a separate test body
 	if (!Array.isArray(call.arguments) || call.arguments.length !== 2) {
 		return
@@ -39,17 +41,20 @@ function testName(statement: Node): string | undefined {
 		return title.value
 	}
 }
+
 // trace matcher members back to an expect call
 function expectReceiver(node: unknown): boolean {
 	if (!isNode(node)) {
 		return false
 	}
+
 	// follow the receiver through chained matcher properties
 	if (node.type === "MemberExpression") {
 		return expectReceiver(node.object)
 	}
 	return node.type === "CallExpression" && isNode(node.callee) && node.callee.name === "expect"
 }
+
 // locate the changed literal in the cited release text
 function citedValue(quote: string, value: unknown): boolean {
 	const text = String(value)
@@ -57,6 +62,7 @@ function citedValue(quote: string, value: unknown): boolean {
 		return quote.includes('""') || quote.includes("''")
 	}
 	const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
 	// preserve token boundaries when matching expected values
 	const boundary = typeof value === "number" ? "[\\w.]" : "[\\w]"
 	return new RegExp(`(?<!${boundary})${escaped}(?!${boundary})`, "i").test(quote)
@@ -64,6 +70,7 @@ function citedValue(quote: string, value: unknown): boolean {
 function documentsExpectedValue(citation: Citation, value: unknown): boolean {
 	const statement = citation.quote.toLowerCase().split(/,\s*not\b/)[0] ?? ""
 	const symbolAt = statement.indexOf(citation.symbol.toLowerCase())
+
 	// reject conditional or negated claims about the symbol
 	if (symbolAt < 0 || /\b(not|never|cannot|unless|if|might|may|could|sometimes)\b|n['’]t\b/.test(statement)) {
 		return false
@@ -83,6 +90,7 @@ function assertionCall(expression: unknown): boolean {
 		return false
 	}
 	const target = value.callee
+
 	// recognize supported assertion methods on their owning object
 	if (
 		target.name === "assert" ||
@@ -118,6 +126,7 @@ function containsAssertion(statement: Node): boolean {
 	if (!isNode(expression) || !Array.isArray(expression.arguments)) {
 		return false
 	}
+
 	// locate assertions inside the proposed test callback
 	const body = expression.arguments[1]?.body
 	if (!isNode(body)) {
@@ -126,12 +135,14 @@ function containsAssertion(statement: Node): boolean {
 	if (assertionCall(body)) {
 		return true
 	}
+
 	// require a block or a direct assertion expression
 	if (body.type !== "BlockStatement" || !Array.isArray(body.body)) {
 		return false
 	}
 	for (const line of body.body) {
 		const value = line.expression ?? line.argument
+
 		// recognize assertions returned or executed within the body
 		if (assertionCall(value)) {
 			return true
@@ -159,6 +170,7 @@ function expectation(value: Node): Node | undefined {
 		return
 	}
 	const member = value.callee
+
 	// require an ordinary method call for an editable expectation
 	if (member.type !== "MemberExpression" || member.computed || !isNode(member.property) || !isNode(member.object)) {
 		return
@@ -187,6 +199,7 @@ function containsSymbol(tree: unknown, symbol: string): boolean {
 	if (!isNode(tree)) {
 		return false
 	}
+
 	// compare node identifiers and descend into children
 	return (
 		(tree.type === "Identifier" && tree.name === symbol) ||
@@ -201,6 +214,7 @@ function maskValues(statement: Node, citation?: Citation): { shape: string; valu
 	const shape = JSON.stringify(statement, (_, value) => {
 		if (isNode(value)) {
 			const literal = expectation(value)
+
 			// collect the original literals and their release citations
 			if (literal && ["NumericLiteral", "StringLiteral", "BooleanLiteral"].includes(literal.type)) {
 				values.push(JSON.stringify(literal.value))
@@ -210,6 +224,7 @@ function maskValues(statement: Node, citation?: Citation): { shape: string; valu
 				literal.value = null
 			}
 		}
+
 		// preserve all other syntax for structural comparison
 		return value
 	})
@@ -217,6 +232,7 @@ function maskValues(statement: Node, citation?: Citation): { shape: string; valu
 }
 export function reviewNewTest(contents: string): { kind: "coverage"; names: string[] } {
 	const statements = toTree(contents).filter((statement) => statement.type !== "ImportDeclaration")
+
 	// require new top-level cases to have distinct names and assertions
 	const names = statements.map((statement) => containsAssertion(statement) && testName(statement))
 	if (
@@ -226,6 +242,7 @@ export function reviewNewTest(contents: string): { kind: "coverage"; names: stri
 	) {
 		throw new Error("New test files require named cases with assertions")
 	}
+
 	// return the names to verify in the final inventory
 	return { kind: "coverage", names }
 }
@@ -240,6 +257,7 @@ function reviewAddedCases(previous: Node[], next: Node[]): Review {
 			continue
 		}
 		const name = containsAssertion(statement) && testName(statement)
+
 		// reject additions without a named test and an assertion
 		if (!name) {
 			throw new Error("Added coverage must contain a named assertion")
@@ -252,7 +270,10 @@ function reviewAddedCases(previous: Node[], next: Node[]): Review {
 	}
 	return { kind: "coverage", names }
 }
-/** Accepts added test cases or one expected literal in an otherwise identical named test. */
+
+/**
+ * Accepts added test cases or one expected literal in an otherwise identical named test.
+ */
 export function reviewTestEdit(before: string, after: string, citation?: Citation): Review {
 	const previous = toTree(before)
 	const next = toTree(after)
@@ -276,6 +297,7 @@ export function reviewTestEdit(before: string, after: string, citation?: Citatio
 	if (!name || left.shape !== right.shape || left.values.filter((value, i) => value !== right.values[i]).length !== 1) {
 		throw new Error("Test edit changed more than one literal expectation")
 	}
+
 	// verify that the changed expectation matches the quoted behavior
 	const change = left.values.findIndex((value, i) => value !== right.values[i])
 	if (citation && !right.cited[change]) {

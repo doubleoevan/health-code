@@ -22,6 +22,7 @@ export class RuntimeMeter {
 		this.allocations.push(lifetime)
 		return lifetime
 	}
+
 	// End metering only when deletion has been acknowledged.
 	deleted(id: string): void {
 		const allocation = this.allocations.find((item) => item.id === id)
@@ -29,6 +30,7 @@ export class RuntimeMeter {
 			allocation.end = performance.now()
 		}
 	}
+
 	// Use one wall-clock cutoff for all outstanding allocations.
 	snapshot(receipts: ModelUsage[]): RuntimeUsage {
 		const cutoff = performance.now()
@@ -44,6 +46,7 @@ export class RuntimeMeter {
 				...(end === undefined ? { reservedUpperBoundUsd } : {}),
 			}
 		})
+
 		// Add independent rounded runtime quotes and each model receipt exactly once.
 		const modelCostUsd = receipts.reduce((sum, item) => sum + (item.costUsd ?? 0), 0)
 		const modelReservedUsd = receipts.reduce((sum, item) => sum + (item.reservedUsd ?? 0), 0)

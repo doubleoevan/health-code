@@ -18,6 +18,7 @@
 				"guest/managePatch.ts",
 				"test/**/*.test.ts"
 			],
+
 			// Include dependencies used by the shipped declarations and compiled MCP executable.
 			"ignoreDependencies": ["@types/json-schema", "@modelcontextprotocol/server"],
 			"project": ["src/**/*.ts", "guest/**/*.ts", "test/**/*.ts"]

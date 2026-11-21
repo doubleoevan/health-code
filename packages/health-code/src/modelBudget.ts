@@ -19,6 +19,7 @@ export function cap(value: number | undefined, maximum: number): number {
 	}
 	return Math.min(value ?? maximum, maximum)
 }
+
 // clamp each role's requested limits to its default ceilings
 export function agentLimits(role: AgentRole, limits: InspectionOptionsV2["limits"]): typeof defaults.repair {
 	const overrides = limits?.agent?.[role]
@@ -29,6 +30,7 @@ export function agentLimits(role: AgentRole, limits: InspectionOptionsV2["limits
 		maxDurationMs: cap(overrides?.maxDurationMs, ceiling.maxDurationMs),
 	}
 }
+
 // convert role limits into a deadline and remaining microdollars
 export function attemptBudget(role: AgentRole, limits: InspectionOptionsV2["limits"]): AttemptBudget {
 	const { maxTurns, maxDurationMs, maxCostUsd } = agentLimits(role, limits)
@@ -37,6 +39,7 @@ export function attemptBudget(role: AgentRole, limits: InspectionOptionsV2["limi
 
 type AttemptBudget = { turns: number; remainingMicros: number; end: number }
 export type Ledger = { remainingMicros: number; end: number; usage: ModelUsage[] }
+
 // describe a priced request and its applicable budgets
 type Request = {
 	ledger: Ledger
@@ -44,11 +47,13 @@ type Request = {
 	execution?: "modelRequestSandbox"
 	verification?: boolean
 	toolBytes?: number
+
 	// Share the inspection ceiling with an optional Agent Attempt.
 	attempt?: AttemptBudget
 	role: ModelRole
 	step: string
 	modelId: string
+
 	// bound the model's input and requested output
 	pricing: Pricing
 	prompt: string
@@ -65,6 +70,7 @@ export async function paidRequest(request: Request): Promise<string> {
 	const started = Date.now()
 	const ceiling = request.execution === "modelRequestSandbox" ? sandboxModelCallTimeoutMs : 45000
 	const duration = Math.min(ledger.end, attempt?.end ?? Infinity, attempt ? Infinity : started + ceiling) - started
+
 	// require sufficient time, money and turns before dispatch
 	if (
 		duration <= 0 ||
@@ -74,6 +80,7 @@ export async function paidRequest(request: Request): Promise<string> {
 	) {
 		throw new InspectionError("model-budget", "Model ceiling reached")
 	}
+
 	// charge the reservation before invoking the model
 	ledger.remainingMicros -= reserve
 	if (attempt) {
@@ -82,6 +89,7 @@ export async function paidRequest(request: Request): Promise<string> {
 			attempt.turns--
 		}
 	}
+
 	// retain the reservation until actual usage is known
 	const receipt: ModelUsage = {
 		role: request.role,
@@ -117,11 +125,13 @@ function reconcileFailedRequest({
 	receipt: ModelUsage
 }): void {
 	const { ledger, attempt } = request
+
 	// Return only money known to be unspent.
 	if (refusedBeforeDispatch(request, error)) {
 		ledger.remainingMicros += reserve
 		ledger.usage.splice(ledger.usage.indexOf(receipt), 1)
 	}
+
 	// Stop the attempt when charging cannot be confirmed.
 	if (attempt) {
 		attempt.turns = 0
@@ -145,6 +155,7 @@ async function dispatchRequest(request: Request, duration: number): Promise<Mode
 		prompts && tracer
 			? traceGeneration({ tracer, role: request.role, prompt: prompts.template(name).reference })
 			: undefined
+
 	// A timeout after dispatch can leave a billable request without a receipt.
 	let dispatched = false
 	try {
@@ -190,6 +201,7 @@ async function dispatchRequest(request: Request, duration: number): Promise<Mode
 		}
 	}
 }
+
 // calculate the worst-case charge from the route bounds
 export function reserveCost(request: Pick<Request, "pricing" | "prompt" | "toolBytes" | "output">): number {
 	const { pricing } = request
@@ -206,6 +218,7 @@ export function reserveCost(request: Pick<Request, "pricing" | "prompt" | "toolB
 	) {
 		throw new InspectionError("pricing", "Missing route price bounds")
 	}
+
 	// Reserve the caller's bound for the entire encoded request, including protocol overhead.
 	// reject prompts that exceed the configured input ceiling
 	if (Buffer.byteLength(request.prompt) + 512 + (request.toolBytes ?? 0) > pricing.maxInputTokens) {
@@ -238,23 +251,27 @@ function settle({
 	) {
 		throw new InspectionError("unknown-usage", "Model usage unavailable")
 	}
+
 	// compute the actual charge in microdollars
 	const cost = Math.ceil(
 		reply.inputTokens * pricing.inputUsdPerMillion +
 			reply.outputTokens * pricing.outputUsdPerMillion +
 			(pricing.fixedUsd ?? 0) * 1e6,
 	)
+
 	// retain the model receipt before checking the declared ceilings
 	receipt.inputTokens = reply.inputTokens
 	receipt.outputTokens = reply.outputTokens
 	receipt.requestId = reply.requestId
 	receipt.costUsd = cost / 1e6
 	delete receipt.reservedUsd
+
 	// exhaust the ledger when actual usage exceeds its reservation
 	if (cost > reserve || reply.outputTokens > request.output || reply.inputTokens > pricing.maxInputTokens) {
 		ledger.remainingMicros = 0
 		throw new InspectionError("pricing", "Model usage exceeded the caller's bound")
 	}
+
 	// restore the unused portion to each budget
 	ledger.remainingMicros += reserve - cost
 	if (attempt) {

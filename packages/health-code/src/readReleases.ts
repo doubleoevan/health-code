@@ -1,6 +1,9 @@
 import { gt, lte, valid } from "semver"
 import { z } from "zod"
 import type { Upgrade } from "./contracts.ts"
+import { readBoundedJson } from "./readBoundedJson.ts"
+
+const maxReleaseBytes = 4 * 1024 * 1024
 
 export type ReleaseNote = { source: string; text: string; workspaces: string[] }
 type Options = {
@@ -10,6 +13,7 @@ type Options = {
 	signal?: AbortSignal
 	request?: typeof fetch
 }
+
 // validate release metadata before using its tag or body
 const release = z.object({
 	tag_name: z.string(),
@@ -17,7 +21,10 @@ const release = z.object({
 	draft: z.boolean(),
 	prerelease: z.boolean(),
 })
-/** Reads bounded release evidence for the exact versions each workspace crosses. */
+
+/**
+ * Reads bounded release evidence for the exact versions each workspace crosses.
+ */
 export async function readReleases({
 	upgrade,
 	githubToken,
@@ -38,7 +45,8 @@ export async function readReleases({
 			await response.body?.cancel()
 			throw new Error()
 		}
-		const info = (await readReleaseJson(response)) as { repository?: string | { url?: string } }
+		const info = (await readBoundedJson(response, maxReleaseBytes)) as { repository?: string | { url?: string } }
+
 		// extract the published github repository identity
 		const address = (typeof info.repository === "string" ? info.repository : info.repository?.url) ?? ""
 		const parsed =
@@ -48,6 +56,7 @@ export async function readReleases({
 		if (!parsed || parsed.slice(1).includes("..")) {
 			throw new Error()
 		}
+
 		// page through a bounded number of releases
 		const repository = `${parsed[1]}/${parsed[2]}`
 		let cursor: string | null = null
@@ -57,12 +66,14 @@ export async function readReleases({
 				gaps.push(batch.gap)
 				break
 			}
+
 			// keep only notes for versions between the pinned and target releases
 			notes.push(...toReleaseNotes({ releases: batch.releases, repository, upgrade }))
 			if (!batch.next) {
 				break
 			}
 			cursor = batch.next
+
 			// record when the page limit leaves release coverage incomplete
 			if (page === 4) {
 				gaps.push("Release page limit reached")
@@ -71,6 +82,7 @@ export async function readReleases({
 	} catch {
 		gaps.push("Package repository or release metadata unavailable")
 	}
+
 	// supplement github evidence with versioned changelog sections
 	notes.push(...toChangelogNotes({ changelog, upgrade, registry }))
 	if (!notes.length) {
@@ -78,6 +90,7 @@ export async function readReleases({
 	}
 	return { notes: notes.slice(0, 40), gaps }
 }
+
 // request visibility alongside release notes in the same authenticated query
 const releaseQuery = `query PublicReleasePage($owner:String!,$name:String!,$after:String) {
  repository(owner:$owner,name:$name) {
@@ -112,17 +125,19 @@ async function readReleasePage(options: {
 				redirect: "error",
 				headers: { accept: "application/vnd.github+json" },
 			})
+
 	// retain a coverage gap when the release service rejects the request
 	if (!response.ok) {
 		await response.body?.cancel()
 		return { gap: `GitHub releases unavailable (${response.status})` }
 	}
-	const json = await readReleaseJson(response)
+	const json = await readBoundedJson(response, maxReleaseBytes)
 	if (!githubToken) {
 		// parse public releases and advance full pages
 		const releases = z.array(release).parse(json)
 		return { releases, next: releases.length === 50 ? String(page + 1) : null }
 	}
+
 	// Check the visibility returned with each page before accepting any credentialed release evidence.
 	// require public visibility in the authenticated response
 	const { data } = z
@@ -158,11 +173,13 @@ function toReleaseNotes({
 			? tag.slice(upgrade.dependency.length + 1)
 			: tag.replace(/^v/, "")
 		const version = valid(raw)
+
 		// skip drafts, prereleases and releases newer than the target
 		if (!version || entry.draft || entry.prerelease || !lte(version, upgrade.to)) {
 			continue
 		}
 		const workspaces = toAffectedWorkspaces(upgrade, version)
+
 		// retain source links and workspaces alongside bounded notes
 		if (workspaces.length && entry.body) {
 			notes.push({
@@ -174,6 +191,7 @@ function toReleaseNotes({
 	}
 	return notes
 }
+
 // select workspaces whose pinned version precedes the release
 function toAffectedWorkspaces(upgrade: Upgrade, version: string): string[] {
 	return Object.entries(upgrade.from)
@@ -190,50 +208,23 @@ function toChangelogNotes({
 	registry: string
 }): ReleaseNote[] {
 	const notes: ReleaseNote[] = []
+
 	// split the changelog at version or unreleased headings
 	const sections = changelog.split(/(?=^#{1,4}[ \t]+\[?(?:v?\d+\.\d+\.\d+|unreleased\b))/im)
 	for (const section of sections) {
 		const heading = /^#{1,4}[ \t]+\[?v?(\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?)(?=[\]\s(]|$)/.exec(section)
 		const version = valid(heading?.[1])
+
 		// require a versioned section within the upgrade range
 		if (!version || !lte(version, upgrade.to)) {
 			continue
 		}
 		const workspaces = toAffectedWorkspaces(upgrade, version)
+
 		// retain changelog text only for affected workspaces
 		if (workspaces.length) {
 			notes.push({ source: registry, text: section.slice(0, 4000), workspaces })
 		}
 	}
 	return notes
-}
-// read release metadata within a fixed byte limit
-async function readReleaseJson(response: Response): Promise<unknown> {
-	const reader = response.body?.getReader()
-	if (!reader) {
-		throw new Error("Empty release response")
-	}
-	const chunks: Uint8Array[] = []
-	let bytes = 0
-	try {
-		// stream the response while tracking its cumulative size
-		for (;;) {
-			const { value, done } = await reader.read()
-			if (done) {
-				break
-			}
-			bytes += value.byteLength
-			// cancel oversized responses before decoding the json
-			if (bytes > 4 * 1024 * 1024) {
-				await reader.cancel()
-				throw new Error("Release metadata exceeds the size limit")
-			}
-			// accumulate only chunks within the response budget
-			chunks.push(value)
-		}
-	} finally {
-		reader.releaseLock()
-	}
-	// parse the completed response after releasing the reader
-	return JSON.parse(Buffer.concat(chunks).toString("utf8"))
 }

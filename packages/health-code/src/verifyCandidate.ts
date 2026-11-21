@@ -26,6 +26,7 @@ export type PatchEvidence = {
 	sandbox: Sandbox
 	card: ReportCard
 	report: UpgradeReportV2
+
 	// retain release and baseline observations for independent verification
 	usage: UsageEvidence
 	releaseNotes?: ReleaseNote[]
@@ -40,6 +41,7 @@ export type State = {
 	unresolvedBump?: boolean
 	tip: string
 	commits: Patch["commits"]
+
 	// track dependency changes and source edits with their test obligations
 	dependencies: UpgradeReportV2["newDependencies"]
 	files: Map<string, string>
@@ -53,6 +55,7 @@ export type State = {
 export async function readIntegrity(adapter: NodeAdapter): Promise<Integrity> {
 	const first = integrity.parse(await adapter.data(["integrity", "0"]))
 	const result = { ...first, cases: [...first.cases] }
+
 	// page through protected test evidence with a fixed case ceiling
 	for (let offset = first.cases.length; offset && offset % 100 === 0; offset += 100) {
 		if (offset > 100000) {
@@ -60,6 +63,7 @@ export async function readIntegrity(adapter: NodeAdapter): Promise<Integrity> {
 		}
 		const page = integrity.parse(await adapter.data(["integrity", String(offset)]))
 		result.cases.push(...page.cases)
+
 		// stop once the final partial page is consumed
 		if (page.cases.length < 100) {
 			break
@@ -74,6 +78,7 @@ export async function workspace(evidence: PatchEvidence, request: PatchOperation
 	if (!provider.patchWorkspace) {
 		throw new InspectionError("patch-workspace", "Provider lacks a protected patch workspace")
 	}
+
 	// run the protected operation within the remaining inspection deadline
 	const operation = context.operation("setup")
 	const patchWorkspace = provider.patchWorkspace
@@ -111,6 +116,7 @@ export async function recordCommit(
 	if (!/^[\da-f]{40}$/.test(tip)) {
 		throw new Error("Invalid commit identity")
 	}
+
 	// record the verified commit and advance the candidate tip
 	state.tip = tip
 	state.commits.push({ sha: tip, subject, flag, reason })
@@ -140,6 +146,7 @@ export function cleanInstall(current: Observation, baseline: Observation): boole
 export async function verifyTree(evidence: PatchEvidence, state: State): Promise<PatchVerification> {
 	requireBaseline(evidence)
 	const { adapter, baselineIntegrity, baseInstall, baseTests } = evidence
+
 	// reinstall the candidate and compare its network and file observations
 	const install = await adapter.install()
 	reportNewDestinations("install", adapter.lastObservation, baseInstall)
@@ -147,6 +154,7 @@ export async function verifyTree(evidence: PatchEvidence, state: State): Promise
 		throw new Error("Final installation evidence failed")
 	}
 	const installation = adapter.lastObservation
+
 	// require the final typecheck when the project provides one
 	const typecheck = await adapter.typecheck()
 	if (adapter.project?.typecheck !== "none" && typecheck.status !== "passed") {
@@ -154,6 +162,7 @@ export async function verifyTree(evidence: PatchEvidence, state: State): Promise
 	}
 	const tests = await adapter.test()
 	reportNewDestinations("tests", adapter.lastObservation, baseTests)
+
 	// require complete attributable network evidence for the final tests
 	if (
 		tests.status === "untested" ||
@@ -162,11 +171,13 @@ export async function verifyTree(evidence: PatchEvidence, state: State): Promise
 	) {
 		throw new Error("Final test evidence incomplete")
 	}
+
 	// verify that repository commands preserved the committed tree
 	if ((await workspace(evidence, { kind: "verify", tip: state.tip })) !== state.tip) {
 		throw new Error("Checks changed the tracked candidate tree")
 	}
 	const final = await readIntegrity(adapter)
+
 	// reject a failed test process with no failing case or file
 	if (
 		tests.status === "failed" &&
@@ -175,6 +186,7 @@ export async function verifyTree(evidence: PatchEvidence, state: State): Promise
 	) {
 		throw new Error("Test process failed without an attributable case or file")
 	}
+
 	// compare lifecycle hooks and cases with the pinned baseline
 	verifyLifecycleHooks(baselineIntegrity.hooks, final.hooks)
 	verifyCases(baselineIntegrity, final)
@@ -183,6 +195,7 @@ export async function verifyTree(evidence: PatchEvidence, state: State): Promise
 			throw new Error("Edited test case did not pass")
 		}
 	}
+
 	// report newly discovered cases alongside the final check evidence
 	const prior = new Set(baselineIntegrity.cases.map(([file, name]) => JSON.stringify([file, name])))
 	const addedCases = final.cases
@@ -204,6 +217,7 @@ export function verifyLifecycleHooks(baseline: string[], current: unknown): void
 		.array(z.string())
 		.parse(current)
 		.filter((hook) => !known.has(hook))
+
 	// identify the packages and events behind newly introduced hooks
 	if (changed.length) {
 		const names = changed.slice(0, 8).map((hook) => {
@@ -218,6 +232,7 @@ export function verifyLifecycleHooks(baseline: string[], current: unknown): void
 		throw new Error(`New lifecycle script: ${names.join(", ")}`)
 	}
 }
+
 // preserve discovered baseline test files
 export function verifyCases(baselineIntegrity: Integrity, final: Integrity): void {
 	if (baselineIntegrity.discoveredFiles?.some((file) => !final.discoveredFiles?.includes(file))) {
@@ -225,12 +240,14 @@ export function verifyCases(baselineIntegrity: Integrity, final: Integrity): voi
 	}
 	const original = groupCases(baselineIntegrity.cases)
 	const current = groupCases(final.cases)
+
 	// check every final group for new or ambiguous failures
 	for (const [key, statuses] of current) {
 		verifyFinalGroup(original.get(key), statuses)
 	}
 	for (const [key, statuses] of original) {
 		const observed = current.get(key)
+
 		// preserve the original invocations and passing outcomes
 		if (
 			observed?.length !== statuses.length ||
@@ -240,6 +257,7 @@ export function verifyCases(baselineIntegrity: Integrity, final: Integrity): voi
 			throw new Error("Baseline test omitted or weakened")
 		}
 	}
+
 	// require the same set of file loading errors
 	if (!isDeepStrictEqual(final.testFileErrors, baselineIntegrity.testFileErrors)) {
 		throw new Error("Changed test file errors")
@@ -267,6 +285,7 @@ function groupCases(cases: Integrity["cases"]): Map<string, CaseStatus[]> {
 			groups.set(key, [status])
 		}
 	}
+
 	// return all observed statuses for each identity
 	return groups
 }

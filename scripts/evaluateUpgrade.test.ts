@@ -16,6 +16,7 @@ test("a repeated and located diagnosis is distinct from a verified repair", () =
 		newDependencies: [],
 		diagnosis: { actions: ["Migrate readConfigFile and sys"] },
 	} as unknown as UpgradeReportV2
+
 	// accept a located diagnosis without awarding a repair
 	assert.deepEqual(gradeUpgrade({ ...input, report: diagnosis }), {
 		acceptableDiagnosis: true,
@@ -27,6 +28,7 @@ test("a repeated and located diagnosis is distinct from a verified repair", () =
 		newDependencies: [],
 		patches: [{ commits: [] }],
 	} as unknown as UpgradeReportV2
+
 	// require passing checks and unchanged tests within budget
 	assert.equal(gradeUpgrade({ ...input, report: fixed }).budgetAcceptance, true)
 	assert.equal(gradeUpgrade({ ...input, report: fixed, withinBudget: false }).budgetAcceptance, false)
@@ -61,12 +63,14 @@ test("the reference diff applies mailboxes in an isolated index", async () => {
 		git(["add", "case.ts"])
 		git(["commit", "-qm", "before"])
 		const base = git(["rev-parse", "HEAD"]).trim()
+
 		// capture a one-commit change as a mailbox
 		writeFileSync(join(repo, "case.ts"), "export const value = 2\n")
 		git(["commit", "-qam", "after"])
 		const tip = git(["rev-parse", "HEAD"]).trim()
 		const mailbox = git(["format-patch", "--stdout", `${base}..${tip}`])
 		const patch = { base, mailbox } as UpgradeReportV2["patches"][number]
+
 		// compare each reference and verify the checkout stays clean
 		assert.equal(await sourceDiff(patch, { parent: base, commit: tip }, repo), "")
 		assert.match(await sourceDiff(patch, { parent: base, commit: base }, repo), /export const value = 2/)
@@ -99,6 +103,7 @@ test("default budget acceptance checks measured turns, wall time, output and cha
 			},
 		},
 	}
+
 	// reject each budget violation independently
 	assert.equal(scoreBudget(fixture), true)
 	for (const change of [

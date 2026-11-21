@@ -7,6 +7,7 @@ async function evaluateBaseline(record: boolean, signal: AbortSignal): Promise<v
 	const path = new URL("../evals/carlnotes-baseline.json", import.meta.url)
 	const { fixture, finish } = await openBaseline(path, record)
 	const started = Date.now()
+
 	// inspect the test inventory with upgrades disabled
 	const sandboxProvider = createSandboxProvider({ memoryMib: 8192, revision: fixture.commit })
 	const card = await inspectRepository({
@@ -29,6 +30,7 @@ async function evaluateBaseline(record: boolean, signal: AbortSignal): Promise<v
 					console.error("Command diagnostic", signature)
 				}
 			}
+
 			// report step progress and elapsed time
 			if (event.type === "step.started") {
 				console.error(event.label)
@@ -38,6 +40,7 @@ async function evaluateBaseline(record: boolean, signal: AbortSignal): Promise<v
 			}
 		},
 	})
+
 	// score or record the observed inventory and its cost
 	const observed = await finish(card)
 	console.log(

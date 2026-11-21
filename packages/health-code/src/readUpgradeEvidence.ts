@@ -29,12 +29,14 @@ export function permalink(repository: ReportCard["repository"], file: string, li
 }
 export function diagnostics(checks: CheckResult[]): Locator[] {
 	const locators = new Map<string, Locator>()
+
 	// collect diagnostic locations only from failed checks
 	for (const check of checks) {
 		if (check.status === "failed") {
 			readDiagnostics(check, locators)
 			for (const test of check.failingTests) {
 				const file = (test.workspace === "." ? "" : `${test.workspace}/`) + test.file
+
 				// add suite failures without duplicating an existing source location
 				if (![...locators.values()].some((loc) => loc.file === file)) {
 					locators.set(file, { file, reason: "Test reporter supplied no line" })
@@ -42,6 +44,7 @@ export function diagnostics(checks: CheckResult[]): Locator[] {
 			}
 		}
 	}
+
 	// bound the number of diagnostics returned for one upgrade
 	return [...locators.values()].slice(0, 40)
 }
@@ -71,6 +74,7 @@ export async function locateDiagnostics(options: {
 }): Promise<void> {
 	const { repository, locators, read } = options
 	const files = new Map<string, string | undefined>()
+
 	// ignore diagnostics without a usable line number
 	for (const locator of locators) {
 		if (!locator.line) {
@@ -79,6 +83,7 @@ export async function locateDiagnostics(options: {
 		if (!files.has(locator.file)) {
 			files.set(locator.file, await read(locator.file).catch(() => undefined))
 		}
+
 		// reject generated, unavailable or out-of-range source locations
 		const text = files.get(locator.file)
 		if (

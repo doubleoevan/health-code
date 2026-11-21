@@ -3,7 +3,9 @@ import { guestArguments, observe } from "./executeGuest.ts"
 
 const projectTool = "/opt/health-code/project.mjs"
 
-/** Builds the sandbox command for capturing a test report or reading its completed inventory. */
+/**
+ * Prepares sandbox commands for test capture, protected evidence, and registry lookup.
+ */
 export function buildTestCommand(options: { command: Command; dir?: string; id: string; previous?: string }): {
 	argv: string[]
 	capture?: string
@@ -15,9 +17,18 @@ export function buildTestCommand(options: { command: Command; dir?: string; id: 
 	const capture =
 		trustedTool && action === "tests" && option === "--inventory" ? `/var/lib/health-code/tests-${id}` : undefined
 	let argv: string[]
+
 	// give a fresh report write access only during its test run
 	if (capture) {
 		argv = guestArguments(command, dir, { path: `${capture}/raw/report`, kind: "report", writable: true })
+	} else if (trustedTool && action === "registry") {
+		// Allow the guest to flush completed lookups before the remote command deadline.
+		const grace = Math.min(2000, command.timeoutMs / 4)
+		const budget = Math.max(0, Math.floor(command.timeoutMs - grace))
+		argv = guestArguments(
+			{ ...command, argv: [node, tool, action, `--timeout-ms=${budget}`, ...command.argv.slice(3)] },
+			dir,
+		)
 	} else if (trustedTool && action === "integrity" && previous) {
 		argv = guestArguments(command, dir, { path: `${previous}/inventory`, kind: "inventory" })
 	} else if (trustedTool && action === "report" && previous) {
@@ -28,6 +39,7 @@ export function buildTestCommand(options: { command: Command; dir?: string; id: 
 	} else {
 		argv = guestArguments(command, dir)
 	}
+
 	// wrap the prepared command in observation and capture as requested
 	if (dir) {
 		argv = ["bash", "-c", observe, "observe", dir, ...argv]

@@ -11,6 +11,7 @@ def inside(fd):
     target = os.readlink("/proc/self/fd/" + str(fd))
     if os.path.commonpath([root, target]) != root:
         raise ValueError("File is outside project")`,
+
 	// A new entry can only be created inside the directory we just verified.
 	`parent, name = os.path.split(path)
 directory = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
@@ -18,6 +19,7 @@ inside(directory)
 flags = os.O_NONBLOCK | (os.O_RDONLY if mode == "read" else os.O_WRONLY)
 try:
     fd = os.open(name, flags, dir_fd=directory)`,
+
 	// Exclusive creation refuses a dangling link or a newly occupied name.
 	`except FileNotFoundError:
     if mode == "read":
@@ -26,6 +28,7 @@ try:
 inside(fd)
 if not stat.S_ISREG(os.fstat(fd).st_mode):
     raise ValueError("Expected a regular file")`,
+
 	// Truncate only the verified descriptor. Reading one extra byte preserves truncation detection.
 	`if mode == "read":
     with os.fdopen(fd, "rb") as source:
@@ -107,6 +110,7 @@ function validatedPath(path: string): string {
 	) {
 		throw new InspectionError("invalid-path", "Expected a relative project file")
 	}
+
 	// anchor the validated path inside the project mount
 	return `/project/${path}`
 }

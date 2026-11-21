@@ -16,6 +16,7 @@ test("first-party cohorts exclude repeat and self views, count timely starts onc
 	const now = Date.now(),
 		day = new Date(now).toISOString().slice(0, 10)
 	const limits = toLaunchLimits({ HEALTH_CODE_DAILY_COST_USD: "100", HEALTH_CODE_VISITOR_RUNS: "10" })
+
 	// Link the report owner and each newly accepted inspection to a separate public queue row.
 	function start(key: string, visitor: string, time = now): string {
 		return store.admission.admit({
@@ -33,6 +34,7 @@ test("first-party cohorts exclude repeat and self views, count timely starts onc
 	store.admission.view(id, "viewer", now)
 	store.admission.view(id, "viewer", now)
 	store.admission.view(id, "late", now)
+
 	// Count a confirmed foreign viewer only in the originating seven-day cohort.
 	start("follow-up", "viewer", now + 1000)
 	start("another", "viewer", now + 2000)
@@ -53,12 +55,14 @@ test("first-party cohorts exclude repeat and self views, count timely starts onc
 		{ shared: counts.shared, viewers: counts.viewers, converted: counts.converted },
 		{ shared: 1, viewers: 2, converted: 1 },
 	)
+
 	// Match each operator-facing rate and dollar amount to its source cohort.
 	const html = adminPage(store.admission, null)
 	assert.ok(html.includes("Viewers who started an inspection (7 days)"))
 	assert.ok(html.includes("<td>1/1 (100%)</td><td>1/2 (50%) (open)</td>"))
 	assert.ok(html.includes("<td>$0.40</td><td>$0.25</td><td>$0.75</td><td>$10.00</td>"))
 	assert.ok(html.includes("<td>3</td><td>1</td><td>1 / 1</td>"))
+
 	// Retain aggregate counts after the visitor and network digests expire.
 	store.database.exec(
 		"UPDATE admissions SET day=date('now','-32 days');UPDATE foreign_views SET day=date('now','-32 days')",
@@ -95,6 +99,7 @@ test("admin protection covers provider hosts and future data routes", async () =
 	assert.equal(plaintext.status, 403)
 	assert.equal(plaintext.headers.has("www-authenticate"), false)
 	const authorization = "Basic " + Buffer.from("admin:fixture").toString("base64")
+
 	// Exercise both ingress hostnames through the same admin middleware.
 	for (const host of [origin, "https://service.northflank.app"]) {
 		for (const route of ["/admin", "/admin/data"]) {
@@ -103,6 +108,7 @@ test("admin protection covers provider hosts and future data routes", async () =
 			assert.ok(denied.headers.get("www-authenticate")?.includes("Basic"))
 			assert.match(denied.headers.get("cache-control") ?? "", /no-store/)
 		}
+
 		// Show the day’s empty denominators only to a signed-in operator.
 		const accepted = await app.request(host + "/admin", { headers: { authorization } })
 		assert.equal(accepted.status, 200)
@@ -129,6 +135,7 @@ test("Doppler boot preserves production networking and rejects a malformed confi
 	assert.equal(runtime.PORT, "3000")
 	assert.equal(runtime.HEALTH_CODE_REPLAY, undefined)
 	assert.equal(runtime.UNRELATED, undefined)
+
 	// Only the runtime and its named configuration fields receive app credentials.
 	assert.equal(runtime.TURNSTILE_SITE_KEY, "public-fixture")
 	assert.equal(runtime.HEALTH_CODE_ADMIN_PASSWORD, "private-fixture")
@@ -155,10 +162,12 @@ test("terminal logs expose only public identity, verdict counts, duration and co
 		console.info = (message: string): void => {
 			records.push(message)
 		}
+
 		// Recover an existing running row before exercising a new provider failure.
 		const unfinished = store.enqueue(replayRepositoryUrl)
 		store.claim()
 		await worker.start()
+
 		// Supply synthetic visitor identities that must stay out of the diagnostic stream.
 		const result = await worker.admit(replayRepositoryUrl, {
 			identify: () => ({ visitor: "fixture-private-cookie", network: "fixture-private-network" }),
@@ -175,6 +184,7 @@ test("terminal logs expose only public identity, verdict counts, duration and co
 			entries.map((entry) => entry.state),
 			["interrupted", "failed"],
 		)
+
 		// Require the same allowlist for errors as for expired workers.
 		for (const entry of entries) {
 			assert.deepEqual(Object.keys(entry).sort(), [

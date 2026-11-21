@@ -41,14 +41,20 @@ export type ProviderOptions = {
 	memoryMib?: 4096 | 8192
 	revision?: string
 }
-/** Creates an isolated provider client. Only its token default reads application settings. */
+
+/**
+ * Creates an isolated provider client. Only its token default reads application settings.
+ */
 export function createSandboxProvider(options: ProviderOptions = {}): SandboxProvider {
 	if (options.revision && !/^[a-f0-9]{40}$/.test(options.revision)) {
 		throw new InspectionError("invalid-revision", "Expected a full commit SHA")
 	}
 	return connectProvider(options, options.revision)
 }
-/** Connects the sandbox client and optionally pins acquisition to a specific revision. */
+
+/**
+ * Connects the sandbox client and optionally pins acquisition to a specific revision.
+ */
 export function connectProvider(
 	options: ProviderOptions,
 	revision?: string,
@@ -61,12 +67,14 @@ export function connectProvider(
 	}
 	const token = options.token ?? process.env.RUNTA_TOKEN
 	const prefix = options.deployment === undefined ? "health-code-" : toSandboxPrefix(options.deployment)
+
 	// give the runtime a deployment-scoped name
 	function runtimeName(name: string): string {
 		return prefix + name.slice("health-code-".length)
 	}
 	const endpoint = "https://api.runta.com"
 	let client: Runta | undefined
+
 	// track pending allocations and deletions by inspection identity
 	const instances = new Map<string, Instance>()
 	const creating = new Map<string, Promise<Runtime>>()
@@ -119,6 +127,7 @@ export function connectProvider(
 		deletions.set(sandbox.id, deletion)
 		return deletion
 	}
+
 	// delete only allocations owned by this provider
 	async function deleteAllocation(sandbox: Sandbox, operation: Operation): Promise<void> {
 		if (!owned.has(sandbox.id)) {
@@ -134,10 +143,12 @@ export function connectProvider(
 					.then(() => bounded((signal) => deleteWithRetries(sandbox, signal), { timeoutMs: 60000 }))
 					.catch(() => undefined)
 			}
+
 			// propagate the failed deletion while its deferred retry waits
 			throw error
 		}
 	}
+
 	// wait for pending creation before resolving the runtime by name
 	async function resolveAllocation(sandbox: Sandbox): Promise<Runtime> {
 		const pending = creating.get(sandbox.id)
@@ -146,6 +157,7 @@ export function connectProvider(
 		}
 		return instances.get(sandbox.id)?.runtime ?? (await sdk().runtimes.get(runtimeName(sandbox.id)))
 	}
+
 	// accept a missing runtime as evidence of a completed deletion
 	function deletedInstance(sandbox: Sandbox, error: unknown): boolean {
 		return error instanceof ApiError && error.statusCode === 404 && instances.has(sandbox.id)
@@ -178,12 +190,14 @@ export function connectProvider(
 	}
 	return {
 		modelRequestSandbox: createModelRequestSandbox({ sdk, runtimeName, token, request: options.fetch ?? fetch }),
+
 		// serialize protected patch operations with guest commands
 		async patchWorkspace(sandbox, request, operation): Promise<string | null> {
 			const instance = locked(sandbox)
 			if (instance.commands || instance.updating) {
 				throw new InspectionError("sandbox-busy", "Repository command is active")
 			}
+
 			// reserve the runtime for the trusted patch helper
 			instance.updating = true
 			instance.locked = false
@@ -197,6 +211,7 @@ export function connectProvider(
 						maxOutputBytes: 1024 * 1024,
 					},
 				)
+
 				// require complete output before parsing the helper response
 				if (outcome.exitCode || outcome.stdoutTruncated) {
 					throw new InspectionError("patch-workspace", `Protected patch operation failed (${request.kind})`)
@@ -214,6 +229,7 @@ export function connectProvider(
 				throw new InspectionError("credential-binding", "Runtime is busy or unavailable")
 			}
 			credentialTarget(route)
+
 			// hold the runtime exclusively while a credential is attached
 			instance.updating = true
 			instance.locked = false
@@ -242,6 +258,7 @@ export function connectProvider(
 						signal,
 						redirect: "error",
 					})
+
 					// classify unsuccessful account checks by their http status
 					await response.body?.cancel()
 					if (!response.ok) {
@@ -259,6 +276,7 @@ export function connectProvider(
 			if (!/^health-code-[\da-f-]{36}$/.test(name)) {
 				throw new InspectionError("invalid-name", "Expected a unique inspection sandbox name")
 			}
+
 			// reject duplicate allocations before reserving the sandbox name
 			try {
 				if (owned.has(name)) {
@@ -266,6 +284,7 @@ export function connectProvider(
 				}
 				checkOperation(operation.signal)
 				const manager = sdk().runtimes
+
 				// track ownership before dispatching creation to the provider
 				owned.add(name)
 				const request = manager.create(runtimeName(name), {
@@ -284,6 +303,7 @@ export function connectProvider(
 						throw error
 					})
 					.finally(() => creating.delete(name))
+
 				// initialize sandbox state before inspecting inherited configuration
 				instances.set(name, {
 					runtime,
@@ -301,6 +321,7 @@ export function connectProvider(
 				if (!response.ok) {
 					throw new SandboxUnavailableError(availabilityReason(response.status))
 				}
+
 				// verify the new runtime starts without a credential binding
 				const info = (await response.json()) as { data?: { secret_configuration?: unknown[] } }
 				const bindings = info.data?.secret_configuration
@@ -331,6 +352,7 @@ export function connectProvider(
 					await providerRequest(runtime.files.write(archive, gzipSync(contents)))
 					await checked(runtime, ["gzip", "-df", archive], remaining())
 				}
+
 				// enable trusted guest tools and check out the pinned repository
 				await checked(runtime, ["chmod", "-R", "a+rX", "/opt/health-code"], remaining())
 				try {
@@ -356,6 +378,7 @@ export function connectProvider(
 				throw new InspectionError("policy", "Sandbox command or policy update in progress")
 			}
 			instance.updating = true
+
 			// reserve the runtime while replacing its registry policy
 			instance.locked = false
 			try {
@@ -365,6 +388,7 @@ export function connectProvider(
 					instance.runtime.egress.setPolicy({ mode: "allowlist", allowedHosts: [...hosts], deniedHosts: [] }),
 				)
 				checkOperation(operation.signal)
+
 				// confirm the full egress policy before unlocking repository commands
 				const policy = await providerRequest(instance.runtime.egress.get())
 				checkOperation(operation.signal)

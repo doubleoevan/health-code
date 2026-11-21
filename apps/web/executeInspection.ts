@@ -12,6 +12,7 @@ export class SiteError extends Error {}
 type DispatchOptions = { revision?: string; settings?: LaunchLimits; signal?: AbortSignal }
 export interface InspectionSource<Output extends InspectionOutput = InspectionOutput> {
 	verify(repositoryUrl: string, admission?: { repositoryId: string; maxSizeKiB: number }): Promise<void>
+
 	// Bind the checkout to the revision selected at admission.
 	resolve?(repositoryUrl: string): Promise<RepositoryHead>
 	inspect(repositoryUrl: string, emit: (event: SiteEvent) => void, options?: DispatchOptions): Promise<Output>
@@ -19,6 +20,7 @@ export interface InspectionSource<Output extends InspectionOutput = InspectionOu
 	recover(options?: { liveInspectionIds: ReadonlySet<string>; createdBefore: number }): Promise<number>
 	maxDurationMs?: number
 }
+
 // coordinate queued inspections and notify subscribers when their state changes
 export class Inspections {
 	readonly changes = new EventEmitter()
@@ -28,6 +30,7 @@ export class Inspections {
 	private maintenanceHealthy = true
 	private cleanupRevision = 0
 	private lifecycle = 0
+
 	// Track live leases independently of durable inspection state.
 	private active = 0
 	private ready = false
@@ -43,10 +46,12 @@ export class Inspections {
 		}
 		this.changes.setMaxListeners(0)
 	}
+
 	// Expose completion of startup cleanup to the readiness probe.
 	get recovered(): boolean {
 		return this.ready
 	}
+
 	// Require both inventory and accounting to be healthy before offering a paid slot.
 	private get workerAvailable(): boolean {
 		return this.ready && this.inventoryHealthy && this.maintenanceHealthy
@@ -55,6 +60,7 @@ export class Inspections {
 		if (!this.launch) {
 			return false
 		}
+
 		// Account for pending reservations when showing the daily budget.
 		const { current, available } = this.launch.settings
 		return (
@@ -76,6 +82,7 @@ export class Inspections {
 			request,
 			source: this.source,
 			store: this.store,
+
 			// Recheck the worker after the external challenge resolves.
 			workerAvailable: () => this.workerAvailable,
 			wake: () => this.drain(),
@@ -84,11 +91,13 @@ export class Inspections {
 	async start(sleep: (milliseconds: number) => Promise<void> = Bun.sleep): Promise<void> {
 		// Interrupt stale inspections before reclaiming their sandboxes.
 		const lifecycle = ++this.lifecycle
+
 		// Defer claims until the previous worker’s runtimes have been reconciled.
 		await this.recoverAtStartup(lifecycle, sleep)
 		if (lifecycle !== this.lifecycle) {
 			return
 		}
+
 		// start claiming work after sandbox recovery succeeds
 		const settings = this.launch?.settings
 		if (settings) {
@@ -98,6 +107,7 @@ export class Inspections {
 				} catch {
 					console.error("Launch limits refresh failed")
 				}
+
 				// Keep persisted reservations within the new ceilings.
 				if (lifecycle !== this.lifecycle) {
 					return
@@ -113,6 +123,7 @@ export class Inspections {
 				}
 				this.drain()
 			}
+
 			// Avoid installing timers on a worker stopped during limits refresh.
 			await refresh()
 			if (lifecycle !== this.lifecycle) {
@@ -120,6 +131,7 @@ export class Inspections {
 			}
 			this.timers.push(setInterval(() => void refresh(), 60000).unref())
 		}
+
 		// Reap for every worker that can allocate a sandbox.
 		this.timers.push(setInterval(() => void this.reap(), 300000).unref())
 		this.ready = true
@@ -127,6 +139,7 @@ export class Inspections {
 	}
 	private async recoverAtStartup(lifecycle: number, sleep: (milliseconds: number) => Promise<void>): Promise<void> {
 		let delay = 1000
+
 		// retry deployment cleanup before accepting queued work
 		for (;;) {
 			try {
@@ -136,11 +149,13 @@ export class Inspections {
 						logInspection({ row, state: "interrupted", durationMs: row.durationMs })
 					}
 				}
+
 				// Verify provider inventory before settling abandoned reservations.
 				const remaining = await this.source.recover()
 				if (lifecycle !== this.lifecycle) {
 					return
 				}
+
 				// Release the old holds only after inventory confirms deletion.
 				if (remaining !== 0) {
 					throw new Error("Cleanup still pending")
@@ -151,6 +166,7 @@ export class Inspections {
 				// back off between recovery attempts for up to one minute
 				console.error("Deployment sandbox cleanup failed. Retrying before starting inspections.")
 				await sleep(delay)
+
 				// Drop the retry when recovery belongs to a stopped worker.
 				if (lifecycle !== this.lifecycle) {
 					return
@@ -159,6 +175,7 @@ export class Inspections {
 			}
 		}
 	}
+
 	// Skip overlapping inventory sweeps.
 	async reap(now = Date.now()): Promise<void> {
 		if (this.sweeping) {
@@ -168,16 +185,19 @@ export class Inspections {
 		const revision = this.cleanupRevision
 		const lifecycle = this.lifecycle
 		const createdBefore = now - (this.source.maxDurationMs ?? 1800000) - 60000
+
 		// An active lease expires after the worker deadline and teardown allowance.
 		const liveInspectionIds = new Set(
 			[...this.leases].filter(([, started]) => started >= createdBefore).map(([id]) => id),
 		)
 		try {
 			const remaining = await this.source.recover({ liveInspectionIds, createdBefore })
+
 			// Discard inventory taken before a newer cleanup failure or worker restart.
 			if (revision !== this.cleanupRevision || lifecycle !== this.lifecycle) {
 				return
 			}
+
 			// Settle interrupted work only after the scoped inventory confirms deletion.
 			this.inventoryHealthy = remaining === 0
 			if (this.inventoryHealthy) {
@@ -189,6 +209,7 @@ export class Inspections {
 			if (lifecycle !== this.lifecycle) {
 				return
 			}
+
 			// Keep paid admission closed until a fresh inventory succeeds.
 			this.inventoryHealthy = false
 			console.error("Scheduled deployment sandbox cleanup failed. Retrying next sweep.")
@@ -213,6 +234,7 @@ export class Inspections {
 			throw new Error("Hosted inspections require visitor admission")
 		}
 		const id = this.store.enqueue(url)
+
 		// Let the submission return its durable ID before starting external work.
 		setTimeout(() => this.drain(), 0)
 		return id
@@ -253,6 +275,7 @@ export class Inspections {
 			}
 			this.active++
 			this.changes.emit("queue")
+
 			// notify subscribers and refill the slot when execution settles
 			this.changes.emit(row.id)
 			void this.execute(row).finally(() => {
@@ -261,6 +284,7 @@ export class Inspections {
 			})
 		}
 	}
+
 	// Compare the worker and settings that admitted this claim with their current state.
 	private canStartVerified(lifecycle: number, settings?: LaunchLimits): boolean {
 		if (!this.workerAvailable || lifecycle !== this.lifecycle) {
@@ -293,6 +317,7 @@ export class Inspections {
 				row.repositoryUrl,
 				checkout && limits ? { repositoryId: checkout.repositoryId, maxSizeKiB: limits.maxSizeKiB } : undefined,
 			)
+
 			// Recheck a claimed job if admission changed while GitHub verified its repository.
 			if (!this.canStartVerified(lifecycle, settings)) {
 				// Keep the reservation while the job waits for current settings.
@@ -303,6 +328,7 @@ export class Inspections {
 			}
 			dispatched = true
 			const signal = AbortSignal.timeout(this.source.maxDurationMs ?? 1800000)
+
 			// Verify checkout identity before publishing a cached report.
 			let output: InspectionOutput
 			try {
@@ -320,10 +346,12 @@ export class Inspections {
 			) {
 				throw new Error("Inspection repository or commit mismatch")
 			}
+
 			// Keep findings available if GitHub cannot identify the license at the pinned commit.
 			const license = await this.source.license(output.report.repository).catch(() => null)
 			const publication = publishReport(output, license)
 			this.store.finish(row.id, publication)
+
 			// Write a terminal log after report publication commits.
 			if (this.launch) {
 				logInspection({
@@ -355,6 +383,7 @@ export class Inspections {
 			error instanceof SiteError
 				? error.message
 				: "The inspection could not finish. Review the recorded steps and start a new inspection."
+
 		// Invalidate inventory before any fallible writes can release this slot.
 		if (failure && (failure.cleanupId || failure.runtimeUsage?.runtimes.some((item) => !item.deleted))) {
 			this.cleanupRevision++
@@ -365,6 +394,7 @@ export class Inspections {
 		while (lifecycle === this.lifecycle) {
 			try {
 				this.store.fail({ id: row.id, dispatched, failure, message })
+
 				// Emit the terminal log after the transaction commits.
 				if (this.launch) {
 					logInspection({

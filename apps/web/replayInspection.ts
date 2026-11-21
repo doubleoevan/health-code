@@ -32,6 +32,7 @@ export function createReplaySource(
 			const first = Date.parse(report.timeline[0]?.timestamp ?? "")
 			let previous = first
 			const start = Date.now()
+
 			// preserve the intervals between recorded events
 			for (const event of report.timeline) {
 				const time = Date.parse(event.timestamp)

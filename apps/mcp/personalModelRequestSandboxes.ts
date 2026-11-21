@@ -53,6 +53,7 @@ export async function organizationFolder({
 			await response.body?.cancel()
 			throw new Error()
 		}
+
 		// Only the authenticated organization identifier belongs in the ownership scope.
 		const { organization_id: id } = z
 			.object({ organization_id: z.string().min(1).max(128) })
@@ -74,6 +75,7 @@ export async function personalProvider(token: string, end = Date.now() + 120000)
 	if (!modelRequestSandbox) {
 		throw new UserError("Model Request Sandbox unavailable")
 	}
+
 	// Resolve ownership before inspecting any local record.
 	const folder = await organizationFolder({ token, end })
 	await recoverModelRequestSandboxes({ modelRequestSandbox, folder, end })
@@ -90,6 +92,7 @@ export async function recoverAccount(token: string): Promise<PersonalProvider | 
 		}
 		throw error
 	})
+
 	// An empty directory from a previous success needs no remote verification.
 	for (const folder of folders) {
 		if (
@@ -120,6 +123,7 @@ export async function recoverModelRequestSandboxes({
 		if (!entry.isFile()) {
 			continue
 		}
+
 		// Interpret only regular files created by a local owner.
 		const file = entry.name
 		const [owner, name, ...extra] = file.split(".")
@@ -135,6 +139,7 @@ export async function recoverModelRequestSandboxes({
 		) {
 			continue
 		}
+
 		// Keep uncertain records for the next startup. A reused PID protects the live owner.
 		try {
 			const phase = await readFile(join(folder, file), "utf8").catch((error) => {
@@ -143,6 +148,7 @@ export async function recoverModelRequestSandboxes({
 				}
 				throw error
 			})
+
 			// Another session may already have reclaimed this recorded allocation.
 			if (phase === undefined) {
 				continue
@@ -151,12 +157,14 @@ export async function recoverModelRequestSandboxes({
 				...sandboxOperation({ end, cap: 30000 }),
 				creationPending: phase !== "ready",
 			})
+
 			// Another session may already have removed this acknowledged record.
 			await rm(join(folder, file), { force: true })
 		} catch {
 			unresolved.push(name)
 		}
 	}
+
 	// Report every outstanding cleanup after attempting the other records.
 	if (unresolved.length) {
 		throw modelRequestSandboxCleanupError(unresolved.join(", "))
@@ -173,6 +181,7 @@ export function recordOwnership(modelRequestSandbox: ModelRequestSandbox, folder
 		}
 		return join(folder, `${process.pid}.${name}`)
 	}
+
 	// Tie cleanup to the exclusive record created by this provider instance.
 	const registered = new Map<string, Promise<void>>()
 	return {
@@ -182,6 +191,7 @@ export function recordOwnership(modelRequestSandbox: ModelRequestSandbox, folder
 			if (registered.has(name)) {
 				throw new Error("Duplicate model request sandbox owner")
 			}
+
 			// Publish the durable intent before dispatching the create request.
 			const record = mkdir(folder, { recursive: true, mode: 0o700 }).then(() =>
 				writeFile(path, "", { mode: 0o600, flag: "wx" }),
@@ -190,6 +200,7 @@ export function recordOwnership(modelRequestSandbox: ModelRequestSandbox, folder
 			await record
 			operation.signal?.throwIfAborted()
 			await modelRequestSandbox.open(name, route, operation)
+
 			// A crash before this marker leaves creation uncertain.
 			await writeFile(path, "ready", { flag: "r+" })
 		},
@@ -203,6 +214,7 @@ export function recordOwnership(modelRequestSandbox: ModelRequestSandbox, folder
 				return
 			}
 			await modelRequestSandbox.close(name, operation)
+
 			// Retire the private journal entry after remote deletion succeeds.
 			await rm(file(name), { force: true })
 			registered.delete(name)

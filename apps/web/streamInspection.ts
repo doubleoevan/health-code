@@ -13,9 +13,11 @@ export function streamInspection(options: {
 	let closed = false
 	let previousPosition: number | null | undefined
 	const notify = (): void => wake?.()
-	// wake idle subscribers periodically to send keepalives
+
 	const encoder = new TextEncoder()
 	const pageSize = 32
+
+	// wake idle subscribers periodically to send keepalives
 	const heartbeat = setInterval(notify, 15000)
 	const close = (): void => {
 		// release the heartbeat and wake any outstanding read on disconnect
@@ -26,18 +28,21 @@ export function streamInspection(options: {
 		signal.removeEventListener("abort", close)
 		notify()
 	}
+
 	// Subscribe before the first read. SQLite remains the source of order on every wake.
 	inspections.changes.on(id, notify)
 	signal.addEventListener("abort", close, { once: true })
 	if (signal.aborted) {
 		close()
 	}
+
 	// Wake only waiting visitors on queue changes.
 	let waiting = false
 	function appendPosition(frames: string[], queued: boolean): void {
 		if (!inspections.launch) {
 			return
 		}
+
 		// Reattach if a worker returns an unstarted job to the queue.
 		if (queued !== waiting) {
 			waiting = queued
@@ -47,6 +52,7 @@ export function streamInspection(options: {
 				inspections.changes.off("queue", notify)
 			}
 		}
+
 		// Emit a final null position when the job starts.
 		const position = queued ? inspections.store.position(id) : null
 		if (position !== previousPosition) {
@@ -70,22 +76,26 @@ export function streamInspection(options: {
 					(event) => `id: ${event.sequence}\nevent: inspection\ndata: ${JSON.stringify(event)}\n\n`,
 				)
 				cursor = events.at(-1)?.sequence ?? cursor
+
 				// Send the terminal signal only after publication is durable.
 				const state = inspections.store.state(id)
 				appendPosition(frames, state === "queued")
 				if (events.length < pageSize && state !== "queued" && state !== "running") {
 					frames.push(`event: terminal\ndata: ${state}\n\n`)
+
 					// Close after the final committed event page.
 					controller.enqueue(encoder.encode(frames.join("")))
 					controller.close()
 					close()
 					return
 				}
+
 				// send available events immediately so a full backlog drains in pages
 				if (frames.length) {
 					controller.enqueue(encoder.encode(frames.join("")))
 					return
 				}
+
 				// wait for a change or heartbeat after an empty read
 				controller.enqueue(encoder.encode(": heartbeat\n\n"))
 				await change.promise

@@ -27,11 +27,13 @@ for (const [mode, verdict] of Object.entries(verdicts)) {
 			report.patches.length,
 			["passes", "repair", "test", "new-test", "dependency", "install-break"].includes(mode) ? 1 : 0,
 		)
+
 		// verify the stop reason when lockfile recovery fails
 		if (mode === "unresolved-lock") {
 			assert.equal(starts, 1)
 			assert.match(report.diagnosis?.stopReason ?? "", /lockfile/)
 		}
+
 		// distinguish added test coverage from edits to existing expectations
 		if (mode === "new-test") {
 			assert.deepEqual(report.patches[0]?.verification?.addedCases, [{ file: "added.test.ts", name: "new behavior" }])
@@ -39,12 +41,14 @@ for (const [mode, verdict] of Object.entries(verdicts)) {
 		if (mode === "test") {
 			assert.equal(report.patches[0]?.commits.at(-1)?.flag, "test")
 		}
+
 		// trace newly admitted dependencies to the patch commit
 		if (mode === "dependency") {
 			assert.equal(report.patches[0]?.commits[1]?.flag, "dependency")
 			assert.equal(report.newDependencies[0]?.commit, report.patches[0]?.commits[1]?.sha)
 			assert.equal(report.newDependencies[0]?.reason, "Replace the removed module")
 		}
+
 		// check that unexpected egress and unverified credentials limit the attempt
 		if (mode === "new-host") {
 			assert.match(report.diagnosis?.stopReason ?? "", /Final tests contacted new destinations: registry.yarnpkg.com/)
@@ -62,6 +66,7 @@ for (const adoption of ["simplify", "decline", "no-benefit"] as const) {
 		assert.equal(report.verdict, "Fixed")
 		const match = report.featureMatches[0]
 		assert.equal(report.patches.length, adoption === "simplify" ? 2 : 1, match?.disposition ?? "")
+
 		// verify the feature patch starts at the tested upgrade tip
 		if (adoption === "simplify") {
 			assert.equal(report.patches[1]?.base, report.patches[0]?.testedTip)
@@ -92,6 +97,7 @@ test("feature adoption ranks all four categories and shares one cap across upgra
 			},
 		}),
 	)
+
 	// add a competing candidate before applying the shared limit
 	const first = candidates[0]?.report.featureMatches[0]
 	assert.ok(first)
@@ -100,6 +106,7 @@ test("feature adoption ranks all four categories and shares one cap across upgra
 		selectFeatureMatches(candidates, 3).map((entry) => entry.match.kind),
 		["deprecated", "option", "dependency"],
 	)
+
 	// verify that excluded matches retain their limit disposition
 	assert.equal(selectFeatureMatches(candidates, 0).length, 0)
 	assert.equal(candidates[1]?.report.featureMatches[0]?.disposition, "Feature match limit")
@@ -111,6 +118,7 @@ test("two targets of one dependency retain their own verdict, patch and charge",
 	report.modelUsage = [...engine.ledger.usage]
 	const minor = { ...report, to: "1.1.0", verdict: "Untested" as const, patches: [], modelUsage: [] }
 	engine.upgrades.push(minor, report)
+
 	// verify that charges and patches stay with their original targets
 	const result = engine.card({ ...card, upgrades: [report, minor] })
 	assert.ok(result.upgrades[0]?.modelUsage.length)

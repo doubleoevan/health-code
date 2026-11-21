@@ -15,11 +15,13 @@ type StoredSandboxEvent = Omit<Extract<ModelRequestSandboxEvent, { type: "sandbo
 }
 export type SiteEvent = InspectionEvent | ModelRequestSandboxEvent | StoredSandboxEvent
 export type Citation = { label: string; url?: string }
+
 // carry the tested revisions with the published patch link
 export type PatchLink = Pick<Patch, "role" | "digest" | "base" | "prompt" | "prerequisite"> & {
 	testedTip?: string
 	checks?: UpgradeCard["checks"]
 }
+
 // summarize check outcomes and verdict evidence for one upgrade
 export type UpgradeCard = Pick<UpgradeReport, "dependency" | "from" | "to" | "observation"> & {
 	testFileErrors?: { file: string; reason: string }[]
@@ -29,6 +31,7 @@ export type UpgradeCard = Pick<UpgradeReport, "dependency" | "from" | "to" | "ob
 	untestedReason?: string
 	testChanges?: string[]
 	summary?: string
+
 	// cite the release and repository locations supporting each match
 	matches: (Citation & {
 		replacement?: "direct" | "inferred"
@@ -38,6 +41,7 @@ export type UpgradeCard = Pick<UpgradeReport, "dependency" | "from" | "to" | "ob
 		callSites?: Citation[]
 		adoptionOutcome?: string
 	})[]
+
 	// associate new dependencies with the commits that introduced them
 	addedDependencies?: { name: string; version: string; reason: string; commit: string; patch?: string }[]
 	usage?: { modelCost?: number; reserved?: number; outputTokens?: number; partialTokens?: boolean }
@@ -45,6 +49,7 @@ export type UpgradeCard = Pick<UpgradeReport, "dependency" | "from" | "to" | "ob
 	sizeBytes?: number
 	patches: PatchLink[]
 }
+
 // combine baseline and upgrade evidence for the public report
 export type PublishedCard = {
 	promptVersions?: ReportCard["promptVersions"]
@@ -56,6 +61,8 @@ export type PublishedCard = {
 	baselineTestFileErrors?: UpgradeCard["testFileErrors"]
 	turnLimits?: { repair: number; featureAdoption: number }
 	detection?: string
+	registryLookupIssue?: string
+
 	// retain the publication license alongside the measured upgrade results
 	license: string | null
 	upgrades: UpgradeCard[]
@@ -63,14 +70,16 @@ export type PublishedCard = {
 }
 
 type InspectionState = "queued" | "running" | "interrupted" | "failed" | "complete"
+
 // combine persisted state with the events and report visible to visitors
 export type Snapshot = {
 	id: string
 	repositoryUrl: string
 	position?: number | null
 	state: InspectionState
-	// Keep the server snapshot aligned with the resumable event cursor.
 	message: string | null
+
+	// Resume the stream after the last event in this snapshot.
 	events: SiteEvent[]
 	card: PublishedCard | null
 }
@@ -79,6 +88,7 @@ export function toCheckText(check: CheckResult): string {
 	if (check.status === "untested") {
 		return check.detail ?? check.reason
 	}
+
 	// include failing test names when the check identifies them
 	if (check.status === "failed" && check.failingTests.length) {
 		return `failed · ${check.failingTests.map((test) => test.name ?? test.file).join(", ")}`
@@ -88,6 +98,10 @@ export function toCheckText(check: CheckResult): string {
 
 export function toSummary(card: PublishedCard): string {
 	const count = card.upgrades.length
+	if (!count && card.registryLookupIssue) {
+		return card.registryLookupIssue
+	}
+
 	// count blocked installation connections across upgrades
 	const blocked = card.upgrades
 		.flatMap((upgrade) => upgrade.observation.findings)

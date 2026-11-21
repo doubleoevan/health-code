@@ -35,6 +35,7 @@ for (const workspace of workspaces) {
 		if (workspace === target) {
 			continue
 		}
+
 		// reject dependencies on private apps
 		if (dependencies.has(target.name) && isApp(target)) {
 			violations.push(`${relative(".", workspace.folder)}/package.json: ${target.name} is an app`)
@@ -61,6 +62,7 @@ for (const workspace of workspaces) {
 				importPath: imported.path,
 				typeOnly: imported.typeOnly,
 			})
+
 			// attribute an import violation to its source line
 			if (violation) {
 				violations.push(`${relative(".", filePath)}:${imported.line} imports ${imported.path}: ${violation}`)
@@ -68,6 +70,7 @@ for (const workspace of workspaces) {
 		}
 	}
 }
+
 // report all boundary violations together
 if (violations.length > 0) {
 	console.error(violations.join("\n"))
@@ -90,6 +93,7 @@ function toImportViolation({ workspace, filePath, importPath, typeOnly }: Import
 	if (isBuiltin(path) || path === "bun" || path.startsWith("bun:")) {
 		return
 	}
+
 	// check imports that name a workspace directly
 	const packageName = path.match(/^(?:@[^/]+\/)?[^/]+/)?.[0] ?? path
 	const violation = toNamedWorkspaceViolation({ workspace, path, packageName })
@@ -101,6 +105,7 @@ function toImportViolation({ workspace, filePath, importPath, typeOnly }: Import
 	if (local && !contains(workspace.folder, resolve(dirname(filePath), path))) {
 		return "relative and absolute file imports must stay inside their workspace"
 	}
+
 	// resolve aliases before deciding whether an import crosses a boundary
 	const resolved = resolveWorkspaceImport({ workspace, filePath, path })
 	if (resolved && resolved.workspace !== workspace && (path !== resolved.workspace.name || !resolved.external)) {
@@ -109,6 +114,7 @@ function toImportViolation({ workspace, filePath, importPath, typeOnly }: Import
 	if (local || resolved?.workspace === workspace || packageName === workspace.name) {
 		return
 	}
+
 	// check external packages against the importing workspace manifest
 	return toDependencyViolation({ workspace, packageName, filePath, typeOnly })
 }
@@ -127,6 +133,7 @@ function toNamedWorkspaceViolation({
 	if (!target || target === workspace) {
 		return
 	}
+
 	// reject imports of private apps and package internals
 	if (isApp(target)) {
 		return "apps are private to their workspace"
@@ -167,11 +174,13 @@ function toDependencyViolation({
 	if (workspace.runtime.has(packageName)) {
 		return
 	}
+
 	// accept separately declared types for erased imports
 	const typePackage = `@types/${packageName.replace(/^@/, "").replace("/", "__")}`
 	if (typeOnly && (workspace.development.has(typePackage) || workspace.runtime.has(typePackage))) {
 		return
 	}
+
 	// restrict development dependencies to types and development files
 	if (workspace.development.has(packageName)) {
 		if (typeOnly || /\.(?:test|spec|config)\.[cm]?[jt]sx?$/.test(filePath)) {

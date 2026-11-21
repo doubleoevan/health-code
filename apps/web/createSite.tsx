@@ -27,6 +27,7 @@ function render(props: PageProps, assets: Assets): string {
 			<meta name="viewport" content="width=device-width,initial-scale=1" />
 			<title>{title}</title>
 			<link rel="canonical" href={props.url} />
+
 			{/* link previews */}
 			<meta property="og:type" content="website" />
 			<meta property="og:title" content={title} />
@@ -35,12 +36,14 @@ function render(props: PageProps, assets: Assets): string {
 			<meta name="twitter:card" content="summary" />
 			<meta name="twitter:title" content={title} />
 			<meta name="twitter:description" content={description} />
+
 			{/* page stylesheets */}
 			{assets.styles.map((style) => (
 				<link key={style} rel="stylesheet" href={style} />
 			))}
 		</head>,
 	)
+
 	// Escape the script closing delimiter in repository-controlled text.
 	const state = JSON.stringify(props).replaceAll("<", "\\u003c")
 	return `<!doctype html><html lang="en">${head}<body><div id="app">${renderToString(<Page {...props} />)}</div><script id="page-state" type="application/json">${state}</script><script type="module" src="${assets.script}"></script></body></html>`
@@ -68,6 +71,7 @@ function admissionFailure(context: Context, error: unknown, key?: string): Respo
 	if (error instanceof SiteError) {
 		return context.json({ message: error.message }, 400)
 	}
+
 	// translate queue and input failures into client responses
 	if (error instanceof InspectionError && error.code === "queue-full") {
 		return context.json({ message: error.message }, 429)
@@ -86,6 +90,7 @@ export function createSite(options: {
 }): Hono {
 	const { inspections, replay, assets } = options
 	const app = new Hono()
+
 	// Keep external response bodies and request headers out of error logs.
 	app.onError((error, context) =>
 		error instanceof HTTPException
@@ -145,12 +150,14 @@ export function createSite(options: {
 		context.header("Cache-Control", "no-store")
 		return context.html(render({ url: options.origin, replay, snapshot: null, paused: inspections.paused }, assets))
 	})
+
 	// accept bounded repository submissions
 	app.post("/api/inspections", bodyLimit({ maxSize: 4096 }), async (context) => {
 		const type = context.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase()
 		if (type !== "application/json") {
 			return context.json({ message: "Send the repository URL as JSON." }, 415)
 		}
+
 		// Accept public paid submissions only through the configured site hostname.
 		if (launch && !replay && new URL(context.req.url).host !== new URL(options.origin).host) {
 			return context.json({ message: "Submit this repository on the Health Code site." }, 403)
@@ -159,6 +166,7 @@ export function createSite(options: {
 		if (!input) {
 			return context.json({ message: "Enter a public GitHub URL like https://github.com/owner/repository." }, 400)
 		}
+
 		// return a report location as soon as the inspection is queued
 		try {
 			const { id, reused } = launch
@@ -174,6 +182,7 @@ export function createSite(options: {
 			return admissionFailure(context, error, launch?.challengeKey)
 		}
 	})
+
 	// render the latest snapshot on each visit to the report link
 	app.get("/r/:id", (context) => {
 		const id = context.req.param("id")
@@ -191,6 +200,7 @@ export function createSite(options: {
 		}
 		return context.html(render({ snapshot, replay, url: `${options.origin}/r/${id}` }, assets))
 	})
+
 	// resume streaming after the last delivered event
 	app.get("/api/inspections/:id/events", (context) => {
 		const id = context.req.param("id")
@@ -203,6 +213,7 @@ export function createSite(options: {
 		}
 		return streamInspection({ inspections, id, after: Number(input), signal: context.req.raw.signal })
 	})
+
 	// serve recorded output for a single event
 	app.get("/api/inspections/:id/details/:sequence", (context) => {
 		const sequence = context.req.param("sequence")
@@ -216,6 +227,7 @@ export function createSite(options: {
 		context.header("X-Content-Type-Options", "nosniff")
 		return context.text(text)
 	})
+
 	// serve immutable patch downloads by verified digest
 	app.get("/patches/:file", (context) => {
 		const digest = /^([0-9a-f]{64})\.patch$/.exec(context.req.param("file"))?.[1]

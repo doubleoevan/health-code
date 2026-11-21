@@ -13,7 +13,9 @@ export function toSandboxPrefix(deployment: string): string {
 	return `hc-site-${deployment}-`
 }
 
-/** Reclaims abandoned allocations before the single deployment worker starts. */
+/**
+ * Reclaims abandoned deployment sandboxes at startup and during scheduled cleanup.
+ */
 export async function reconcileSandboxes(options: {
 	deployment: string
 	token: string
@@ -26,12 +28,14 @@ export async function reconcileSandboxes(options: {
 	if (options.createdBefore !== undefined && !options.firstSeen) {
 		throw new InspectionError("cleanup-inventory", "Scheduled cleanup requires a persistent firstSeen map")
 	}
+
 	// restrict runtime inventory to the selected deployment
 	const prefix = toSandboxPrefix(options.deployment)
 	const origin = "https://api.runta.com/v2/runtimes"
 	const request = options.fetch ?? fetch
 	const headers = { Authorization: `Bearer ${options.token}` }
 	const url = new URL(origin)
+
 	// request bounded pages and retain ids for deferred deletion
 	url.searchParams.set("limit", "100")
 	const cursors = new Set<string>()
@@ -45,6 +49,7 @@ export async function reconcileSandboxes(options: {
 			await response.body?.cancel()
 			throw new InspectionError("cleanup-inventory", "Unable to list deployment sandboxes")
 		}
+
 		// separate abandoned deployment runtimes from live inspections
 		const page = runtimePage.parse(await response.json())
 		for (const id of orphanedRuntimeIds(page.data, { prefix, observed, ...options })) {
@@ -53,6 +58,7 @@ export async function reconcileSandboxes(options: {
 		if (!page.pagination.has_more) {
 			break
 		}
+
 		// require a fresh cursor before requesting the next inventory page
 		const cursor = page.pagination.next_cursor
 		if (!cursor || cursors.has(cursor)) {
@@ -64,6 +70,7 @@ export async function reconcileSandboxes(options: {
 
 	updateObservedTimes(options.firstSeen, observed)
 	await deleteOrphans({ orphanIds, request, headers, origin })
+
 	// Remove allocations only after deletion has been confirmed.
 	for (const id of orphanIds) {
 		options.firstSeen?.delete(id)
@@ -102,6 +109,7 @@ async function deleteOrphans({
 				signal: AbortSignal.timeout(15000),
 			})
 			await response.body?.cancel()
+
 			// accept a missing runtime as already reclaimed
 			if (!response.ok && response.status !== 404) {
 				incomplete = true
@@ -110,6 +118,7 @@ async function deleteOrphans({
 			incomplete = true
 		}
 	}
+
 	// report any remaining cleanup failure after processing the inventory
 	if (incomplete) {
 		throw new InspectionError("cleanup-failed", "Unable to delete every deployment sandbox")
@@ -131,15 +140,18 @@ function* orphanedRuntimeIds(
 		if (!runtime.display_name.startsWith(options.prefix) || !z.uuid().safeParse(suffix).success) {
 			continue
 		}
+
 		// Use observation time as a conservative lower bound if inventory omits creation time.
 		// Remember only unleased allocations that may need a later age check.
 		if (options.liveInspectionIds.has(suffix)) {
 			continue
 		}
+
 		// Use first observation when the provider omits creation time.
 		const timestamp = Date.parse(runtime.created_at ?? "")
 		const observed = Number.isFinite(timestamp) ? timestamp : (options.firstSeen?.get(runtime.id) ?? Date.now())
 		options.observed.set(runtime.id, observed)
+
 		// Leave younger unleased runtimes visible to the next sweep.
 		if (options.createdBefore !== undefined && observed >= options.createdBefore) {
 			continue

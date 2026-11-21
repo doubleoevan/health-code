@@ -13,10 +13,12 @@ bun run --cwd packages/health-code prepack
 for path in ./packages/health-code ./apps/mcp; do
   npm pack "$path" --ignore-scripts --json --pack-destination "$artifacts" > "$artifacts/$(basename "$path").json"
 done
+
 # Require a README and only publishable artifacts in each tarball.
 for name in health-code mcp; do
   jq -e '.[0].files | any(.path=="README.md") and all(.path | test("(^|/)([.]env([.][^/]*)?|node_modules|fixtures|src|test)(/|$)")|not)' "$artifacts/$name.json" >/dev/null
 done
+
 # Run the clean consumer against the same tarballs that will be staged.
 HEALTH_CODE_RELEASE_ARTIFACTS="$artifacts" bun test apps/mcp/package.test.ts
 
@@ -46,15 +48,18 @@ test -z "${NODE_AUTH_TOKEN:-}${NPM_TOKEN:-}"
 registry=https://registry.npmjs.org
 
 pending=()
+
 # Verify any already public sibling before staging the remaining tarballs.
 for name in health-code mcp; do
   manifest="$artifacts/$name.json"
   package=$(jq -r '.[0].name' "$manifest")
   archive=$(jq -r '.[0].filename' "$manifest")
+
   # Compare against the exact tarball that passed the package smoke test.
   digest=$(jq -r '.[0].integrity' "$manifest")
   endpoint="$registry/$(jq -nr --arg package "$package" '$package|@uri')/$version"
   status=$(curl --silent --show-error --output "$artifacts/registry.json" --write-out '%{http_code}' "$endpoint")
+
   # Resume only after checking any prior publication against this build.
   if [[ "$status" == 404 ]]; then
     if [[ "$1" == "--verify-public" ]]; then
@@ -64,15 +69,18 @@ for name in health-code mcp; do
     pending+=("$archive")
     continue
   fi
+
   # Reject registry failures and compare confirmed public bytes.
   test "$status" = 200
   test "$digest" = "$(jq -r .dist.integrity "$artifacts/registry.json")"
+
   # Verify the signed registry provenance before checking its workflow claims.
   proof=$(jq -er '.dist.attestations.url' "$artifacts/registry.json")
   [[ "$proof" == https://registry.npmjs.org/-/npm/v1/attestations/* ]]
   mkdir -p "$artifacts/verify"
   (cd "$artifacts/verify" && npm install --ignore-scripts --no-audit --registry="$registry" "$package@$version" && npm audit signatures --registry="$registry")
   curl --fail --silent --show-error "$proof" -o "$artifacts/proof.json"
+
   # Bind the attested workflow, Git ref and resolved commit to the checked-out tag.
   jq -er '.attestations[] | select(.predicateType=="https://slsa.dev/provenance/v1") | .bundle.dsseEnvelope.payload | @base64d | fromjson | .predicate.buildDefinition' "$artifacts/proof.json" > "$artifacts/build.json"
   jq -e --arg ref "$GITHUB_REF" --arg sha "$(git rev-parse HEAD)" '

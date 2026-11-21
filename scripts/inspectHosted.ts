@@ -10,6 +10,7 @@ const repositories = [
 	"sindresorhus/ky",
 	"vercel/nextjs-postgres-nextauth-tailwindcss-template",
 ]
+
 // Persist public evidence from each completed browser case.
 type Evidence = {
 	id: string
@@ -19,11 +20,13 @@ type Evidence = {
 	verdicts: string[]
 	promptVersions: NonNullable<Snapshot["card"]["promptVersions"]>
 }
+
 // Read only the report fields needed by the acceptance checks.
 type Snapshot = {
 	id: string
 	state: string
 	events: { type: string; action?: string; sandboxId?: string; inspectionId: string }[]
+
 	// Inspect the published fields that a signed-out reviewer can see.
 	card: {
 		repository: { url: string; commit: string }
@@ -40,6 +43,7 @@ async function submit(page: Page, repository: string): Promise<{ path: string; r
 	)
 	await button.click()
 	let admission = await response
+
 	// Complete the real widget on the configured host and submit through the ordinary form.
 	if (admission.status() === 403 && (await admission.json()).siteKey) {
 		console.log("Waiting for verification in the opened browser. Complete the widget if prompted.")
@@ -63,6 +67,7 @@ async function verifyCleanup(options: { inspectionId: string; deployment: string
 	url.searchParams.set("limit", "100")
 	const seen = new Set<string>()
 	const name = `hc-site-${options.deployment}-${options.inspectionId}`
+
 	// Page the provider's inventory independently of the site's recorded teardown event.
 	for (;;) {
 		const response = await fetch(url, {
@@ -87,6 +92,7 @@ async function verifyCleanup(options: { inspectionId: string; deployment: string
 		if (inventory.pagination.has_more === false) {
 			return
 		}
+
 		// Require inventory pagination to advance.
 		const cursor = inventory.pagination.next_cursor
 		assert.ok(typeof cursor === "string" && cursor && !seen.has(cursor))
@@ -102,17 +108,20 @@ async function inspect(
 	await page.goto(options.origin)
 	const { path, reused } = await submit(page, options.repository)
 	await page.waitForURL(options.origin + path)
+
 	// Wait for terminal SSR and retain rendered verdict coverage only.
 	await page
 		.getByRole("heading", { level: 1, name: /upgrades? inspected|Inspection failed|Inspection interrupted/ })
 		.waitFor({ timeout: 2400000 })
 	const snapshot: Snapshot = JSON.parse((await page.locator("#page-state").textContent()) ?? "{}").snapshot
 	assert.equal(snapshot.state, "complete")
+
 	// Verify the commit and provenance shown to a signed-out reader.
 	assert.equal(snapshot.card.repository.url, `https://github.com/${options.repository}`)
 	assert.match(snapshot.card.repository.commit, /^[a-f0-9]{40}$/)
 	const versions = snapshot.card.promptVersions
 	assert.ok(versions && Array.isArray(versions.model), "Missing prompt provenance")
+
 	// Inspect visible explanations alongside their published reports.
 	const text = await page.locator("main").innerText()
 	const verdicts: string[] = []
@@ -120,12 +129,14 @@ async function inspect(
 		const { verdict } = upgrade
 		assert.ok(verdict && text.includes(verdict), "Verdict missing from rendered card")
 		verdicts.push(verdict)
+
 		// Require the actual diagnostic for an inconclusive or unsuccessful upgrade.
 		if (verdict === "Untested" || verdict === "Can't fix") {
 			const reason = verdict === "Untested" ? upgrade.untestedReason : upgrade.reason
 			assert.ok(reason && text.includes(reason), "Verdict explanation missing from rendered card")
 		}
 	}
+
 	// Open the same provenance disclosure a reviewer uses and check each dispatched version.
 	await page.locator("summary", { hasText: "Prompt versions" }).click()
 	const provenance = await page
@@ -138,6 +149,7 @@ async function inspect(
 			provenance.includes(ref.name) && provenance.includes(`v${ref.version}`) && provenance.includes(ref.sha256),
 		)
 	}
+
 	// Match the recorded deletion to the runtime that was created for this library inspection.
 	const created = snapshot.events.find((event) => event.type === "sandbox.event" && event.action === "created")
 	assert.ok(

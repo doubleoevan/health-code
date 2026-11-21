@@ -21,6 +21,7 @@ function staysInProject(path: string, links: FileLinks): boolean {
 		if (!part || part === ".") {
 			continue
 		}
+
 		// reject traversal outside the project before expanding links
 		directory = posix.join(directory, part)
 		if (!isProjectPath(directory)) {
@@ -36,6 +37,7 @@ function staysInProject(path: string, links: FileLinks): boolean {
 		if (!target || followed > 40) {
 			return false
 		}
+
 		// resolve the target relative to its link's parent
 		directory = target.startsWith("/") ? "/" : posix.dirname(directory)
 		remaining.push(...target.split("/").reverse())
@@ -45,6 +47,7 @@ function staysInProject(path: string, links: FileLinks): boolean {
 
 function hasLinkedParent(path: string, links: FileLinks): boolean {
 	let parent = posix.dirname(path)
+
 	// inspect each ancestor for a recorded link
 	while (parent !== "/") {
 		if (links.has(parent)) {
@@ -52,6 +55,7 @@ function hasLinkedParent(path: string, links: FileLinks): boolean {
 		}
 		parent = posix.dirname(parent)
 	}
+
 	// finish once traversal reaches the filesystem root
 	return false
 }
@@ -75,6 +79,7 @@ function recordLinkChange(change: LinkChange): void {
 		links.set(first, links.has(first) ? undefined : target)
 		return
 	}
+
 	// invalidate targets affected by unlink or rename
 	if (call.startsWith("unlink") && links.has(first)) {
 		links.set(first, undefined)
@@ -88,6 +93,7 @@ function invalidateMovedLinks({ call, line, paths: [first, second], links }: Lin
 	if (!first || !second) {
 		return
 	}
+
 	// Invalidate targets when their names or containing directories move.
 	const rename = call.startsWith("rename")
 	const exchange = line.includes("RENAME_EXCHANGE")
@@ -99,6 +105,7 @@ function invalidateMovedLinks({ call, line, paths: [first, second], links }: Lin
 				links.set(link, undefined)
 			}
 		}
+
 		// invalidate links beneath the destination of a rename
 		if (rename && containsPath(second, link)) {
 			links.set(link, undefined)
@@ -109,7 +116,9 @@ function invalidateMovedLinks({ call, line, paths: [first, second], links }: Lin
 	}
 }
 
-/** Tracks observed link targets and checks which path operations stay attributable. */
+/**
+ * Tracks observed link targets and checks which path operations stay attributable.
+ */
 export function trackFileLinks(options: LinkChange): boolean {
 	const { call, links } = options
 	const paths = options.paths.map((path) => posix.normalize(path))

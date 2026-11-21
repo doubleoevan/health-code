@@ -12,11 +12,13 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 	const store = new InspectionStore(":memory:")
 	const app = site(store)
 	const output = await replay.inspect(repository, () => {})
+
 	// require a recorded upgrade for the rendering scenarios
 	const upgrade = output.report.upgrades[0]
 	if (!upgrade) {
 		throw new Error("fixture requires an upgrade")
 	}
+
 	// exercise workspace versions and partial installation evidence
 	upgrade.from = { "workspace-a": "1.0", "workspace-b": "1.1" }
 	upgrade.observation = {
@@ -27,6 +29,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			{ kind: "connection", destination: "example.net", outcome: "unknown" },
 		],
 	}
+
 	// include unsafe release text and separate turn limits
 	upgrade.releaseSummary.text = "</script><script>alert(1)</script>"
 	output.report.limits = {
@@ -37,6 +40,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			featureAdoption: { maxTurns: 0, maxDurationMs: 0, maxCostUsd: 0 },
 		},
 	}
+
 	// Publish the runtime usage cutoff with the saved report.
 	output.report.runtimeUsage = {
 		usageAsOf: "2026-11-20T10:42:00.000Z",
@@ -44,6 +48,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 		modelCostUsd: 0,
 		modelReservedUsd: 0,
 	}
+
 	// include unavailable size evidence and a test file error
 	upgrade.installSize = { reason: "Size measurement unavailable" }
 	upgrade.tests.inventory = {
@@ -55,6 +60,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 	if (!match || !patchForReview) {
 		throw new Error("The review fixture requires a Feature Match and a Patch")
 	}
+
 	// attach a direct quotation and affected call sites to the match
 	match.replacement = "direct"
 	match.directQuote = "Replace the old configuration with the built-in defaults."
@@ -67,6 +73,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			commit: patchForReview.commits[0]?.sha ?? "commit",
 		},
 	]
+
 	// supply repair, usage and patch verification evidence
 	upgrade.diagnosis = { breakingChange: "Configuration changed", actions: [], stopReason: "Turn limit reached" }
 	upgrade.modelUsage.push({ role: "repair", modelId: "fixture", step: "repair", durationMs: 2, reservedUsd: 0.004 })
@@ -76,6 +83,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 		testNetwork: upgrade.observation,
 		addedCases: [],
 	}
+
 	// render the published report for each possible verdict
 	for (const verdict of ["Passes as is", "Fixed", "Fixed with test changes", "Can't fix", "Untested"] as const) {
 		upgrade.verdict = verdict
@@ -137,10 +145,12 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 		]) {
 			expect(html).toContain(expected)
 		}
+
 		// reject a false empty state and unescaped release text
 		expect(html).not.toContain("No findings.")
 		expect(html).not.toContain(upgrade.releaseSummary.text)
 	}
+
 	// render the same evidence without a publication license
 	const withheld = store.enqueue(repository)
 	store.finish(withheld, publishReport(output, null))
@@ -149,6 +159,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 	expect(html).not.toContain(upgrade.patches[0]?.prompt ?? "Copy patch instructions")
 	expect(html).not.toContain("/patches/")
 	expect((await app.request(`/patches/${"0".repeat(64)}.patch`)).status).toBe(404)
+
 	// check that changing the mailbox invalidates the recorded digest
 	const patch = upgrade.patches[0]
 	if (!patch) {
@@ -163,12 +174,14 @@ test("unsupported and ambiguous projects preserve detection reasons without upgr
 	const output = await replay.inspect(repository, () => {})
 	const store = new InspectionStore(":memory:")
 	const app = site(store)
+
 	// preserve each detection failure on an otherwise empty report
 	for (const reason of ["missing root package manifest", "ambiguous package manager"]) {
 		output.report.upgrades = []
 		output.report.packageManager = { reason }
 		const id = store.enqueue(repository)
 		store.finish(id, publishReport(output, null))
+
 		// verify the page explains the reason and supported languages
 		const html = await (await app.request(`/r/${id}`)).text()
 		expect(html).toContain(reason)
@@ -192,6 +205,7 @@ test("a saved model request sandbox startup is shown once in the pinned list and
 	}
 	const html = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: false, events: [event] }))
 	expect(html.split(detail)).toHaveLength(3)
+
 	// Replay the original action and detail from an earlier saved Inspection.
 	const historical: SiteEvent = {
 		...event,
@@ -200,4 +214,70 @@ test("a saved model request sandbox startup is shown once in the pinned list and
 	}
 	const replayed = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: false, events: [historical] }))
 	expect(replayed.split(detail)).toHaveLength(3)
+})
+
+test("an empty report explains registry failure on the shared report page", async () => {
+	const output = await replay.inspect(repository, () => {})
+	const store = new InspectionStore(":memory:")
+	const app = site(store)
+	output.report.upgrades = []
+	const reason = "Couldn’t list available upgrades: registry lookup timed out after 60s."
+	output.report.selection.registryLookupIssue = reason
+
+	// Exercise publication, persistence, server rendering and the share title.
+	const id = store.enqueue(repository)
+	store.finish(id, publishReport(output, null))
+	const html = await (await app.request(`/r/${id}`)).text()
+	expect(html).toContain(`<h1>${reason}</h1>`)
+	expect(html).toContain(`property="og:title" content="Health Code: ${reason}"`)
+	expect(html).toContain(`name="twitter:title" content="Health Code: ${reason}"`)
+	expect(html).not.toContain("No upgrades inspected")
+
+	// Preserve the recorded timeout when opening a card saved with the earlier field name.
+	store.database
+		.query(
+			"UPDATE inspections SET report = json_remove(json_set(report, '$.discoveryIssue', ?), '$.registryLookupIssue') WHERE id = ?",
+		)
+		.run(reason, id)
+	expect(store.snapshot(id)?.card?.registryLookupIssue).toBe(reason)
+
+	// Recover the registry failure from an older inspection’s timeline.
+	delete output.report.selection.registryLookupIssue
+	const previous = store.enqueue(repository)
+	store.append(previous, {
+		type: "step.finished",
+		version: 1,
+		sequence: 1,
+		inspectionId: previous,
+		timestamp: new Date().toISOString(),
+		stepId: "1",
+		summary: "registry",
+		status: "failed",
+		durationMs: 59100,
+	})
+	store.finish(previous, publishReport(output, null))
+	const previousHtml = await (await app.request(`/r/${previous}`)).text()
+	expect(previousHtml).toContain("Couldn’t list available upgrades: registry lookup failed.")
+	expect(previousHtml).not.toContain("No upgrades inspected")
+	store.database.close()
+})
+
+test("the live and saved timelines label registry lookup and its partial results", () => {
+	const base = { version: 1 as const, inspectionId: "recorded", timestamp: new Date(0).toISOString(), stepId: "1" }
+	const started: SiteEvent = { ...base, sequence: 1, type: "step.started", label: "registry" }
+	const finished: SiteEvent = {
+		...base,
+		sequence: 2,
+		type: "step.finished",
+		summary: "registry",
+		status: "untested",
+		durationMs: 500,
+	}
+	const live = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: true, events: [started] }))
+	expect(live).toContain("Find available upgrades")
+
+	// Keep the public event status while showing the reader which stage was incomplete.
+	const saved = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: false, events: [finished] }))
+	expect(saved).toContain("Find available upgrades")
+	expect(saved).toContain("Incomplete · 0.5s")
 })

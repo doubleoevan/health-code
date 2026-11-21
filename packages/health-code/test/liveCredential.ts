@@ -17,6 +17,7 @@ test("the live gateway authenticates only while the scoped model stub is attache
 		await provider.prepareRepository(sandbox, "https://github.com/doubleoevan/health-code", operation)
 		await provider.setNetworkPolicy(sandbox, registryHosts, operation)
 		await provider.resetProject(sandbox, operation)
+
 		// bind the configured credential name to the intended model endpoint
 		const name = process.env.HEALTH_CODE_STORED_CREDENTIAL
 		assert.ok(name)
@@ -38,6 +39,7 @@ test("the live gateway authenticates only while the scoped model stub is attache
 				provider.executeCommand(sandbox, { ...operation, argv: ["true"] }),
 				/Registry policy required/,
 			)
+
 			// verify the authenticated model and its usage receipt
 			const reply = await session.verify(operation)
 			assert.equal(reply.modelId, route.modelId)
@@ -45,6 +47,7 @@ test("the live gateway authenticates only while the scoped model stub is attache
 		} finally {
 			await session.close(operation)
 		}
+
 		// check that repository commands resume after closing the session
 		assert.equal((await provider.executeCommand(sandbox, { ...operation, argv: ["true"] })).exitCode, 0)
 		console.log("Live credential probe authenticated only with binding attached")

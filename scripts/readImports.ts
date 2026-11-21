@@ -2,7 +2,9 @@ import { type Node, parseSync, Visitor } from "oxc-parser"
 
 type SourceImport = { path: string; line: number; typeOnly: boolean }
 
-/** Reads literal module specifiers, including types erased by the transpiler. */
+/**
+ * Reads literal module specifiers, including types erased by the transpiler.
+ */
 export function readImports(filePath: string, text: string): SourceImport[] {
 	// reject incomplete syntax trees before checking module boundaries
 	const source = parseSync(filePath, text, { sourceType: "unambiguous" })
@@ -58,6 +60,7 @@ export function readImports(filePath: string, text: string): SourceImport[] {
 		TSImportType(node) {
 			record(node.source, true)
 		},
+
 		// include dynamic imports and literal require calls
 		ImportExpression(node) {
 			record(node.source)

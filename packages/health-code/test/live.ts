@@ -22,6 +22,7 @@ for (const [url, commit] of [
 			sandboxProvider,
 			limits: { maxUpgrades: 0, maxDurationMs: 540000 },
 		})
+
 		// confirm the pinned baseline produced installation evidence
 		assert.equal(card.repository.commit, commit)
 		assert.ok("name" in card.packageManager, JSON.stringify(card.packageManager))
@@ -30,6 +31,7 @@ for (const [url, commit] of [
 			// Exercise oxlint's sparse allocator through Nano ID's pinned test script.
 			assert.equal(card.baseline.tests.status, "passed", JSON.stringify(card.baseline.tests))
 		}
+
 		// report cleanup, elapsed time and the provider cost estimate
 		assert.ok(card.timeline.some((e) => e.type === "sandbox.event" && e.action === "deleted"))
 		console.log(

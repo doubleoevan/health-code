@@ -17,10 +17,12 @@ export class InspectionStore {
 		this.database = new Database(path, { create: true, strict: true })
 		this.database.run("PRAGMA journal_mode=WAL")
 		const version = this.database.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version
+
 		// Capture committed pages and WAL contents before upgrading a persisted schema.
 		if ((version === 1 || version === 2) && path !== ":memory:") {
 			this.database.query("VACUUM INTO ?").run(`${path}.v${version}.${randomUUID()}.backup`)
 		}
+
 		// create the queue, event log and patch store in one transaction
 		if (version === 0) {
 			this.database.transaction(() =>
@@ -35,6 +37,7 @@ export class InspectionStore {
 		} else if (version !== 1 && version !== 2 && version !== 3) {
 			throw new Error("Unsupported inspection database version")
 		}
+
 		// add storage for the original library report
 		if (version === 0 || version === 1) {
 			this.database.transaction(() =>
@@ -46,6 +49,7 @@ export class InspectionStore {
 		if (version !== 3) {
 			migrateAdmissions(this.database)
 		}
+
 		// Attach the admission ledger to this same SQLite connection.
 		this.admission = new AdmissionLedger(this.database)
 	}
@@ -59,6 +63,7 @@ export class InspectionStore {
 				.get(id)?.position ?? null
 		)
 	}
+
 	// Recover the pinned revision after a worker restart.
 	checkout(id: string): { revision: string; repositoryId: string } | null {
 		return this.database
@@ -80,6 +85,7 @@ export class InspectionStore {
 		if (this.queueFull()) {
 			throw new InspectionError("queue-full", "The inspection queue is full. Try again after an inspection starts.")
 		}
+
 		// retry id collisions without replacing another inspection
 		for (;;) {
 			const id = this.makeId()
@@ -93,6 +99,7 @@ export class InspectionStore {
 			}
 		}
 	}
+
 	// claim the oldest waiting inspection in one update
 	claim(): StoredRow | null {
 		return this.database
@@ -101,6 +108,7 @@ export class InspectionStore {
 			)
 			.get()
 	}
+
 	// Preserve FIFO order and the hold when dispatch needs a fresh admission check.
 	requeue(id: string): void {
 		this.database
@@ -117,6 +125,7 @@ export class InspectionStore {
 						"SELECT id,repositoryUrl,max(0,unixepoch('now')-unixepoch(updated))*1000 durationMs FROM inspections WHERE state='running'",
 					)
 					.all()
+
 				// Mark and report exactly the inspections claimed by the previous process.
 				this.database
 					.query("UPDATE inspections SET state='interrupted',message=?,updated=CURRENT_TIMESTAMP WHERE state='running'")
@@ -132,12 +141,14 @@ export class InspectionStore {
 			this.database
 				.query("INSERT INTO events VALUES(?,?,?) ON CONFLICT DO NOTHING")
 				.run(id, event.sequence, JSON.stringify(event))
+
 			// associate the public id with the library id at startup
 			if (event.type === "inspection.started") {
 				this.database.query("UPDATE inspections SET libraryId=? WHERE id=?").run(event.inspectionId, id)
 			}
 		})()
 	}
+
 	// fetch the current inspection row by its public id
 	row(id: string): StoredRow | null {
 		return this.database.query<StoredRow, [string]>("SELECT * FROM inspections WHERE id=?").get(id)
@@ -149,17 +160,38 @@ export class InspectionStore {
 			if (!row) {
 				return null
 			}
+			const events = this.publicEvents(id, 0)
+			const card: Snapshot["card"] = row.report ? JSON.parse(row.report) : null
+
+			// Preserve the reason on cards saved with the earlier field name.
+			if (card && !card.registryLookupIssue && "discoveryIssue" in card && typeof card.discoveryIssue === "string") {
+				card.registryLookupIssue = card.discoveryIssue
+			}
+
+			// Recover the reason from the timeline when an empty card has none.
+			if (
+				card &&
+				!card.registryLookupIssue &&
+				!card.upgrades.length &&
+				events.some(
+					(event) => event.type === "step.finished" && event.summary === "registry" && event.status === "failed",
+				)
+			) {
+				card.registryLookupIssue = "Couldn’t list available upgrades: registry lookup failed."
+			}
+
 			return {
 				id: row.id,
 				state: row.state,
 				position: this.position(id),
 				message: row.message,
 				repositoryUrl: row.repositoryUrl,
-				events: this.publicEvents(id, 0),
-				card: row.report ? JSON.parse(row.report) : null,
+				events,
+				card,
 			}
 		})()
 	}
+
 	// look up the state without loading the event history
 	state(id: string): Snapshot["state"] | undefined {
 		return this.database
@@ -179,6 +211,7 @@ export class InspectionStore {
 		// page by event sequence and decode the filtered payloads
 		return events.all(id, after, limit).map((row) => JSON.parse(row.payload))
 	}
+
 	// reveal raw detail text only after license verification
 	detail(id: string, sequence: number): string | null {
 		return (
@@ -187,6 +220,7 @@ export class InspectionStore {
    SELECT json_extract(payload,'$.text') AS text FROM events JOIN inspections USING(id)
    WHERE id=? AND sequence=? AND json_extract(report,'$.license') IS NOT NULL AND json_extract(payload,'$.type')='detail'
    `)
+
 				// return null if the event lacks a public detail
 				.get(id, sequence)?.text ?? null
 		)
@@ -198,20 +232,24 @@ export class InspectionStore {
 			if (report.version === 2) {
 				this.admission.settle(id, report.runtimeUsage)
 			}
+
 			// Store immutable patch bytes alongside their source report.
 			this.database.query("INSERT INTO source_reports VALUES(?,?)").run(id, JSON.stringify(publication.original))
 			for (const [digest, bytes] of publication.blobs) {
 				this.database.query("INSERT INTO patches VALUES(?,?) ON CONFLICT DO NOTHING").run(digest, bytes)
 			}
+
 			// mark the inspection complete with its public projection
 			this.database
 				.query("UPDATE inspections SET state='complete',report=?,updated=CURRENT_TIMESTAMP WHERE id=?")
 				.run(JSON.stringify(publication.card), id)
 		})()
 	}
+
 	// record the terminal failure message for reconnecting clients
 	fail(input: { id: string; message: string; dispatched: boolean; failure?: InspectionError }): void {
 		const { id, message, dispatched, failure } = input
+
 		// Commit accounting, missing events and the terminal state together for safe retries.
 		this.database.transaction(() => {
 			if (!dispatched) {
@@ -224,12 +262,14 @@ export class InspectionStore {
 					this.append(id, event)
 				}
 			}
+
 			// Store only the message intended for public display.
 			this.database
 				.query("UPDATE inspections SET state='failed',message=?,updated=CURRENT_TIMESTAMP WHERE id=?")
 				.run(message, id)
 		})()
 	}
+
 	// look up the exact bytes for a verified patch digest
 	patch(digest: string): Uint8Array | null {
 		return (

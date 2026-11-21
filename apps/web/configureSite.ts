@@ -40,12 +40,14 @@ export function createLiveSource(
 			"Configure HEALTH_CODE_DEPLOYMENT, RUNTA_TOKEN, ANTHROPIC_API_KEY and HEALTH_CODE_STORED_CREDENTIAL before starting the live site",
 		)
 	}
+
 	// restrict the hosted service to its budgeted model
 	const hostedModel = "claude-opus-5-5"
 	const modelId = environment.HEALTH_CODE_MODEL ?? hostedModel
 	if (modelId !== hostedModel) {
 		throw new Error("The hosted inspection requires Claude Opus 5.5")
 	}
+
 	// bind host requests to the fixed endpoint and reject redirects
 	const baseUrl = "https://api.anthropic.com/v1"
 	const provider = createAnthropic({
@@ -57,6 +59,7 @@ export function createLiveSource(
 			{ preconnect: fetch.preconnect },
 		),
 	})
+
 	// share price bounds between host handles and credential-bound guest routes
 	const pricing = { inputUsdPerMillion: 4, outputUsdPerMillion: 20, maxInputTokens: 65536 }
 	const host = { model: provider(modelId), pricing }
@@ -67,6 +70,7 @@ export function createLiveSource(
 		credential: { name, header: "x-api-key", valueTemplate: `\${credential}` },
 		pricing,
 	}
+
 	// configure per-inspection spend, duration and upgrade limits
 	const sandboxProvider = createSandboxProvider({ deployment, token })
 	const limits = {
@@ -78,6 +82,7 @@ export function createLiveSource(
 	if (!Number.isSafeInteger(limits.maxUpgrades)) {
 		throw new Error("Expected a whole-number upgrade limit")
 	}
+
 	// bind github lookup and sandbox recovery to the hosted deployment
 	const githubToken = environment.GITHUB_TOKEN
 	const firstSeen = new Map<string, number>()
