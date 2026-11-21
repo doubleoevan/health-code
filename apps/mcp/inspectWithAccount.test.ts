@@ -1,10 +1,9 @@
 import assert from "node:assert/strict"
-import { readFile } from "node:fs/promises"
-import { mock, test } from "node:test"
-import { createFakeSandboxProvider, type FixtureCommand, type SandboxFixture } from "health-code"
+import { test } from "node:test"
+import { createFakeSandboxProvider, InspectionError } from "health-code"
 import { fetchPatch } from "./fetchPatch.ts"
+import { modelRequestSandboxFixture } from "./fixtures/modelRequestSandboxInspection.ts"
 import { inspectWithAccount } from "./inspectWithAccount.ts"
-import { secretName } from "./modelSettings.ts"
 import { cardSchema, toHash } from "./storeInspection.ts"
 
 test("the paid entry point routes each credential and closes the guest binding on a replay", async () => {
@@ -13,164 +12,12 @@ test("the paid entry point routes each credential and closes the guest binding o
 		ANTHROPIC_API_KEY: "synthetic-model-key",
 		GITHUB_TOKEN: "synthetic-github-token",
 	}
-	// load recorded commands for the inspected project
 	const repositoryUrl = "https://github.com/example/project"
-	const fixture: SandboxFixture = JSON.parse(
-		await readFile(new URL("../../scripts/fixtures/recorded/inspection.json", import.meta.url), "utf8"),
+	const { provider, phases, mailbox, requested, restore } = await modelRequestSandboxFixture(
+		createFakeSandboxProvider,
+		environment.GITHUB_TOKEN,
 	)
-	const [detect, registry, install, , report, bump] = fixture.commands
-	assert.ok(detect && registry && install && report && bump)
-	// prepare matching source and release evidence for the fixture
-	const source = "index.ts"
-	const summarySource = "https://github.com/example/widget/releases/tag/v1.3.0"
-	const evidence = { complete: true, findings: [], destinations: [] }
-	const guest = detect.argv.slice(0, 2)
-	function command(args: string[], value: unknown): FixtureCommand {
-		return {
-			argv: [...guest, ...args],
-			result: { stdout: JSON.stringify(value) },
-			connections: evidence,
-		}
-	}
-	// replay a passing test inventory before and after the bump
-	const size = command(["installed-size"], 100)
-	const tests = command(["tests", "--inventory"], {
-		counts: { passed: 1, failed: 0, skipped: 0, todo: 0 },
-		testFileErrors: [],
-	})
-	const inventory = command(["integrity", "0"], {
-		files: ["package.json", "package-lock.json", source],
-		hooks: [],
-		cases: [["a.test.ts", "example", "passed"]],
-		testFileErrors: [],
-	})
-	const usage = command(["usage", "widget"], {
-		usage: [{ file: source, line: 1, symbol: "widget", workspace: ".", text: "widget()" }],
-		changelog: "",
-		unresolved: [],
-	})
-	// order guest responses to match the inspection phases
-	const commands = [
-		detect,
-		registry,
-		usage,
-		install,
-		size,
-		tests,
-		report,
-		inventory,
-		bump,
-		command(["changelog", "widget"], ""),
-		size,
-		tests,
-		report,
-		bump,
-		install,
-		tests,
-		report,
-		inventory,
-	]
-	const provider = createFakeSandboxProvider({
-		...fixture,
-		commands: commands.map((entry) => ({ ...entry, connections: evidence })),
-	})
-	// emulate the patch workspace at its inspected and upgraded revisions
-	const mailbox = "From abc fixture\nSubject: [PATCH] upgrade widget\n"
-	provider.patchWorkspace = async (_sandbox, request) => {
-		switch (request.kind) {
-			case "commit":
-				return "b".repeat(40)
-			case "export":
-				return mailbox
-			// return revision-specific manifest and source contents
-			case "read":
-				if (request.file === "package.json") {
-					return JSON.stringify({ dependencies: { widget: request.revision === fixture.commit ? "1.2.0" : "1.3.0" } })
-				}
-				assert.equal(request.file, source)
-				return "widget()"
-			// acknowledge verification and restoration of the fixture
-			case "verify":
-				return request.tip
-			case "restore":
-				return null
-			default:
-				throw new Error("Unexpected workspace operation")
-		}
-	}
-	// record the lifetime of the host-bound credential session
-	const phases: string[] = []
-	provider.openCredentialSession = async (_sandbox, route) => {
-		assert.equal(route.credential.name, secretName("https://api.anthropic.com"))
-		assert.equal(route.baseUrl, "https://api.anthropic.com/v1")
-		assert.ok(!JSON.stringify(route).includes(environment.ANTHROPIC_API_KEY))
-		phases.push("open")
-		// supply model replies with measured token usage
-		const reply = { modelId: route.modelId, inputTokens: 1, outputTokens: 1 }
-		return {
-			async verify(): Promise<typeof reply & { text: string }> {
-				phases.push("verify")
-				return { ...reply, text: "OK" }
-			},
-			async generate(prompt): Promise<typeof reply & { text: string }> {
-				phases.push("generate")
-				assert.ok(!prompt.includes(environment.ANTHROPIC_API_KEY))
-				return { ...reply, text: JSON.stringify({ reason: "No suitable edit", edits: [] }) }
-			},
-			async close(): Promise<void> {
-				phases.push("close")
-			},
-		}
-	}
-	// intercept requests and check credentials at each destination
-	const requested: string[] = []
-	const request = mock.method(globalThis, "fetch", async (input: string | URL, init?: RequestInit) => {
-		const url = new URL(input)
-		const headers = new Headers(init?.headers)
-		// keep registry lookups anonymous
-		if (url.hostname === "registry.npmjs.org") {
-			assert.equal(headers.get("authorization"), null)
-			requested.push("registry")
-			return Response.json({ repository: "https://github.com/example/widget" })
-		}
-		// require the github token for release metadata
-		if (url.hostname === "api.github.com") {
-			assert.equal(headers.get("authorization"), `Bearer ${environment.GITHUB_TOKEN}`)
-			assert.equal(url.pathname, "/graphql")
-			requested.push("releases")
-			return Response.json({
-				data: {
-					repository: {
-						visibility: "PUBLIC",
-						releases: {
-							nodes: [{ tag_name: "v1.3.0", body: "Widget can replace the wrapper.", draft: false, prerelease: false }],
-							pageInfo: { hasNextPage: false, endCursor: null },
-						},
-					},
-				},
-			})
-		}
-		// check that host inference receives only the model key
-		assert.equal(url.href, "https://api.anthropic.com/v1/messages")
-		assert.equal(headers.get("x-api-key"), environment.ANTHROPIC_API_KEY)
-		assert.equal(headers.get("authorization"), null)
-		// replay the summary and match responses in order
-		const first = !requested.includes("summary")
-		requested.push(first ? "summary" : "match")
-		const value = first
-			? { text: "Widget has a new API.", sources: [summarySource] }
-			: [{ feature: "Use widget directly", kind: "workaround", source: summarySource, file: source, line: 1 }]
-		return Response.json({
-			type: "message",
-			role: "assistant",
-			id: "recorded",
-			model: "claude-opus-5-5",
-			content: [{ type: "text", text: JSON.stringify(value) }],
-			stop_reason: "end_turn",
-			stop_sequence: null,
-			usage: { input_tokens: 10, output_tokens: 10 },
-		})
-	})
+
 	try {
 		const options = {
 			repositoryUrl,
@@ -178,16 +25,21 @@ test("the paid entry point routes each credential and closes the guest binding o
 			signal: new AbortController().signal,
 			onEvent(): void {},
 		}
-		// reject missing credentials before any request
-		assert.throws(
-			() => inspectWithAccount(options, { ...environment, ANTHROPIC_API_KEY: undefined }),
-			/ANTHROPIC_API_KEY/,
-		)
-		assert.deepEqual(requested, [])
-		// check the versioned evidence and the complete credential session
-		const card = await inspectWithAccount(options, environment)
+		assert.throws(() => inspectWithAccount(options, {}), /RUNTA_TOKEN/)
+		const card = await inspectWithAccount(options, { ...environment, ANTHROPIC_API_KEY: undefined })
 		assert.equal(card.version, 2)
-		assert.deepEqual(requested, ["registry", "releases", "summary", "match"])
+		assert.deepEqual(requested, ["registry", "releases"])
+		assert.deepEqual(
+			provider.modelRequestSandboxEvents.map((item) => item.request?.role ?? item.action),
+			["open", "releaseSummary", "featureMatch", "close"],
+		)
+		assert.deepEqual(
+			card.runtimeUsage?.runtimes.map((item) => [item.resource, item.deleted]),
+			[
+				["repository", true],
+				["modelRequestSandbox", true],
+			],
+		)
 		assert.deepEqual(phases, ["open", "verify", "generate", "close"])
 		assert.ok(card.timeline.some((event) => event.type === "sandbox.event" && event.action === "agent-started"))
 		assert.ok(!Object.values(environment).some((value) => JSON.stringify(card).includes(value)))
@@ -196,6 +48,102 @@ test("the paid entry point routes each credential and closes the guest binding o
 		assert.equal(patch.text, mailbox)
 		assert.equal(patch.agentPrompt, card.upgrades[0]?.patches[0]?.prompt)
 	} finally {
-		request.mock.restore()
+		restore()
+	}
+})
+
+test("failed inspections delete both runtimes independently and preserve all unresolved identities", async () => {
+	for (const failure of [
+		"callback",
+		"partial create",
+		"repository deletion",
+		"model request sandbox deletion",
+		"both deletions",
+		"cancellation",
+	]) {
+		const { provider, restore } = await modelRequestSandboxFixture(createFakeSandboxProvider)
+		const controller = new AbortController()
+		const cleanupAttemptIds: string[] = []
+		// Simulate a Model Request Sandbox deletion failure.
+		const close = provider.modelRequestSandbox.close
+		provider.modelRequestSandbox.close = async (name, op): Promise<void> => {
+			cleanupAttemptIds.push(name)
+			if (failure === "both deletions" || failure === "model request sandbox deletion") {
+				throw new Error("Unconfirmed")
+			}
+			await close(name, op)
+		}
+		// Record each repository sandbox cleanup attempt.
+		const destroy = provider.destroySandbox
+		provider.destroySandbox = async (sandbox, op): Promise<void> => {
+			cleanupAttemptIds.push(sandbox.id)
+			if (failure === "both deletions" || failure === "repository deletion") {
+				throw new Error("Unconfirmed")
+			}
+			await destroy(sandbox, op)
+		}
+		// Keep the requested identity when allocation cannot return a handle.
+		if (failure === "partial create") {
+			provider.modelRequestSandbox.open = async () => {
+				throw new InspectionError("credential-binding", "Lost create reply")
+			}
+		}
+		try {
+			// Interrupt the Inspection after verified startup for the delivery scenarios.
+			const inspection = inspectWithAccount(
+				{
+					repositoryUrl: "https://github.com/example/project",
+					sandboxProvider: provider,
+					signal: controller.signal,
+					onEvent(event) {
+						if (event.type === "sandbox.event" && event.action === "model-request-sandbox-started") {
+							if (failure === "callback") {
+								throw new Error("Delivery failed")
+							}
+							// Abort work while leaving both cleanup obligations active.
+							if (failure === "cancellation") {
+								controller.abort()
+							}
+						}
+					},
+				},
+				{ RUNTA_TOKEN: "fixture" },
+			)
+			await assert.rejects(inspection, (error: unknown) => {
+				assert.ok(error instanceof InspectionError)
+				// A failed startup ends the Inspection before later Upgrades can request the same model request sandbox.
+				if (failure === "partial create") {
+					assert.equal(error.code, "model-request-sandbox-startup")
+				}
+				assert.equal(cleanupAttemptIds.length, 2)
+				assert.equal(error.timeline.at(-1)?.type, "inspection.failed")
+				if (failure.includes("deletion")) {
+					// Compare the compatibility field with the full list of outstanding resources.
+					const unresolved =
+						failure === "both deletions"
+							? cleanupAttemptIds
+							: cleanupAttemptIds.filter(
+									(name) => name.endsWith("-relay") === (failure === "model request sandbox deletion"),
+								)
+					assert.deepEqual(error.cleanupIds, unresolved)
+					assert.equal(error.cleanupId, unresolved[0])
+					assert.equal(error.runtimeUsage?.totalUpperBoundUsd, undefined)
+					// Retain an independent reservation for each outstanding runtime.
+					assert.deepEqual(
+						error.runtimeUsage?.runtimes.filter((item) => !item.deleted).map((item) => item.id),
+						unresolved,
+					)
+					assert.ok(
+						error.runtimeUsage?.runtimes
+							.filter((item) => !item.deleted)
+							.every((item) => item.reservedUpperBoundUsd !== undefined),
+					)
+				}
+				// Require the typed failure for every scenario.
+				return true
+			})
+		} finally {
+			restore()
+		}
 	}
 })

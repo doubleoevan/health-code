@@ -31,7 +31,7 @@ import assert from "node:assert/strict"
 import { createFakeSandboxProvider, inspectRepository } from "health-code"
 import { readFileSync } from "node:fs"
 const sandboxProvider = createFakeSandboxProvider(JSON.parse(readFileSync("fixture.json", "utf8")))
-const card = await inspectRepository({repositoryUrl:"https://github.com/example/project",sandboxProvider,models:{fix:"legacy"}})
+const card = await inspectRepository({repositoryUrl:"https://github.com/example/project",sandboxProvider,callerModelExecution:"local",models:{fix:"legacy"}})
 assert.equal(card.version,1)
 assert.equal(card.baseline.install.status,"passed")
 assert.equal(card.timeline.at(-1).type,"inspection.finished")
@@ -49,6 +49,14 @@ const reportV2 = await inspectRepository({repositoryUrl:"https://github.com/exam
   sandboxProvider:createFakeSandboxProvider(recording),
   models:{repair:route,featureAdoption:route,releaseSummary:host,featureMatch:host},limits:{maxUpgrades:0},
   onEvent:event=>{replay.push(event)}})
+const modelRequestSandboxProvider = createFakeSandboxProvider(recording)
+const modelRequestSandboxOptions = {repositoryUrl:"https://github.com/example/project",sandboxProvider:modelRequestSandboxProvider,
+  callerModelExecution:"modelRequestSandbox",models:{releaseSummary:route,featureMatch:route,repair:route,featureAdoption:route},limits:{maxUpgrades:0}}
+const modelRequestSandboxCard=await inspectRepository(modelRequestSandboxOptions)
+assert.equal(modelRequestSandboxCard.version,2)
+assert.equal(modelRequestSandboxCard.runtimeUsage.runtimes.length,1)
+assert.deepEqual(modelRequestSandboxProvider.modelRequestSandboxEvents,[])
+await assert.rejects(inspectRepository({...modelRequestSandboxOptions,sandboxProvider:{...modelRequestSandboxProvider,modelRequestSandbox:undefined}}),/capability/)
 assert.equal(reportV2.version,2)
 assert.equal(reportV2.limits.agent.repair.maxTurns,40)
 assert.equal(reportV2.limits.agent.featureAdoption.maxTurns,25)
@@ -85,6 +93,14 @@ import { inspectRepository, type InspectionOptions, type ReportCard } from "heal
 import type {InspectionOptionsV2, ReportCardV2} from "health-code"
 export function inspectWithModels(options: InspectionOptionsV2): Promise<ReportCardV2> {
   return inspectRepository(options)
+}
+export function modelRequestSandbox(options: import("health-code").ModelRequestSandboxOptions): Promise<import("health-code").ModelRequestSandboxReportCard> {
+  return inspectRepository(options)
+}
+export const local: InspectionOptionsV2["onEvent"] = event => {
+  if(event.type !== "sandbox.event") return
+  const known: "agent-started"|"created"|"credentials-withheld"|"network-locked"|"connection-blocked"|"deleted"=event.action
+  void known
 }
 export function checkFormerType(options: import("health-code").EnrichedInspectionOptions): Promise<import("health-code").EnrichedReportCard> {
   return inspectRepository(options)

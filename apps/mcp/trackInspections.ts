@@ -2,9 +2,9 @@ import { setTimeout as delay } from "node:timers/promises"
 import {
 	InspectionError,
 	type InspectionEvent,
-	type InspectionEventV2,
+	type ModelRequestSandboxEvent,
+	type ModelRequestSandboxReportCard,
 	type ReportCard,
-	type ReportCardV2,
 } from "health-code"
 import * as z from "zod"
 import { UserError } from "./modelSettings.ts"
@@ -34,8 +34,8 @@ export const readOutput = z.object({
 export type Inspect = (options: {
 	repositoryUrl: string
 	signal: AbortSignal
-	onEvent: (event: InspectionEvent | InspectionEventV2) => void
-}) => Promise<ReportCard | ReportCardV2>
+	onEvent: (event: InspectionEvent | ModelRequestSandboxEvent) => void
+}) => Promise<ReportCard | ModelRequestSandboxReportCard>
 // retain live progress until the report is saved
 type State = {
 	events: Event[]
@@ -59,10 +59,16 @@ export function textPage(text: string, offset: number): { text: string; nextOffs
 	}
 	return { text: text.slice(offset, end), nextOffset: end < text.length ? end : null }
 }
+
 export function toEventLine(event: Event): string {
 	switch (event.type) {
 		// highlight sandbox activity in the terminal timeline
 		case "sandbox.event":
+			if (event.action === "model-request-sandbox-started" || event.action === "model-relay-started") {
+				// Recorded startup events keep the credential detail supplied by their provider.
+				const detail = typeof event.detail === "string" ? event.detail : "Model request sandbox started"
+				return `◆ ${detail.replace(/^Model relay started/, "Model request sandbox started")}`
+			}
 			return `◆ Runta · ${event.action}`
 		case "step.started":
 			return `Starting · ${event.label}`
@@ -88,6 +94,7 @@ function toPreview(event: Event): Event {
 	}
 	return event
 }
+
 export class Inspections {
 	// track live state separately from work that shutdown must drain
 	private active = new Map<string, State>()
@@ -175,7 +182,9 @@ export class Inspections {
 					error instanceof UserError
 						? error.message
 						: error instanceof InspectionError
-							? `Inspection failed (${error.code}).`
+							? error.code === "credential-binding"
+								? "Model Request Sandbox verification failed. Run health-code mcp setup for this model origin."
+								: `Inspection failed (${error.code}).`
 							: "Inspection failed."
 				// screen the failure message before delivery
 				try {

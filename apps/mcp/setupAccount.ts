@@ -1,23 +1,31 @@
 import { Runta } from "@runta/runta-sdk"
-import { createSandboxProvider } from "health-code"
+import { createSandboxProvider, type SandboxModelRoutes } from "health-code"
+import { configureModels } from "./configureModels.ts"
 import {
-	credentials,
+	accountToken,
 	modelOrigin,
 	priceVariables,
 	roleVariables,
 	secretName,
+	setupKey,
 	toEnvironmentReference,
 	UserError,
 } from "./modelSettings.ts"
+import { personalProvider } from "./personalModelRequestSandboxes.ts"
+import { probeModelRequestSandbox, setupTimeoutMs } from "./probeModelRequestSandbox.ts"
 
-const required = ["RUNTA_TOKEN", "ANTHROPIC_API_KEY"] as const
-const optional = ["HEALTH_CODE_MODEL_HOST", ...Object.values(roleVariables), ...priceVariables, "GITHUB_TOKEN"]
+const optional = ["HEALTH_CODE_MODEL_HOST", ...Object.values(roleVariables), ...priceVariables]
 type Account = {
+	probe(token: string, route: SandboxModelRoutes["releaseSummary"], end: number): Promise<void>
 	check(token: string): Promise<void>
 	store(options: { token: string; name: string; key: string }): Promise<unknown>
 }
 
 const account: Account = {
+	async probe(token, route, end): Promise<void> {
+		const modelRequestSandbox = (await personalProvider(token, end)).modelRequestSandbox
+		await probeModelRequestSandbox({ modelRequestSandbox, route, end })
+	},
 	check(token): Promise<void> {
 		return createSandboxProvider({ token }).checkAvailability()
 	},
@@ -31,7 +39,10 @@ export async function setupAccount(
 	environment: NodeJS.ProcessEnv,
 	{ version, client = account }: { version: string; client?: Account },
 ): Promise<string> {
-	const { token, key } = credentials(environment)
+	const token = accountToken(environment)
+	const key = setupKey(environment)
+	const end = Date.now() + setupTimeoutMs
+	const route = configureModels(environment).releaseSummary
 	const origin = modelOrigin(environment)
 	// Keep credentials and SDK response bodies out of setup diagnostics.
 	try {
@@ -42,13 +53,23 @@ export async function setupAccount(
 	// register the model key under the selected origin's secret name
 	const name = secretName(origin)
 	try {
-		await client.store({ token, key, name })
+		if (key) {
+			await client.store({ token, key, name })
+		}
 	} catch {
 		throw new UserError("Runta secret write failed. Check secret write access and retry setup.")
 	}
 
+	try {
+		await client.probe(token, route, end)
+	} catch (error) {
+		if (error instanceof UserError) {
+			throw error
+		}
+		throw new UserError("Model Request Sandbox verification failed. Register the origin-bound key during setup.")
+	}
 	// Forward environment references so the emitted configuration can be shared.
-	const names = [...required, ...optional.filter((name) => environment[name])]
+	const names = ["RUNTA_TOKEN", ...optional.filter((name) => environment[name])]
 	// Resolve npm packages from the user's home when a client opens a new checkout.
 	const windows = process.platform === "win32"
 	const command = windows ? "cmd.exe" : "/bin/sh"
@@ -58,7 +79,7 @@ export async function setupAccount(
 	// render shared launcher settings in each client's configuration format
 	const env = Object.fromEntries(names.map((name) => [name, toEnvironmentReference(name)]))
 	return [
-		"Runta account checked and model secret stored.",
+		"Model key verified in Runta. After setup, only RUNTA_TOKEN is required.",
 		"Claude Code · add inside mcpServers in .mcp.json",
 		`"health-code": ${JSON.stringify({ type: "stdio", command, args, env })}`,
 		"Codex · add at the top level of ~/.codex/config.toml",

@@ -19,3 +19,5 @@ Supply `RUNTA_TOKEN`, an optional `GITHUB_TOKEN`, and a stable deployment name i
 Keep completed reports and published blobs indefinitely. Schedule daily volume backups, monitor free capacity and take a backup before schema migration. For a consistent SQLite backup on a running service, use SQLite’s online backup or `VACUUM INTO` and copy the resulting database off the volume. To restore, stop the worker, mount a fresh volume, restore the database to the configured path and start a compatible image under the same origin. Open a saved report and verify a downloaded Patch against its URL digest. The server rejects unknown schema versions.
 
 Follow code-style, jsx-conventions and vercel-react-best-practices. Review browser interactions against web-design-guidelines.
+
+The hosted library caller keeps its local model handles. The timeline pins the Model Request Sandbox startup Sandbox Event. The saved event includes the runtime ID.

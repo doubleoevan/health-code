@@ -78,6 +78,11 @@ export async function bounded<T>(work: (signal: AbortSignal) => Promise<T>, opti
 	}
 }
 
+/** Reserves teardown time for each possibly allocated runtime. */
+export function cleanupAllowance(durationMs: number): number {
+	return Math.min(60000, Math.max(1, Math.floor(durationMs / 4)))
+}
+
 export class InspectionContext {
 	readonly id = randomUUID()
 	readonly timeline: InspectionEvent[] = []
@@ -98,6 +103,7 @@ export class InspectionContext {
 	constructor(
 		readonly options: InspectionOptions,
 		private readonly observe?: (event: InspectionEvent) => () => Promise<void>,
+		reserveCleanupGrace = false,
 	) {
 		const limits = options.limits ?? {}
 		const duration = limits.maxDurationMs ?? 1800000
@@ -120,7 +126,9 @@ export class InspectionContext {
 		while (low < high) {
 			// search for the longest duration affordable within the sandbox budget
 			const middle = Math.ceil((low + high) / 2)
-			const estimate = options.sandboxProvider.estimateMaxCost(middle)
+			const estimate = options.sandboxProvider.estimateMaxCost(
+				middle + (reserveCleanupGrace ? cleanupAllowance(middle) : 0),
+			)
 			if (Number.isFinite(estimate) && estimate >= 0 && Math.ceil(estimate * 1000000) <= budgetMicros) {
 				low = middle
 			} else {
@@ -128,7 +136,7 @@ export class InspectionContext {
 			}
 		}
 		// reserve a portion of the affordable window for cleanup
-		this.cleanupMs = Math.min(60000, Math.max(1, Math.floor(low / 4)))
+		this.cleanupMs = cleanupAllowance(low)
 		this.end = this.started + low
 	}
 	cleanupWindow(): number {

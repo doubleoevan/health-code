@@ -43,21 +43,23 @@ Health Code runs as a local Node stdio server in Claude Code or Codex. The serve
 
 The next `health-code` npm release includes the library and the MCP executable. It supports Node 22.18 or later on the 22.x line, or Node 24.11 and later.
 
-1. Create a Runta account and token. Set `RUNTA_TOKEN` and `ANTHROPIC_API_KEY` in your secret manager. [Runta signup](https://dashboard.runta.com)
-2. From your home directory, run `npx health-code mcp setup` in that environment, for example `doppler run -- npx health-code mcp setup`. Setup checks your token, stores or rotates the model secret in Runta, and prints both client entries.
-3. Paste the Claude Code entry inside `mcpServers` in the project’s `.mcp.json`, or the Codex entry at the top level of `~/.codex/config.toml`. Both launch `npx health-code mcp` from your home directory with `-y` and the installed version pinned. This keeps repository-local executables out of startup.
-4. Launch the client from the same secret environment, for example `doppler run -- claude` or `doppler run -- codex`. The generated entries reference variables by name. Keep the model key available to the MCP process for summaries and matching. Sandbox repair and feature adoption use a host-bound reference to the secret stored by setup.
+1. Create a Runta account and set `RUNTA_TOKEN`. The token needs access to runtimes, secrets and the model-provider list for your organization. For first-time registration or rotation, also supply `ANTHROPIC_API_KEY` to the setup process. [Runta signup](https://dashboard.runta.com)
+2. From your home directory, run `npx health-code mcp setup`. Setup verifies the stored key with one authenticated request in a Model Request Sandbox, deletes the model request sandbox, then prints both client entries. You can repeat setup with just `RUNTA_TOKEN` once the origin’s key is registered.
+3. Paste the Claude Code entry inside `mcpServers` in the project’s `.mcp.json`, or the Codex entry at the top level of `~/.codex/config.toml`. Both pin the installed version and resolve the command from your home directory.
+4. Start or restart your client with `RUNTA_TOKEN`. The MCP uses the model key stored in Runta for all four roles. When migrating an existing configuration, replace the old client entry and remove its model-key reference. You can remove your local model key after setup succeeds.
+
+Library callers can select `callerModelExecution: "modelRequestSandbox"` and pass stored-credential routes for all four roles. Omitting the option keeps summaries and Feature Matches in the caller’s process. A model request sandbox starts on the first eligible request. Each model request sandbox call has up to 120 seconds within the Inspection’s remaining work time. The Report Card records runtime cost bounds separately from model charges. **Usage as of** (`runtimeUsage.usageAsOf`) gives the time through which runtime usage was measured.
 
 To use an unpublished checkout, build the library with `bun run --cwd packages/health-code build`, then run `bun run --cwd apps/mcp build`. Use `node packages/health-code/dist/mcp/cli.js mcp setup` in your secret environment. In the printed client entry, use `node` as the command and pass the absolute path to that file followed by `mcp` as the arguments.
 
 | Environment variable | Use |
 | --- | --- |
 | `RUNTA_TOKEN` | Account check, secret registration and live sandbox access. |
-| `ANTHROPIC_API_KEY` | Setup and host-side model requests. Run setup again after rotating the key. |
+| `ANTHROPIC_API_KEY` | One-time registration or rotation during setup. |
 | `HEALTH_CODE_MODEL_HOST` | HTTPS Anthropic-compatible origin. Defaults to `https://api.anthropic.com`. Run setup for the chosen origin. |
 | `HEALTH_CODE_SUMMARY_MODEL`, `HEALTH_CODE_MATCH_MODEL`, `HEALTH_CODE_REPAIR_MODEL`, `HEALTH_CODE_ADOPTION_MODEL` | Select each live model role. The default is `claude-opus-5-5`. |
 | `HEALTH_CODE_INPUT_USD_PER_MILLION`, `HEALTH_CODE_OUTPUT_USD_PER_MILLION` | Upper bounds for model cost reservations. Supply both for a custom host or model. |
-| `GITHUB_TOKEN` | Optional release-note access for public repositories. |
+| `GITHUB_TOKEN` | Optional release-note access for public repositories. To opt in, add this variable to the client entry. |
 
 ### Example agent session
 

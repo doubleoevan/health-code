@@ -17,8 +17,9 @@ const key = "synthetic-model-key-for-tests"
 const environment = {
 	RUNTA_TOKEN: "synthetic-sandbox-token",
 	ANTHROPIC_API_KEY: key,
-	HEALTH_CODE_SUMMARY_MODEL: "example",
+	HEALTH_CODE_SUMMARY_MODEL: "claude-opus-5-5",
 }
+
 const repo = "https://github.com/example/project"
 const testRoot = new URL("../../scripts/fixtures/recorded/inspection.json", import.meta.url)
 
@@ -26,6 +27,7 @@ test("setup registers and rotates a host-bound secret and prints name-only clien
 	// capture registrations without contacting the account service
 	const stored: string[] = []
 	const fake = {
+		probe: async (): Promise<void> => {},
 		check: async (token: string) => {
 			assert.equal(token, environment.RUNTA_TOKEN)
 		},
@@ -36,16 +38,16 @@ test("setup registers and rotates a host-bound secret and prints name-only clien
 	}
 	// parse both clients' settings and check their environment references
 	const setup = { version: "1.2.3", client: fake }
-	const output = await setupAccount(environment, setup)
+	const output = await setupAccount({ ...environment, GITHUB_TOKEN: "separate-opt-in" }, setup)
 	assert.ok(!output.includes(key) && !output.includes(environment.RUNTA_TOKEN))
 	const entry = JSON.parse(`{${output.split("\n")[2]}}`)["health-code"]
-	assert.equal(entry.env.ANTHROPIC_API_KEY, ["$", "{ANTHROPIC_API_KEY}"].join(""))
+	assert.equal(entry.env.ANTHROPIC_API_KEY, undefined)
 	const config = parseToml(output.split("\n").at(-1) ?? "")
 	assert.deepEqual(JSON.parse(JSON.stringify(config.mcp_servers)), {
 		"health-code": {
 			command: entry.command,
 			args: entry.args,
-			env_vars: ["RUNTA_TOKEN", "ANTHROPIC_API_KEY", "HEALTH_CODE_SUMMARY_MODEL"],
+			env_vars: ["RUNTA_TOKEN", "HEALTH_CODE_SUMMARY_MODEL"],
 		},
 	})
 	// verify the version-pinned launcher for this platform
@@ -59,16 +61,26 @@ test("setup registers and rotates a host-bound secret and prints name-only clien
 	// rotate the secret in place and isolate registrations for other origins
 	await setupAccount({ ...environment, ANTHROPIC_API_KEY: `${key}-rotated` }, setup)
 	assert.equal(stored[0], stored[1])
-	await setupAccount({ ...environment, HEALTH_CODE_MODEL_HOST: "https://models.example.com" }, setup)
+	await setupAccount(
+		{
+			...environment,
+			HEALTH_CODE_MODEL_HOST: "https://models.example.com",
+			HEALTH_CODE_INPUT_USD_PER_MILLION: "3",
+			HEALTH_CODE_OUTPUT_USD_PER_MILLION: "16",
+		},
+		setup,
+	)
 	assert.notEqual(stored[1], stored[2])
+	await setupAccount({ RUNTA_TOKEN: environment.RUNTA_TOKEN }, setup)
+	assert.equal(stored.length, 3)
 	// reject missing and unresolved credentials
 	await assert.rejects(setupAccount({}, setup), /Supply RUNTA_TOKEN/)
 	await assert.rejects(
-		setupAccount({ ...environment, ANTHROPIC_API_KEY: entry.env.ANTHROPIC_API_KEY }, setup),
+		setupAccount({ ...environment, ANTHROPIC_API_KEY: `\${ANTHROPIC_API_KEY}` }, setup),
 		/ANTHROPIC_API_KEY/,
 	)
 	// withhold credential-bearing messages from both setup failure paths
-	for (const step of ["check", "store"]) {
+	for (const step of ["check", "store", "probe"]) {
 		const broken = {
 			...fake,
 			[step]: async () => {

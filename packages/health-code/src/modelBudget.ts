@@ -2,11 +2,14 @@ import type { AgentRole, InspectionOptionsV2, ModelReply, ModelRole, ModelUsage,
 import { bounded, checkOperation } from "./collectEvents.ts"
 import { InspectionError, type Operation } from "./contracts.ts"
 
+import { sandboxModelCallTimeoutMs } from "./modelRequestSandbox.ts"
+
 export const agentOutputTokens = 8192
 const defaults = {
 	repair: { maxTurns: 40, maxDurationMs: 1_200_000, maxCostUsd: 4 },
 	featureAdoption: { maxTurns: 25, maxDurationMs: 600_000, maxCostUsd: 2 },
 }
+
 export function cap(value: number | undefined, maximum: number): number {
 	// reject non-finite and negative model limits
 	if (value !== undefined && (!Number.isFinite(value) || value < 0)) {
@@ -29,13 +32,16 @@ export function attemptBudget(role: AgentRole, limits: InspectionOptionsV2["limi
 	const { maxTurns, maxDurationMs, maxCostUsd } = agentLimits(role, limits)
 	return { turns: maxTurns, end: Date.now() + maxDurationMs, remainingMicros: Math.floor(maxCostUsd * 1e6) }
 }
+
 type AttemptBudget = { turns: number; remainingMicros: number; end: number }
 export type Ledger = { remainingMicros: number; end: number; usage: ModelUsage[] }
 // describe a priced request and its applicable budgets
 type Request = {
 	ledger: Ledger
+	execution?: "modelRequestSandbox"
 	verification?: boolean
 	toolBytes?: number
+	// Share the inspection ceiling with an optional Agent Attempt.
 	attempt?: AttemptBudget
 	role: ModelRole
 	step: string
@@ -47,13 +53,15 @@ type Request = {
 	signal?: AbortSignal
 	send: (operation: Operation) => Promise<ModelReply>
 }
+
 export async function paidRequest(request: Request): Promise<string> {
 	// check cancellation before reserving the request cost
 	checkOperation(request.signal)
 	const { ledger, attempt } = request
 	const reserve = reserveCost(request)
 	const started = Date.now()
-	const duration = Math.min(ledger.end, attempt?.end ?? Infinity, attempt ? Infinity : started + 45000) - started
+	const ceiling = request.execution === "modelRequestSandbox" ? sandboxModelCallTimeoutMs : 45000
+	const duration = Math.min(ledger.end, attempt?.end ?? Infinity, attempt ? Infinity : started + ceiling) - started
 	// require sufficient time, money and turns before dispatch
 	if (
 		duration <= 0 ||
@@ -74,6 +82,7 @@ export async function paidRequest(request: Request): Promise<string> {
 	// retain the reservation until actual usage is known
 	const receipt: ModelUsage = {
 		role: request.role,
+		...(request.execution ? { execution: request.execution } : {}),
 		step: request.step,
 		modelId: request.modelId,
 		durationMs: 0,
@@ -89,17 +98,40 @@ export async function paidRequest(request: Request): Promise<string> {
 		settle({ request, reply, reserve, receipt })
 		return reply.text
 	} catch (error) {
+		releaseUnsentReservation({ request, error, reserve, receipt })
 		// stop the attempt when model charging cannot be confirmed
 		if (attempt) {
 			attempt.turns = 0
 		}
 		throw error
 	} finally {
+		// Include time spent waiting for a missing receipt.
 		receipt.durationMs = Date.now() - started
 	}
 }
+
+function releaseUnsentReservation({
+	request,
+	error,
+	reserve,
+	receipt,
+}: {
+	request: Request
+	error: unknown
+	reserve: number
+	receipt: ModelUsage
+}): void {
+	const { ledger } = request
+	const deniedBeforeDispatch = error instanceof InspectionError && error.code === "credential-binding"
+	// Release the model reservation only after a verified pre-dispatch refusal.
+	if (request.execution === "modelRequestSandbox" && deniedBeforeDispatch) {
+		ledger.remainingMicros += reserve
+		ledger.usage.splice(ledger.usage.indexOf(receipt), 1)
+	}
+}
+
 // calculate the worst-case charge from the route bounds
-function reserveCost(request: Request): number {
+export function reserveCost(request: Pick<Request, "pricing" | "prompt" | "toolBytes" | "output">): number {
 	const { pricing } = request
 	const inputs = [
 		pricing.maxInputTokens,
@@ -125,6 +157,7 @@ function reserveCost(request: Request): number {
 			(pricing.fixedUsd ?? 0) * 1e6,
 	)
 }
+
 function settle({
 	request,
 	reply,

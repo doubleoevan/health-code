@@ -48,14 +48,26 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		ANTHROPIC_API_KEY: modelKey,
 		RUNTA_TOKEN: "fixture-token",
 	}
-	const fixture = fileURLToPath(new URL("../../scripts/fixtures/recorded/inspection.json", import.meta.url))
+	const fixture = new URL("./fixtures/modelRequestSandboxInspection.ts", import.meta.url).href
 
-	async function connect({ command, args, cwd }: { command: string; args: string[]; cwd: string }): Promise<Client> {
+	async function connect({
+		command,
+		args,
+		cwd,
+		tokenOnly,
+		token = settings.RUNTA_TOKEN,
+	}: {
+		command: string
+		args: string[]
+		cwd: string
+		tokenOnly?: boolean
+		token?: string
+	}): Promise<Client> {
 		const transport = new StdioClientTransport({
 			command,
 			args,
 			cwd,
-			env: settings,
+			env: tokenOnly ? { HOME: home, PATH: settings.PATH, RUNTA_TOKEN: token } : { ...settings, RUNTA_TOKEN: token },
 			stderr: "pipe",
 		})
 		// inspect server diagnostics throughout the client session
@@ -64,6 +76,78 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		await client.connect(transport)
 		return client
 	}
+	async function replayWithCredentials(tokenOnly: boolean): Promise<void> {
+		const replay = await connect({
+			tokenOnly,
+			command: "node",
+			args: [
+				"--input-type=module",
+				"-e",
+				`
+ import {createFakeSandboxProvider} from "health-code"
+ import {inspectWithAccount} from "./dist/mcp/inspectWithAccount.js"
+ import {StdioServerTransport} from "@modelcontextprotocol/server/stdio"
+ import {createServer} from "./dist/mcp/createServer.js"
+ import {InspectionStore} from "./dist/mcp/storeInspection.js"
+ import {Inspections} from "./dist/mcp/trackInspections.js"
+ const {modelRequestSandboxFixture}=await import(process.argv[1])
+ const {provider:sandboxProvider}=await modelRequestSandboxFixture(createFakeSandboxProvider)
+ const inspections=new Inspections(new InspectionStore(),options=>inspectWithAccount({...options,sandboxProvider},process.env))
+ await createServer(inspections,"fixture").connect(new StdioServerTransport())
+ `,
+				fixture,
+			],
+			cwd: installed,
+		})
+		try {
+			// reopen the recorded result in the new server process
+			const recovered = await replay.callTool({ name: "read_inspection", arguments: { inspectionId: id } })
+			assert.deepEqual((recovered.structuredContent as { results: unknown[] }).results.length, 1)
+			const response = await replay.callTool({ name: "start_inspection", arguments: { repositoryUrl } })
+			assert.ok(!response.isError)
+			// poll the accepted id until the report is complete
+			const accepted = response.structuredContent as { inspectionId: string }
+			let cursor = 0
+			let status = ""
+			const end = Date.now() + 10000
+			while (status !== "complete" && Date.now() < end) {
+				const read = await replay.callTool({
+					name: "read_inspection",
+					arguments: { inspectionId: accepted.inspectionId, afterSequence: cursor, waitMs: 100 },
+				})
+				assert.ok(!read.isError)
+				assert.ok(!JSON.stringify(read).includes(modelKey))
+				// advance the event cursor only after checking the tool result
+				const details = read.structuredContent as { status: string; nextSequence: number }
+				status = details.status
+				cursor = details.nextSequence
+			}
+			// Read the saved artifact from the packed server’s private store.
+			assert.equal(status, "complete")
+			const text = await readFile(join(home, ".health-code", "inspections", accepted.inspectionId, "card.json"), "utf8")
+			assert.ok(!text.includes(modelKey) && !text.includes(settings.RUNTA_TOKEN))
+			const card = JSON.parse(text)
+			assert.deepEqual(
+				card.upgrades[0].modelUsage
+					.filter((item: { execution?: string }) => item.execution === "modelRequestSandbox")
+					.map((item: { role: string }) => item.role),
+				["releaseSummary", "featureMatch"],
+			)
+			assert.ok(card.timeline.some((item: { action?: string }) => item.action === "agent-started"))
+			assert.ok(
+				card.runtimeUsage.runtimes.length === 2 &&
+					card.runtimeUsage.runtimes.every((item: { deleted: boolean }) => item.deleted),
+			)
+			const patch = await replay.callTool({
+				name: "get_tested_patch",
+				arguments: { inspectionId: accepted.inspectionId, sha256: card.upgrades[0].patches[0].digest },
+			})
+			assert.equal(patch.isError, undefined)
+		} finally {
+			await replay.close()
+		}
+	}
+
 	try {
 		// Extract the exact archive npm delivers and resolve only its declared dependencies.
 		execFileSync("npm", ["pack", "--silent", "--pack-destination", scratch], {
@@ -105,6 +189,13 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			intercept,
 			`
  import assert from "node:assert/strict"
+ import {registerHooks} from "node:module"
+ registerHooks({resolve(specifier,context,next){
+   if (!specifier.endsWith("/personalModelRequestSandboxes.js")) return next(specifier,context)
+   const mock='export async function recoverAccount(){};export function personalProvider(){return {modelRequestSandbox:{estimateMaxCost(){return 0},async open(){},async send(name,q){if(q.output!==1)throw Error(); return {text:"OK",inputTokens:3,outputTokens:1}},async close(){}}}}'
+   return {shortCircuit:true,url:"data:text/javascript,"+encodeURIComponent(mock)}
+ }})
+ // Intercept setup registration at the SDK boundary.
  globalThis.fetch=async (input,options)=>{
    const url=new URL(input)
    assert.equal(url.origin,"https://api.runta.com")
@@ -182,7 +273,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		const checkout = join(scratch, "checkout")
 		await mkdir(checkout)
 		await writeFile(join(checkout, "package.json"), '{"name":"example","private":true}')
-		const client = await connect({ ...entry, cwd: checkout })
+		const client = await connect({ ...entry, cwd: checkout, token: `\${RUNTA_TOKEN}` })
 		try {
 			// verify discovery and read evidence written by another session
 			assert.equal(client.getServerVersion()?.version, packed.version)
@@ -224,59 +315,9 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		}
 
 		// Run the same packed server with the public fake provider at its injection boundary.
-		const replay = await connect({
-			command: "node",
-			args: [
-				"--input-type=module",
-				"-e",
-				`
- import {readFileSync} from "node:fs"
- import {createFakeSandboxProvider,inspectRepository} from "health-code"
- import {StdioServerTransport} from "@modelcontextprotocol/server/stdio"
- import {createServer} from "./dist/mcp/createServer.js"
- import {InspectionStore} from "./dist/mcp/storeInspection.js"
- import {Inspections} from "./dist/mcp/trackInspections.js"
- const sandboxProvider=createFakeSandboxProvider(JSON.parse(readFileSync(process.argv[1],"utf8")))
- const inspections=new Inspections(new InspectionStore(),options=>inspectRepository({...options,sandboxProvider}))
- await createServer(inspections,"fixture").connect(new StdioServerTransport())
- `,
-				fixture,
-			],
-			cwd: installed,
-		})
-		try {
-			// reopen the recorded result in the new server process
-			const recovered = await replay.callTool({ name: "read_inspection", arguments: { inspectionId: id } })
-			assert.deepEqual((recovered.structuredContent as { results: unknown[] }).results.length, 1)
-			const response = await replay.callTool({ name: "start_inspection", arguments: { repositoryUrl } })
-			assert.ok(!response.isError)
-			// poll the accepted id until the report is complete
-			const accepted = response.structuredContent as { inspectionId: string }
-			let cursor = 0
-			let status = ""
-			const end = Date.now() + 10000
-			while (status !== "complete" && Date.now() < end) {
-				const read = await replay.callTool({
-					name: "read_inspection",
-					arguments: { inspectionId: accepted.inspectionId, afterSequence: cursor, waitMs: 100 },
-				})
-				assert.ok(!read.isError)
-				assert.ok(!JSON.stringify(read).includes(modelKey))
-				// advance the event cursor only after checking the tool result
-				const details = read.structuredContent as { status: string; nextSequence: number }
-				status = details.status
-				cursor = details.nextSequence
-			}
-			assert.equal(status, "complete")
-			// inspect the persisted report for leaked credentials
-			assert.ok(
-				!(
-					await readFile(join(home, ".health-code", "inspections", accepted.inspectionId, "card.json"), "utf8")
-				).includes(modelKey),
-			)
-		} finally {
-			await replay.close()
-		}
+		await replayWithCredentials(true)
+		await replayWithCredentials(false)
+
 		console.log("Packed MCP server passed Node stdio discovery, fake inspection, Patch handoff and restart checks.")
 	} finally {
 		// remove the installed package and all recorded evidence

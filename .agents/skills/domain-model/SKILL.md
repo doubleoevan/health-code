@@ -25,6 +25,7 @@ An **Inspection** targets a **Repository** at a pinned commit. An **Ecosystem Ad
 | Report Card | The result of the Inspection. | Include the Baseline, per-upgrade findings, Verdicts, Patches, and event timeline. |
 | Inspection Event | A typed event emitted as an Inspection progresses. | Step started, step finished, detail, inspection finished, or inspection failed. |
 | Sandbox Event | An Inspection Event recording an action by the sandbox's controls. | Sandbox created, network locked, connection blocked, agent started with its key kept out of the sandbox, or sandbox deleted. Highlight and pin these events in the live log and timeline. |
+| Model Request Sandbox | An isolated provider runtime that sends release-summary and Feature Match requests through a verified stored credential. | One per Inspection on first use. It contains no Repository checkout. Its verified startup is a Sandbox Event. |
 | Sandbox Provider | The interface checks use to create a sandbox, execute commands in it, and destroy it. | Runta is the shipped provider. Unit tests use a fake. |
 | Ecosystem Adapter | Language support behind one interface to detect the package manager, install, bump a dependency, typecheck, test, and list upgrades. | The Node adapter covers JavaScript and TypeScript. |
 
@@ -35,6 +36,8 @@ Use **Report Card** in product copy. In API docs, call the model-enabled result 
 Use **Direct replacement** or **Inferred replacement** for a Feature Match. Identify the **Source location**, **Affected call sites** and **Adoption outcome**. Reserve **Verdict** for the Upgrade.
 
 The **Final patch check** produces **Patch verification**. Label the artifact **Download patch** and identify **Applies to commit**, **Tested commit** and **Required upgrade patch**. Report **Added dependencies**, **Installed size change** and **Why repair stopped** when recorded.
+
+Use **Usage as of** (`usageAsOf`) for the timestamp through which the Report Card measures runtime usage. An unconfirmed deletion can accrue additional cost after that time.
 
 Separate **Model cost** from **Reserved upper bound** and label measured reply tokens **Output tokens**.
 

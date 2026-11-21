@@ -19,3 +19,5 @@ Run these commands from the repository root. The root package manifest names the
 Keep check tests beside their entry points. Use temporary workspaces or saved inputs for negative cases. `tsconfig.json` enables Bun types for these scripts. The root typecheck and test commands build the public library first so CLI imports resolve on a fresh checkout.
 
 `evaluate.ts` dispatches pinned cases. `evaluateUpgrade.ts` grades the confirmed regression and final patch. `scoreBudget.ts` compares observed usage and reservations with the public defaults. `evaluateBaseline.ts` writes a complete Baseline atomically in record mode and compares reviewed measurements in score mode. `check-packed-library.sh` compiles both public return types and replays both event versions under Node and Bun.
+
+The development log displays Model Request Sandbox startup details. The cost grader uses both independently rounded runtime quotes when a Report Card contains runtime usage.

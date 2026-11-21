@@ -21,3 +21,7 @@ An Agent Attempt may add a test file beside a discovered suite with the same fil
 A confirmed install failure can enter repair after a clean observation. The supervisor records the intended manifests and verifies the lockfile target before the first commit can qualify for a Patch.
 
 `testInventorySummary.ts` reads current and historical test counts and test file errors. The web report and evaluation grader use the same schema.
+
+`modelRequestSandbox.ts` defines model request sandbox options and serializes lazy allocation. `runtimeUsage.ts` measures each allocation through acknowledged deletion and combines runtime upper bounds with model receipts. Incomplete cleanup retains every unresolved identity on the Inspection error.
+
+`inspectUpgrade.ts` runs the Install Check, confirms new failures and compares each Upgrade Check against the Baseline.

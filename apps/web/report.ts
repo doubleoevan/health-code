@@ -1,7 +1,7 @@
 import type {
 	CheckResult,
 	InspectionEvent,
-	InspectionEventV2,
+	ModelRequestSandboxEvent,
 	Patch,
 	ReportCard,
 	UpgradeReport,
@@ -9,7 +9,10 @@ import type {
 } from "health-code"
 
 export const replayRepositoryUrl = "https://github.com/example/project"
-export type SiteEvent = InspectionEvent | InspectionEventV2
+type StoredSandboxEvent = Omit<Extract<ModelRequestSandboxEvent, { type: "sandbox.event" }>, "action"> & {
+	action: "model-relay-started"
+}
+export type SiteEvent = InspectionEvent | ModelRequestSandboxEvent | StoredSandboxEvent
 export type Citation = { label: string; url?: string }
 // carry the tested revisions with the published patch link
 export type PatchLink = Pick<Patch, "role" | "digest" | "base" | "prompt" | "prerequisite"> & {
@@ -42,6 +45,8 @@ export type UpgradeCard = Pick<UpgradeReport, "dependency" | "from" | "to" | "ob
 }
 // combine baseline and upgrade evidence for the public report
 export type PublishedCard = {
+	usageAsOf?: string
+
 	version: 1
 	repository: ReportCard["repository"]
 	baseline: UpgradeCard["checks"]

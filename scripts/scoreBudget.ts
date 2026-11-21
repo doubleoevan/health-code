@@ -59,16 +59,24 @@ export function scoreBudget(options: {
 function within(value: number | undefined, limit: number): boolean {
 	return value !== undefined && Number.isFinite(value) && value >= 0 && value <= limit
 }
+
 function validReceipt(receipt: ModelUsage): boolean {
 	// choose the output allowance for the recorded step
-	const host = receipt.role === "releaseSummary" || receipt.role === "featureMatch"
-	const cap = receipt.step === "verify credential" ? 1 : host ? 1024 : 8192
+	const isCallerModelRole = receipt.role === "releaseSummary" || receipt.role === "featureMatch"
+	const cap = receipt.step === "verify credential" ? 1 : isCallerModelRole ? 1024 : 8192
 	return (
 		// validate the charge, token count and duration
 		within(receipt.costUsd ?? receipt.reservedUsd, expected.maxCostUsd) &&
 		Number.isSafeInteger(receipt.outputTokens) &&
 		within(receipt.outputTokens, cap) &&
-		within(receipt.durationMs, host ? 45000 : expected.agent.repair.maxDurationMs)
+		within(
+			receipt.durationMs,
+			isCallerModelRole
+				? receipt.execution === "modelRequestSandbox"
+					? 120000
+					: 45000
+				: expected.agent.repair.maxDurationMs,
+		)
 	)
 }
 // include reserved charges when the final price is unavailable

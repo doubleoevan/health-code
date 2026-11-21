@@ -50,3 +50,19 @@ test("invalid arguments exit before starting an inspection", () => {
 	expect(child.status).toBe(1)
 	expect(child.stderr).toContain("Usage: bun run inspect <repo-url> [--fake]")
 })
+
+test("a replayed Model Request Sandbox startup event identifies the remote credential in the dev log", () => {
+	const lines: string[] = []
+	const log = createInspectionLog({ write: (text) => lines.push(text) })
+	log({
+		version: 2,
+		inspectionId: "recorded",
+		sequence: 4,
+		timestamp: "",
+		type: "sandbox.event",
+		sandboxId: "recorded-relay",
+		action: "model-request-sandbox-started",
+		detail: "Runta supplies the model key.",
+	})
+	expect(lines.join("")).toContain("◆ model-request-sandbox-started Runta supplies the model key.")
+})

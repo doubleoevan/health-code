@@ -6,11 +6,11 @@ import {
 	createSandboxProvider,
 	InspectionError,
 	type InspectionEvent,
-	type InspectionEventV2,
 	inspectRepository,
+	type ModelRequestSandboxEvent,
 } from "health-code"
 
-type LogEvent = InspectionEvent | InspectionEventV2
+type LogEvent = InspectionEvent | ModelRequestSandboxEvent
 
 type Output = { isTTY?: boolean; columns?: number; write: (text: string) => unknown }
 

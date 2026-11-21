@@ -15,3 +15,7 @@ A hosted consumer passes a stable deployment name to the provider factory and ca
 The provider reads the runtime revision, sends `PATCH /v2/runtimes/{id}?expected_revision={revision}` and checks the complete replacement `secret_configuration`. Before releasing the repository it also waits for the gateway to reject the inert credential. The manual `bun run test:credential` contract sends the same one-token request before attachment, while attached and after removal.
 
 `executeCommand.ts` accounts for active repository commands, collects observations and releases superseded test captures.
+
+`createModelRequestSandbox.ts` creates the separate 1-vCPU, 512-MiB model request sandbox with closed egress. It reads back the one-host policy and attaches the revision-checked credential. `sandboxModelRequest.ts` sends one tool-free request through the trusted image’s curl with JSON on stdin. No checkout or provisioner enters this runtime. The deployment reaper matches the Inspection UUID and its exact model request sandbox sibling.
+
+`projectFiles.ts` validates relative project paths and bounds reads and writes through the unprivileged guest process.

@@ -111,7 +111,9 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	const verified = upgradePatch?.verification
 	// score model usage and sandbox time against the shared budget
 	const durationMs = Date.now() - started
-	const sandboxCostUpperBoundUsd = provider.estimateMaxCost(durationMs)
+	const sandboxCostUpperBoundUsd =
+		card.runtimeUsage?.runtimes.reduce((sum, runtime) => sum + runtime.upperBoundUsd, 0) ??
+		provider.estimateMaxCost(durationMs)
 	const withinBudget = scoreBudget({
 		limits: card.limits,
 		modelUsage: report.modelUsage,
@@ -199,6 +201,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 		process.exitCode = 1
 	}
 }
+
 export function gradeUpgrade({
 	withinBudget,
 	report,
@@ -245,6 +248,7 @@ export function gradeUpgrade({
 			/(?:\bsys\b|parseJsonConfigFileContent)/.test(diagnosis),
 	}
 }
+
 export async function sourceDiff(
 	patch: UpgradeReportV2["patches"][number],
 	reference: { parent: string; commit: string },

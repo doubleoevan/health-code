@@ -100,7 +100,7 @@ function* orphanedRuntimeIds(
 	liveInspectionIds: ReadonlySet<string>,
 ): Generator<string> {
 	for (const runtime of runtimes) {
-		const suffix = runtime.display_name.slice(prefix.length)
+		const suffix = runtime.display_name.slice(prefix.length).replace(/-relay$/, "")
 		// match the exact deployment prefix and an inactive inspection uuid
 		if (
 			runtime.display_name.startsWith(prefix) &&

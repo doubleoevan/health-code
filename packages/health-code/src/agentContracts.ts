@@ -41,6 +41,7 @@ type AttemptLimits = { maxTurns: number; maxDurationMs: number; maxCostUsd: numb
 export type InspectionOptionsV2 = Omit<InspectionOptions, "models" | "onEvent" | "limits"> & {
 	models: InspectionModels
 	githubToken?: string
+	// Keep existing limit overrides available to local callers.
 	limits?: InspectionOptions["limits"] & {
 		maxFeatureMatches?: number
 		agent?: Partial<Record<AgentRole, Partial<AttemptLimits>>>
@@ -48,6 +49,7 @@ export type InspectionOptionsV2 = Omit<InspectionOptions, "models" | "onEvent" |
 	// deliver events using the version two envelope
 	onEvent?: (event: InspectionEventV2) => void | Promise<void>
 }
+
 type CompatibleAgentLimits = Partial<AttemptLimits> & { maxIterations?: number }
 // accept earlier role and limit names at the package boundary
 export type PreviousInspectionOptions = Omit<InspectionOptionsV2, "models" | "limits"> & {
@@ -60,7 +62,9 @@ export type PreviousInspectionOptions = Omit<InspectionOptionsV2, "models" | "li
 }
 
 type VersionTwo<T> = T extends unknown
-	? Omit<T, "version"> & { version: 2; attemptId?: string; role?: ModelRole }
+	? Omit<T, "version"> & { version: 2; attemptId?: string; role?: ModelRole } & (T extends { type: "inspection.failed" }
+				? { cleanupIds?: string[]; runtimeUsage?: import("./modelRequestSandbox.ts").RuntimeUsage }
+				: unknown)
 	: never
 // extend inspection events with verified agent startup
 export type InspectionEventV2 =
@@ -73,6 +77,7 @@ export type InspectionEventV2 =
 	  })
 // record usage and cost for each model role
 export type ModelUsage = {
+	execution?: "modelRequestSandbox"
 	role: ModelRole
 	step: string
 	modelId: string
@@ -98,6 +103,7 @@ export type CredentialSession = {
 	generate(prompt: string, operation: Operation): Promise<ModelReply>
 	close(operation: Operation): Promise<void>
 }
+
 export type AgentCapability = (
 	sandbox: Sandbox,
 	route: ModelRoute,
@@ -125,6 +131,7 @@ export type FeatureMatch = {
 	disposition: string
 	patchId?: string
 }
+
 export type PatchVerification = Baseline & {
 	installation: Observation
 	testNetwork: Observation
@@ -145,6 +152,7 @@ export type Patch = {
 	prompt: string
 	commits: { subject: string; sha: string; reason?: string; flag?: "dependency" | "test" }[]
 }
+
 export type Verdict = "Passes as is" | "Fixed" | "Fixed with test changes" | "Can't fix" | "Untested"
 // summarize upgrade evidence and the resulting verdict
 export type UpgradeReportV2 = UpgradeReport & {
@@ -165,6 +173,7 @@ export type UpgradeReportV2 = UpgradeReport & {
 export type ReportCardV2 = Omit<ReportCard, "version" | "timeline" | "upgrades"> & {
 	version: 2
 	limits?: { maxDurationMs: number; maxCostUsd: number; agent: Record<AgentRole, AttemptLimits> }
+	runtimeUsage?: import("./modelRequestSandbox.ts").RuntimeUsage
 	timeline: InspectionEventV2[]
 	upgrades: UpgradeReportV2[]
 }

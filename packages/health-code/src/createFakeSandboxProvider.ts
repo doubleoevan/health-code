@@ -8,6 +8,7 @@ import {
 	type Sandbox,
 	type SandboxProvider,
 } from "./contracts.ts"
+import { createFakeModelRequestSandbox, type ModelRequestSandboxFixture } from "./createFakeModelRequestSandbox.ts"
 import { validateRegistryHosts } from "./networkPolicy.ts"
 
 export type FixtureCommand = {
@@ -20,6 +21,7 @@ export type FixtureCommand = {
 export type SandboxFixture = {
 	commit: string
 	commands: readonly FixtureCommand[]
+	modelRequestSandbox?: ModelRequestSandboxFixture
 	agentReplies?: readonly ModelReply[]
 	verifiedStub?: boolean
 	patches?: readonly { request: PatchOperation; response: string | null }[]
@@ -30,9 +32,10 @@ export type SandboxFixture = {
 const empty: Observation = { complete: true, findings: [] }
 
 /** Replays each inspection independently, using the caller's fixture records. */
-export function createFakeSandboxProvider(
-	fixture: SandboxFixture,
-): SandboxProvider & { credentialEvents: { sandboxId: string; action: string; host: string }[] } {
+export function createFakeSandboxProvider(fixture: SandboxFixture): SandboxProvider &
+	ReturnType<typeof createFakeModelRequestSandbox> & {
+		credentialEvents: { sandboxId: string; action: string; host: string }[]
+	} {
 	const credentialEvents: { sandboxId: string; action: string; host: string }[] = []
 	const sessions = new Map<
 		string,
@@ -64,6 +67,7 @@ export function createFakeSandboxProvider(
 		return entry
 	}
 	return {
+		...createFakeModelRequestSandbox(fixture.modelRequestSandbox),
 		credentialEvents,
 		// bind a fake credential only during the locked registry phase
 		async openCredentialSession(sandbox, route): Promise<CredentialSession> {

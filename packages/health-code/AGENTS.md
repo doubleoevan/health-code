@@ -17,3 +17,5 @@ The Node adapter supports npm, pnpm, Yarn, and Bun. Recognized Bun, Vitest, and 
 A hosted consumer passes a stable deployment name to the provider factory and calls the public `reconcileSandboxes` operation before starting workers. The provider paginates runtime inventory, matches its reserved prefix and Inspection UUID, and reclaims abandoned allocations by runtime ID. Ordinary CLI allocations retain their existing names.
 
 The four structured model roles select the version 2 Report Card (`ReportCardV2`). Use `repair` and `featureAdoption` for Agent Attempt roles and `maxTurns` for their turn limits. Release summaries and matching use caller-configured host models. Repair and feature adoption use serializable guest routes. Their scoped credential must pass a live probe before the engine emits agent startup.
+
+The public model request sandbox overload accepts serializable credential routes and emits a verified Model Request Sandbox startup event. Existing model handles select local execution by default. Both execution paths validate the same fenced prompts and model replies.

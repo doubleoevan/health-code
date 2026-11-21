@@ -3,6 +3,7 @@ import type { SiteEvent } from "./report.ts"
 
 const actions = {
 	created: "Sandbox created",
+	"model-request-sandbox-started": "Model request sandbox started",
 	"credentials-withheld": "Real keys kept outside the sandbox",
 	"network-locked": "Network locked to approved destinations",
 	"connection-blocked": "Connection blocked",
@@ -11,7 +12,17 @@ const actions = {
 }
 
 function toActionLabel(event: Extract<SiteEvent, { type: "sandbox.event" }>): string {
-	return actions[event.action] ?? event.action
+	if (event.action === "model-relay-started") {
+		return (
+			event.detail?.replace(/^Model relay started/, "Model request sandbox started") ||
+			actions["model-request-sandbox-started"]
+		)
+	}
+	if (event.action === "model-request-sandbox-started" && event.detail) {
+		return event.detail
+	}
+	const label = actions[event.action] ?? event.action
+	return event.detail && event.detail !== label ? `${label} ${event.detail}` : label
 }
 function toStepLabel(label: string): string {
 	// label current and historical agent steps consistently
@@ -84,11 +95,7 @@ function Output({ event, id }: { event: Extract<SiteEvent, { type: "detail" }>; 
 function renderEvent(event: SiteEvent, id: string): ReactElement {
 	switch (event.type) {
 		case "sandbox.event":
-			return (
-				<strong className="control">
-					Runta · {toActionLabel(event)} {event.detail}
-				</strong>
-			)
+			return <strong className="control">Runta · {toActionLabel(event)}</strong>
 		case "step.finished":
 			return (
 				<span>
@@ -140,9 +147,7 @@ export function Timeline({ events, live, id }: { events: SiteEvent[]; live: bool
 					<h2>Runta sandbox</h2>
 					<ul>
 						{sandboxEvents.map((event) => (
-							<li key={event.sequence}>
-								{toActionLabel(event)} {event.detail}
-							</li>
+							<li key={event.sequence}>{toActionLabel(event)}</li>
 						))}
 					</ul>
 				</aside>

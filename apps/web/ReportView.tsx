@@ -326,6 +326,13 @@ export function ReportView({ card, url }: { card: PublishedCard; url: string }):
 					Health Code inspects JavaScript and TypeScript projects. Project detection · {card.detection}
 				</p>
 			)}
+			{/* runtime usage cutoff */}
+			{card.usageAsOf && (
+				<p>
+					Usage as of{" "}
+					<time dateTime={card.usageAsOf}>{card.usageAsOf.replace("T", " ").replace(/(?:\.\d+)?Z$/, " UTC")}</time>
+				</p>
+			)}
 			{/* baseline checks */}
 			<details>
 				<summary>Checks before the upgrade</summary>

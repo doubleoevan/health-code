@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto"
-import type { Baseline, ReportCard, ReportCardV2, UpgradeReportV2 } from "health-code"
+import type { Baseline, ModelRequestSandboxReportCard, ReportCard, UpgradeReportV2 } from "health-code"
 import { testInventorySummarySchema } from "health-code"
 import { type Citation, type PatchLink, type PublishedCard, toCheckText, type UpgradeCard } from "./report.ts"
 
-export type InspectionOutput = { report: ReportCard | ReportCardV2 }
+export type InspectionOutput = { report: ReportCard | ModelRequestSandboxReportCard }
 export type Publication = { original: InspectionOutput["report"]; card: PublishedCard; blobs: Map<string, Uint8Array> }
 
 function toChecks(checks: Baseline): UpgradeCard["checks"] {
@@ -124,6 +124,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 		card: {
 			version: 1,
 			repository: report.repository,
+			usageAsOf: report.version === 2 ? report.runtimeUsage?.usageAsOf : undefined,
 			baseline: toChecks(report.baseline),
 			baselineTestFileErrors: toTestFileErrors(report.baseline.tests),
 			turnLimits:

@@ -1,16 +1,9 @@
 import { generateText } from "ai"
 import { z } from "zod"
-import type {
-	AgentRole,
-	InspectionEventV2,
-	InspectionOptionsV2,
-	PreviousInspectionOptions,
-	ReportCardV2,
-	UpgradeReportV2,
-} from "./agentContracts.ts"
+import type { AgentRole, InspectionEventV2, InspectionOptionsV2, UpgradeReportV2 } from "./agentContracts.ts"
 import { buildPrompt, parseAnswer } from "./buildPrompt.ts"
 import type { NodeAdapter } from "./checkProject.ts"
-import { type InspectionContext, redactEvidence, rethrowInspectionFailure } from "./collectEvents.ts"
+import { cleanupAllowance, type InspectionContext, redactEvidence, rethrowInspectionFailure } from "./collectEvents.ts"
 import {
 	InspectionError,
 	type InspectionEvent,
@@ -20,10 +13,19 @@ import {
 	type Sandbox,
 	type UpgradeReport,
 } from "./contracts.ts"
-import { agentLimits, cap, type Ledger, paidRequest } from "./modelBudget.ts"
+import { agentLimits, cap, type Ledger, paidRequest, reserveCost } from "./modelBudget.ts"
+import { validateModels } from "./modelOptions.ts"
+import {
+	callerOutputTokens,
+	ModelRequestSandboxAllocation,
+	type ModelRequestSandboxEvent,
+	type ModelRequestSandboxOptions,
+	type ModelRequestSandboxReportCard,
+} from "./modelRequestSandbox.ts"
 import { matchSchema, selectFeatureMatches, verifyMatch } from "./rankFeatureMatches.ts"
 import { readReleases } from "./readReleases.ts"
 import { diagnostics, locateDiagnostics, sizeBytes, type UsageEvidence, usageEvidence } from "./readUpgradeEvidence.ts"
+import { RuntimeMeter } from "./runtimeUsage.ts"
 import { credentialTarget } from "./sandbox/setCredentialBinding.ts"
 import { type PatchEvidence, workspace } from "./verifyCandidate.ts"
 import { evaluatePatch } from "./verifyPatch.ts"
@@ -32,7 +34,7 @@ const summarySchema = z.object({ text: z.string().max(8000), sources: z.array(z.
 type Candidate = { report: UpgradeReportV2; evidence: PatchEvidence }
 export class ModelInspection {
 	// accumulate the version two timeline, reports and adoption candidates
-	readonly timeline: InspectionEventV2[] = []
+	readonly timeline: ModelRequestSandboxEvent[] = []
 	readonly upgrades: UpgradeReportV2[] = []
 	readonly candidates: Candidate[] = []
 	readonly limits: NonNullable<InspectionOptions["limits"]> & { maxDurationMs: number; maxCostUsd: number }
@@ -47,7 +49,9 @@ export class ModelInspection {
 	baseTests?: Observation
 	baseIntegrity?: PatchEvidence["baselineIntegrity"]
 	// clamp inspection limits before constructing the model budget
-	constructor(readonly options: InspectionOptionsV2) {
+	readonly meter = new RuntimeMeter()
+	readonly modelRequestSandbox?: ModelRequestSandboxAllocation
+	constructor(readonly options: InspectionOptionsV2 | ModelRequestSandboxOptions) {
 		this.limits = {
 			...options.limits,
 			maxCostUsd: cap(options.limits?.maxCostUsd, 15),
@@ -60,15 +64,25 @@ export class ModelInspection {
 		}
 		// validate both guest routes before allocating sandbox time
 		for (const role of ["repair", "featureAdoption"] as const) {
-			if (!options.models[role]?.credential) {
+			if (!options.models?.[role]?.credential) {
 				throw new InspectionError("invalid-model-route", "Missing guest model route")
 			}
 			credentialTarget(options.models[role])
 			agentLimits(role, options.limits)
 		}
 		// reserve the sandbox cost before permitting model requests
-		validateModels(options.models)
-		const reserve = options.sandboxProvider.estimateMaxCost(this.limits.maxDurationMs)
+		validateModels(options)
+		if (options.callerModelExecution === "modelRequestSandbox") {
+			if (!options.sandboxProvider.modelRequestSandbox) {
+				throw new InspectionError("model-request-sandbox", "Sandbox Provider has no Model Request Sandbox capability")
+			}
+			this.modelRequestSandbox = new ModelRequestSandboxAllocation(options.sandboxProvider.modelRequestSandbox)
+		}
+		// Reserve the repository runtime before admitting any inference.
+		const duration = this.limits.maxDurationMs
+		const reserve = options.sandboxProvider.estimateMaxCost(
+			duration + (this.modelRequestSandbox ? cleanupAllowance(duration) : 0),
+		)
 		if (!Number.isFinite(reserve) || reserve < 0) {
 			throw new InspectionError("pricing", "Sandbox price bound unavailable")
 		}
@@ -108,20 +122,67 @@ export class ModelInspection {
 		evidence: unknown,
 		context: InspectionContext,
 	): Promise<unknown> {
-		const { model, pricing } = this.options.models[role]
+		const configured = this.options.models[role]
+		const { pricing } = configured
 		// build a bounded prompt for the selected host role
 		const prompt = await buildPrompt(role, evidence)
+		const output = callerOutputTokens
+		const reserve = reserveCost({ pricing, prompt, output })
+		if (this.modelRequestSandbox && "credential" in configured) {
+			const modelRequestSandbox = this.modelRequestSandbox
+			await modelRequestSandbox.ready({
+				context,
+				ledger: this.ledger,
+				requestMicros: reserve,
+				start: async (name) => {
+					const options = this.options
+					if (options.callerModelExecution !== "modelRequestSandbox") {
+						throw new InspectionError("model-request-sandbox", "Invalid model request sandbox configuration")
+					}
+					const event: ModelRequestSandboxEvent = {
+						version: 2,
+						type: "sandbox.event",
+						action: "model-request-sandbox-started",
+						sandboxId: name,
+						inspectionId: context.id,
+						sequence: this.timeline.length + 1,
+						timestamp: new Date().toISOString(),
+						detail:
+							"Model request sandbox started. The sandbox provider supplies the model key. This machine doesn’t need it.",
+					}
+					this.timeline.push(event)
+					await context.deliver(() => options.onEvent?.(structuredClone(event)))
+				},
+				route: configured,
+				allocated: (name, reservedUsd) =>
+					this.meter.start(
+						"modelRequestSandbox",
+						name,
+						(ms) => modelRequestSandbox.provider.estimateMaxCost(ms),
+						reservedUsd,
+					),
+			})
+		}
 		const text = await context.step("setup", role, (operation) =>
 			paidRequest({
 				ledger: this.ledger,
+				execution: this.modelRequestSandbox ? "modelRequestSandbox" : undefined,
 				role,
 				step: role,
 				pricing,
-				modelId: model.modelId,
+				modelId: "model" in configured ? configured.model.modelId : configured.modelId,
 				prompt,
-				output: 1024,
+				output,
 				signal: operation.signal,
 				send: async (budget) => {
+					if ("credential" in configured && this.modelRequestSandbox) {
+						return this.modelRequestSandbox.send({ role, route: configured, prompt, output }, budget)
+					}
+					if (!("model" in configured)) {
+						throw new InspectionError("invalid-model", "Missing caller model")
+					}
+					// Dispatch local handles through the caller’s model client.
+					const { model } = configured
 					const reply = await generateText({
 						model,
 						prompt,
@@ -263,7 +324,10 @@ export class ModelInspection {
 		} catch (error) {
 			// preserve cancellation and delivery failures from model calls
 			rethrowInspectionFailure(error, context)
-			report.releaseSummary.text += " (model evidence incomplete)"
+			if (error instanceof InspectionError && error.code === "model-request-sandbox-startup") {
+				throw error
+			}
+			recordEvidenceError(report, error, Boolean(this.modelRequestSandbox))
 		}
 	}
 	async adopt(): Promise<void> {
@@ -276,7 +340,7 @@ export class ModelInspection {
 		}
 	}
 	// assemble the version two report from the measured upgrades
-	card(card: ReportCard): ReportCardV2 {
+	card(card: ReportCard): ModelRequestSandboxReportCard {
 		const reports = new Map(this.upgrades.map((upgrade) => [upgradeKey(upgrade), upgrade]))
 		return {
 			...card,
@@ -293,89 +357,11 @@ export class ModelInspection {
 				card.upgrades.map((upgrade) => reports.get(upgradeKey(upgrade)) ?? toUpgradeReport(upgrade)),
 			),
 			timeline: this.timeline,
+			runtimeUsage: this.meter.snapshot(this.ledger.usage),
 		}
-	}
-}
-function validateModels(models: InspectionOptionsV2["models"]): void {
-	// validate price bounds for each required model role
-	for (const role of ["releaseSummary", "featureMatch", "repair", "featureAdoption"] as const) {
-		const model = models[role]
-		if (
-			!model?.pricing ||
-			!Number.isSafeInteger(model.pricing.maxInputTokens) ||
-			model.pricing.maxInputTokens < 1 ||
-			![model.pricing.inputUsdPerMillion, model.pricing.outputUsdPerMillion, model.pricing.fixedUsd ?? 0].every(
-				(rate) => Number.isFinite(rate) && rate >= 0,
-			)
-		) {
-			throw new InspectionError("pricing", "Four model roles require explicit price bounds")
-		}
-		// verify that host roles supply a configured model handle
-		if (
-			(role === "releaseSummary" || role === "featureMatch") &&
-			(!("model" in model) ||
-				!model.model ||
-				typeof model.model !== "object" ||
-				typeof model.model.doGenerate !== "function")
-		) {
-			// reject an unusable host model before starting work
-			throw new InspectionError("invalid-model", "Expected a configured host model")
-		}
-	}
-}
-export function hasModels(
-	options: InspectionOptions | InspectionOptionsV2 | PreviousInspectionOptions,
-): options is InspectionOptionsV2 | PreviousInspectionOptions {
-	// distinguish configured model roles from legacy model ids
-	const models = options.models
-	if (models === undefined) {
-		return false
-	}
-	if (models === null || typeof models !== "object" || Array.isArray(models)) {
-		throw new InspectionError("invalid-model", "Expected a dictionary of model roles")
-	}
-	// select model-backed inspection for structured role settings
-	return Object.values(models).some((value) => typeof value !== "string")
-}
-export function toModelOptions(options: InspectionOptionsV2 | PreviousInspectionOptions): InspectionOptionsV2 {
-	const { models, limits } = options
-	const agent: NonNullable<PreviousInspectionOptions["limits"]>["agent"] = limits?.agent
-	// map older model and limit names to current roles
-	return {
-		...options,
-		models: {
-			releaseSummary: models.releaseSummary,
-			featureMatch: models.featureMatch,
-			repair: "repair" in models ? models.repair : models.fix,
-			featureAdoption: "featureAdoption" in models ? models.featureAdoption : models.adoption,
-		},
-		limits: {
-			...limits,
-			agent: {
-				repair: toTurnLimits(agent?.repair, agent?.fix),
-				featureAdoption: toTurnLimits(agent?.featureAdoption, agent?.adoption),
-			},
-		},
 	}
 }
 
-type CurrentLimits = NonNullable<NonNullable<InspectionOptionsV2["limits"]>["agent"]>["repair"]
-type PreviousLimits = NonNullable<NonNullable<PreviousInspectionOptions["limits"]>["agent"]>["fix"]
-function toTurnLimits(current: PreviousLimits, previous: PreviousLimits): CurrentLimits {
-	if (!current && !previous) {
-		return undefined
-	}
-	return {
-		maxTurns: lowestLimit(current?.maxTurns, current?.maxIterations, previous?.maxTurns, previous?.maxIterations),
-		maxDurationMs: lowestLimit(current?.maxDurationMs, previous?.maxDurationMs),
-		maxCostUsd: lowestLimit(current?.maxCostUsd, previous?.maxCostUsd),
-	}
-}
-// apply the lowest supplied limit across compatible option names
-function lowestLimit(...values: (number | undefined)[]): number | undefined {
-	const specified = values.filter((value) => value !== undefined)
-	return specified.length ? Math.min(...specified) : undefined
-}
 function upgradeKey(upgrade: Pick<UpgradeReport, "dependency" | "to">): string {
 	return `${upgrade.dependency}@${upgrade.to}`
 }
@@ -392,4 +378,15 @@ function toUpgradeReport(upgrade: UpgradeReport): UpgradeReportV2 {
 		newDependencies: [],
 		modelUsage: [],
 	}
+}
+
+function recordEvidenceError(report: UpgradeReportV2, error: unknown, modelRequestSandbox: boolean): void {
+	if (modelRequestSandbox && error instanceof InspectionError && error.code === "credential-binding") {
+		throw error
+	}
+	// Record incomplete evidence on the affected Upgrade.
+	report.releaseSummary.text +=
+		error instanceof InspectionError && error.code === "model-budget"
+			? " (model budget reached)"
+			: " (model evidence incomplete)"
 }

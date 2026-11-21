@@ -2,7 +2,6 @@
 	"name": "@health-code/mcp",
 	"type": "module",
 	"dependencies": {
-		"@ai-sdk/anthropic": "4.0.105",
 		"@modelcontextprotocol/server": "2.4.0",
 		"@runta/runta-sdk": "0.2.0",
 		"health-code": "workspace:*",

@@ -1,7 +1,5 @@
-import { createAnthropic } from "@ai-sdk/anthropic"
-import type { InspectionModels, Pricing } from "health-code"
+import type { Pricing, SandboxModelRoutes } from "health-code"
 import {
-	credentials,
 	defaultModel,
 	defaultOrigin,
 	modelOrigin,
@@ -18,19 +16,10 @@ function priceBound(setting: string | undefined, fallback: number | undefined): 
 	}
 	return price
 }
-export function configureModels(
-	environment: NodeJS.ProcessEnv,
-	request: typeof globalThis.fetch = globalThis.fetch,
-): InspectionModels {
-	// bind the host client to the configured model origin
-	const { key } = credentials(environment)
+
+export function configureModels(environment: NodeJS.ProcessEnv): SandboxModelRoutes {
 	const origin = modelOrigin(environment)
 	const baseUrl = `${origin}/v1`
-	const provider = createAnthropic({
-		baseURL: baseUrl,
-		apiKey: key,
-		fetch: (url, init) => request(url, { ...init, redirect: "error" }),
-	})
 	// apply built-in pricing only to the default model and origin
 	function pricing(modelId: string): Pricing {
 		const known = modelId === defaultModel && origin === defaultOrigin
@@ -40,13 +29,8 @@ export function configureModels(
 			maxInputTokens: 65536,
 		}
 	}
-	// build authenticated handles for the two host roles
-	function host(role: "releaseSummary" | "featureMatch"): InspectionModels["releaseSummary"] {
-		const modelId = environment[roleVariables[role]] || defaultModel
-		return { model: provider(modelId), pricing: pricing(modelId) }
-	}
-	// give guest roles a reference to the registered secret
-	function guest(role: "repair" | "featureAdoption"): InspectionModels["repair"] {
+	// All four roles refer to the stored credential for this origin.
+	function route(role: keyof SandboxModelRoutes): SandboxModelRoutes["repair"] {
 		const modelId = environment[roleVariables[role]] || defaultModel
 		return {
 			modelId,
@@ -57,9 +41,9 @@ export function configureModels(
 		}
 	}
 	return {
-		releaseSummary: host("releaseSummary"),
-		featureMatch: host("featureMatch"),
-		repair: guest("repair"),
-		featureAdoption: guest("featureAdoption"),
+		releaseSummary: route("releaseSummary"),
+		featureMatch: route("featureMatch"),
+		repair: route("repair"),
+		featureAdoption: route("featureAdoption"),
 	}
 }

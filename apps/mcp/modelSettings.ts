@@ -15,18 +15,22 @@ export function toEnvironmentReference(name: string): string {
 	return `\${${name}}`
 }
 
-export function credentials(environment: NodeJS.ProcessEnv): { token: string; key: string } {
-	function required(name: string): string {
-		const value = environment[name]
-		// Claude Code can forward an unresolved environment reference verbatim.
-		if (!value?.trim() || value === toEnvironmentReference(name)) {
-			throw new UserError(`Supply ${name} through your environment.`)
-		}
-		return value
+export function accountToken(environment: NodeJS.ProcessEnv): string {
+	const token = environment.RUNTA_TOKEN
+	if (!token?.trim() || token === toEnvironmentReference("RUNTA_TOKEN")) {
+		throw new UserError("Supply RUNTA_TOKEN through your environment.")
 	}
-	// require both accounts for live inspections
-	return { token: required("RUNTA_TOKEN"), key: required("ANTHROPIC_API_KEY") }
+	return token
 }
+
+export function setupKey(environment: NodeJS.ProcessEnv): string | undefined {
+	const key = environment.ANTHROPIC_API_KEY
+	if (key !== undefined && (!key.trim() || key === toEnvironmentReference("ANTHROPIC_API_KEY"))) {
+		throw new UserError("Supply ANTHROPIC_API_KEY only when registering a key.")
+	}
+	return key
+}
+
 export function modelOrigin(environment: NodeJS.ProcessEnv): string {
 	try {
 		// parse the configured origin before binding credentials

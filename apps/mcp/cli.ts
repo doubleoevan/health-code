@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs"
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio"
 import { createServer } from "./createServer.ts"
 import { inspectWithAccount } from "./inspectWithAccount.ts"
-import { UserError } from "./modelSettings.ts"
+import { accountToken, UserError } from "./modelSettings.ts"
+import { recoverAccount } from "./personalModelRequestSandboxes.ts"
 import { setupAccount } from "./setupAccount.ts"
 import { InspectionStore } from "./storeInspection.ts"
 import { Inspections } from "./trackInspections.ts"
@@ -20,8 +21,25 @@ async function main(args: string[]): Promise<void> {
 		return
 	}
 
+	// Saved reports remain readable while the provider reclaims previous allocations.
+	const recovery = process.env.RUNTA_TOKEN
+		? Promise.resolve()
+				.then(() => recoverAccount(accountToken(process.env)))
+				.catch((error: unknown) =>
+					error instanceof UserError
+						? error
+						: new UserError("Model Request Sandbox recovery failed. Check your account and restart."),
+				)
+		: undefined
 	// bind inspection jobs to the stdio session
-	const inspections = new Inspections(new InspectionStore(), (options) => inspectWithAccount(options, process.env))
+	const inspections = new Inspections(new InspectionStore(), async (options) => {
+		const provider = await recovery
+		if (provider instanceof UserError) {
+			throw provider
+		}
+		return inspectWithAccount({ ...options, sandboxProvider: provider }, process.env)
+	})
+	// Connect stdio independently of remote recovery.
 	const server = createServer(inspections, version)
 	const transport = new StdioServerTransport()
 	server.server.onclose = () => {

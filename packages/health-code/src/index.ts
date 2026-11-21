@@ -47,6 +47,16 @@ export type {
 export { InspectionError, SandboxUnavailableError } from "./contracts.ts"
 export { createFakeSandboxProvider, type FixtureCommand, type SandboxFixture } from "./createFakeSandboxProvider.ts"
 export { inspectRepository } from "./inspectRepository.ts"
+export type {
+	ModelRequestSandbox,
+	ModelRequestSandboxEvent,
+	ModelRequestSandboxOptions,
+	ModelRequestSandboxReportCard,
+	RuntimeUsage,
+	SandboxModelRequest,
+	SandboxModelRoutes,
+} from "./modelRequestSandbox.ts"
+export { isModelRequestSandboxName, toModelRequestSandboxName } from "./modelRequestSandbox.ts"
 export { createSandboxProvider, type ProviderOptions } from "./sandbox/createSandboxProvider.ts"
 export { reconcileSandboxes } from "./sandbox/reconcileSandboxes.ts"
 export { testInventorySummarySchema } from "./testInventorySummary.ts"

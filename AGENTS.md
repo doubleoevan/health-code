@@ -23,7 +23,7 @@ The library ships the inspection engine. The site and MCP workspaces consume the
 | When changing | Start here | Guidance |
 | --- | --- | --- |
 | Baseline, install or upgrade checks, feature matching, agent attempts, patches, verdicts, events, or report cards | `packages/health-code/` | domain-model, code-style |
-| Sandbox creation, network policy, command execution, teardown, or the fake provider | `packages/health-code/` | Sandbox Provider boundary. Use provider names in identifiers only inside their provider. |
+| Sandbox creation, Model Request Sandbox credentials, network policy, command execution, teardown, or the fake provider | `packages/health-code/` | Sandbox Provider boundary. Use provider names in identifiers only inside their provider. |
 | Package-manager detection, install, bump, typecheck, tests, or upgrade discovery | `packages/health-code/` | Ecosystem Adapter boundary. |
 | Model-facing instructions, evidence interpolation, or model calls | `packages/health-code/` | prompt-authoring, ai-sdk |
 | Hosted submission, recovery, SSE, live log, timeline, or Report Card publication | `apps/web/` | jsx-conventions, vercel-react-best-practices, web-design-guidelines |

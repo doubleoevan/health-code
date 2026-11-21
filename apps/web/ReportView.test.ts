@@ -1,8 +1,12 @@
 import { expect, test } from "bun:test"
+import { createElement } from "react"
+import { renderToStaticMarkup } from "react-dom/server"
 import { origin, replay, createTestSite as site } from "./fixtures/createTestSite.ts"
 import { publishReport } from "./publishReport.ts"
+import type { SiteEvent } from "./report.ts"
 import { replayRepositoryUrl as repository } from "./report.ts"
 import { InspectionStore } from "./storeInspections.ts"
+import { Timeline } from "./Timeline.tsx"
 
 test("server HTML renders each Verdict, license decision, evidence and preview before JavaScript", async () => {
 	const store = new InspectionStore(":memory:")
@@ -32,6 +36,13 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			repair: { maxTurns: 4, maxDurationMs: 20000, maxCostUsd: 0.5 },
 			featureAdoption: { maxTurns: 0, maxDurationMs: 0, maxCostUsd: 0 },
 		},
+	}
+	// Publish the runtime usage cutoff with the saved report.
+	output.report.runtimeUsage = {
+		usageAsOf: "2026-11-20T10:42:00.000Z",
+		runtimes: [],
+		modelCostUsd: 0,
+		modelReservedUsd: 0,
 	}
 	// include unavailable size evidence and a test file error
 	upgrade.installSize = { reason: "Size measurement unavailable" }
@@ -70,11 +81,12 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 		upgrade.verdict = verdict
 		const id = store.enqueue(repository)
 		store.finish(id, publishReport(output, "MPL-2.0"))
-		const html = (await (await app.request("/r/" + id)).text()).replaceAll("<!-- -->", "")
+		const html = (await (await app.request(`/r/${id}`)).text()).replaceAll("<!-- -->", "")
 		for (const expected of [
 			verdict.replace("'", "&#x27;"),
 			"<h1>1 upgrade inspected, 1 feature patch, 1 connection blocked during install</h1>",
 			"Checks before the upgrade",
+			'Usage as of <time dateTime="2026-11-20T10:42:00.000Z">2026-11-20 10:42:00 UTC</time>',
 			"<summary>Turn limit</summary>",
 			"<dt>Repair</dt><dd>4</dd>",
 			"<dt>Feature adoption</dt><dd>0</dd>",
@@ -86,7 +98,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			"twitter:card",
 			"og:description",
 			"og:title",
-			origin + "/r/" + id,
+			`${origin}/r/${id}`,
 			"Copy patch instructions",
 			"Direct replacement",
 			match.directQuote,
@@ -121,11 +133,11 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 	// render the same evidence without a publication license
 	const withheld = store.enqueue(repository)
 	store.finish(withheld, publishReport(output, null))
-	const html = await (await app.request("/r/" + withheld)).text()
+	const html = await (await app.request(`/r/${withheld}`)).text()
 	expect(html).toContain("Findings only")
 	expect(html).not.toContain(upgrade.patches[0]?.prompt ?? "Copy patch instructions")
 	expect(html).not.toContain("/patches/")
-	expect((await app.request("/patches/" + "0".repeat(64) + ".patch")).status).toBe(404)
+	expect((await app.request(`/patches/${"0".repeat(64)}.patch`)).status).toBe(404)
 	// check that changing the mailbox invalidates the recorded digest
 	const patch = upgrade.patches[0]
 	if (!patch) {
@@ -147,10 +159,34 @@ test("unsupported and ambiguous projects preserve detection reasons without upgr
 		const id = store.enqueue(repository)
 		store.finish(id, publishReport(output, null))
 		// verify the page explains the reason and supported languages
-		const html = await (await app.request("/r/" + id)).text()
+		const html = await (await app.request(`/r/${id}`)).text()
 		expect(html).toContain(reason)
 		expect(html).toContain("JavaScript and TypeScript")
 		expect(html).toContain("No upgrades inspected")
 	}
 	store.database.close()
+})
+
+test("a saved model request sandbox startup is shown once in the pinned list and once in the timeline", () => {
+	const detail = "Model request sandbox started. Runta supplies the model key. This machine doesn’t need it."
+	const event: SiteEvent = {
+		version: 2,
+		inspectionId: "recorded",
+		sandboxId: "recorded-relay",
+		type: "sandbox.event",
+		action: "model-request-sandbox-started",
+		sequence: 4,
+		timestamp: new Date(0).toISOString(),
+		detail,
+	}
+	const html = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: false, events: [event] }))
+	expect(html.split(detail)).toHaveLength(3)
+	// Replay the original action and detail from an earlier saved Inspection.
+	const historical: SiteEvent = {
+		...event,
+		action: "model-relay-started",
+		detail: detail.replace("Model request sandbox started", "Model relay started"),
+	}
+	const replayed = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: false, events: [historical] }))
+	expect(replayed.split(detail)).toHaveLength(3)
 })

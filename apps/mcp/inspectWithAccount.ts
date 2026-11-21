@@ -1,18 +1,24 @@
-import { createSandboxProvider, inspectRepository, type ReportCardV2, type SandboxProvider } from "health-code"
+import { inspectRepository, type ModelRequestSandboxReportCard, type SandboxProvider } from "health-code"
 import { configureModels } from "./configureModels.ts"
-import { credentials } from "./modelSettings.ts"
+import { accountToken } from "./modelSettings.ts"
+import { type PersonalProvider, personalProvider } from "./personalModelRequestSandboxes.ts"
 import type { Inspect } from "./trackInspections.ts"
 
 export function inspectWithAccount(
-	options: Parameters<Inspect>[0] & { sandboxProvider?: SandboxProvider },
+	options: Parameters<Inspect>[0] & { sandboxProvider?: PersonalProvider },
 	environment: NodeJS.ProcessEnv,
-): Promise<ReportCardV2> {
+): Promise<ModelRequestSandboxReportCard> {
 	// resolve the developer's model roles and sandbox account for this inspection
+	const token = accountToken(environment)
 	const models = configureModels(environment)
-	return inspectRepository({
-		...options,
-		models,
-		sandboxProvider: options.sandboxProvider ?? createSandboxProvider({ token: credentials(environment).token }),
-		githubToken: environment.GITHUB_TOKEN,
-	})
+	function inspect(sandboxProvider: SandboxProvider): Promise<ModelRequestSandboxReportCard> {
+		return inspectRepository({
+			...options,
+			callerModelExecution: "modelRequestSandbox",
+			models,
+			sandboxProvider,
+			githubToken: environment.GITHUB_TOKEN,
+		})
+	}
+	return options.sandboxProvider ? inspect(options.sandboxProvider) : personalProvider(token).then(inspect)
 }

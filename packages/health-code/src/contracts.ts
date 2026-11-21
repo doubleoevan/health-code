@@ -1,4 +1,4 @@
-import type { AgentCapability, InspectionEventV2, PatchOperation } from "./agentContracts.ts"
+import type { AgentCapability, PatchOperation } from "./agentContracts.ts"
 export type Stage = "setup" | "detect" | "install" | "typecheck" | "tests"
 export type Evidence = {
 	// retain bounded output alongside exit status and timing
@@ -25,6 +25,7 @@ export type Observation = {
 	reason?: string
 	destinations?: string[]
 }
+
 export type TestCounts = Record<"passed" | "failed" | "skipped" | "todo", number>
 export type TestCase = { file: string; name: string; status: keyof TestCounts }
 // group discovered tests and file loading errors
@@ -34,6 +35,7 @@ export type TestInventory = {
 	cases: TestCase[]
 	testFileErrors: { file: string; reason: string }[]
 }
+
 export type TestFailure = { file: string; name?: string; workspace: string }
 // represent check outcomes with their evidence
 export type CheckResult = (
@@ -48,6 +50,7 @@ export type CheckResult = (
 	unconfirmedTests?: TestFailure[]
 	attempts?: { status: "passed" | "failed" | "untested"; failingTests: TestFailure[] }[]
 }
+
 export type Upgrade = { dependency: string; from: Record<string, string>; to: string; kind: "minor" | "major" }
 export type PackageManager = "npm" | "bun" | "pnpm" | "yarn"
 // describe the detected manager and workspace dependencies
@@ -61,6 +64,7 @@ export type Project = {
 	testScript?: string
 	environment: string[]
 }
+
 export type Sandbox = { id: string }
 type SandboxAction = "created" | "credentials-withheld" | "network-locked" | "connection-blocked" | "deleted"
 // distinguish inspection lifecycle, sandbox and check events
@@ -99,6 +103,7 @@ export type Command = {
 export type CommandResult = Evidence & { observationId?: string; timedOut?: boolean }
 export type Operation = { timeoutMs: number; signal?: AbortSignal }
 export interface SandboxProvider {
+	modelRequestSandbox?: import("./modelRequestSandbox.ts").ModelRequestSandbox
 	openCredentialSession?: AgentCapability
 	patchWorkspace?(sandbox: Sandbox, request: PatchOperation, operation: Operation): Promise<string | null>
 	checkAvailability(options?: Operation): Promise<void>
@@ -123,7 +128,9 @@ export type InspectionLimits = {
 	maxCostUsd?: number
 	timeouts?: Partial<Record<Stage, number>>
 }
+
 export type InspectionOptions = {
+	callerModelExecution?: "local"
 	// select a public repository and its execution provider
 	repositoryUrl: string
 	sandboxProvider: SandboxProvider
@@ -136,6 +143,7 @@ export type InspectionOptions = {
 	models?: Readonly<Record<string, string>>
 	signal?: AbortSignal
 }
+
 export type Baseline = { install: CheckResult; typecheck: CheckResult; tests: CheckResult }
 // associate upgrade checks with their installation observations
 export type UpgradeReport = Upgrade & {
@@ -169,10 +177,13 @@ export type ReportCard = {
 	upgrades: UpgradeReport[]
 	timeline: InspectionEvent[]
 }
+
 export class InspectionError extends Error {
-	timeline: InspectionEvent[] | InspectionEventV2[] = []
+	timeline: InspectionEvent[] | import("./modelRequestSandbox.ts").ModelRequestSandboxEvent[] = []
 	// preserve cleanup state on typed inspection failures
 	cleanupId?: string
+	cleanupIds?: string[]
+	runtimeUsage?: import("./modelRequestSandbox.ts").RuntimeUsage
 	constructor(
 		readonly code: string,
 		message: string,

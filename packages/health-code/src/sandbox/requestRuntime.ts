@@ -102,3 +102,21 @@ export function availabilityReason(status?: number): SandboxUnavailableError["re
 	}
 	return "unavailable"
 }
+
+/** Quotes one independently rounded provider runtime with its allocated resources. */
+export function runtimeCost({
+	durationMs,
+	vcpus,
+	memoryMib,
+}: {
+	durationMs: number
+	vcpus: number
+	memoryMib: number
+}): number {
+	return (Math.ceil(durationMs / 60000) / 60) * (vcpus * 0.0504 + (memoryMib / 1024) * 0.0162 + 256 * 0.000108)
+}
+
+/** Identifies create responses that could not have allocated a new runtime. */
+export function refusedAllocation(error: unknown): boolean {
+	return error instanceof ApiError && [400, 401, 403, 409, 422].includes(error.statusCode ?? 0)
+}

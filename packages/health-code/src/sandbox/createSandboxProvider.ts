@@ -15,9 +15,10 @@ import {
 } from "../contracts.ts"
 import { confirmNetworkPolicy, validateRegistryHosts } from "../networkPolicy.ts"
 import { toRepositoryUrl } from "../toRepositoryUrl.ts"
+import { createModelRequestSandbox } from "./createModelRequestSandbox.ts"
 import { executeCommand, type Instance } from "./executeCommand.ts"
-import { guestArguments } from "./executeGuest.ts"
 import { openCredentialSession } from "./openCredentialSession.ts"
+import { readProjectFile, writeProjectFile } from "./projectFiles.ts"
 import { checkout, provision, restore } from "./provision.ts"
 import { toSandboxPrefix } from "./reconcileSandboxes.ts"
 import {
@@ -25,24 +26,13 @@ import {
 	checked,
 	providerRequest,
 	type Runtime,
+	refusedAllocation,
 	remainingOperation,
+	runtimeCost,
 	translate,
 } from "./requestRuntime.ts"
 import { credentialTarget } from "./setCredentialBinding.ts"
 
-function validatedPath(path: string): string {
-	// constrain file operations to relative paths beneath the guest project
-	if (
-		!path ||
-		path.startsWith("/") ||
-		path.split("/").some((part) => !part || part === "." || part === "..") ||
-		path.includes("\0")
-	) {
-		throw new InspectionError("invalid-path", "Expected a relative project file")
-	}
-	// anchor the validated path inside the project mount
-	return `/project/${path}`
-}
 // accept deployment, resource and revision overrides at allocation time
 export type ProviderOptions = {
 	token?: string
@@ -187,6 +177,7 @@ export function connectProvider(
 		}
 	}
 	return {
+		modelRequestSandbox: createModelRequestSandbox({ sdk, runtimeName, token, request: options.fetch ?? fetch }),
 		// serialize protected patch operations with guest commands
 		async patchWorkspace(sandbox, request, operation): Promise<string | null> {
 			const instance = locked(sandbox)
@@ -262,7 +253,7 @@ export function connectProvider(
 			}, operation)
 		},
 		estimateMaxCost(durationMs): number {
-			return (Math.ceil(durationMs / 60000) / 60) * (2 * 0.0504 + (memoryMib / 1024) * 0.0162 + 256 * 0.000108)
+			return runtimeCost({ durationMs, vcpus: 2, memoryMib })
 		},
 		async createSandbox(name, operation): Promise<Sandbox> {
 			if (!/^health-code-[\da-f-]{36}$/.test(name)) {
@@ -287,7 +278,7 @@ export function connectProvider(
 				const runtime = await request
 					.catch((error: unknown) => {
 						// release ownership on definitive creation rejections
-						if (error instanceof ApiError && [400, 401, 403, 409, 422].includes(error.statusCode ?? 0)) {
+						if (refusedAllocation(error)) {
 							owned.delete(name)
 						}
 						throw error
@@ -387,35 +378,10 @@ export function connectProvider(
 			return executeCommand(locked(sandbox), command)
 		},
 		async readFile(sandbox, path, operation): Promise<string> {
-			return withCommand(locked(sandbox), (runtime) =>
-				checked(
-					runtime,
-					guestArguments({ argv: ["cat", "--", validatedPath(path)], timeoutMs: operation.timeoutMs }, undefined),
-					operation,
-					true,
-				),
-			)
+			return withCommand(locked(sandbox), (runtime) => readProjectFile({ runtime, path, operation }))
 		},
 		async writeFile(sandbox, path, contents, operation): Promise<void> {
-			const instance = locked(sandbox)
-			return withCommand(instance, async (runtime) => {
-				// validate the write target and bound its contents
-				const target = validatedPath(path)
-				if (Buffer.byteLength(contents) > 65536) {
-					throw new InspectionError("input-limit", "File exceeds input limit")
-				}
-				checkOperation(operation.signal)
-				const result = await runtime.exec(
-					guestArguments(
-						{ argv: ["sh", "-c", 'cat > "$1"', "write", target], timeoutMs: operation.timeoutMs },
-						undefined,
-					),
-					{ stdin: contents, timeoutSecs: Math.max(1, Math.ceil(operation.timeoutMs / 1000)) },
-				)
-				if (result.exitCode !== 0) {
-					throw new InspectionError("write-failed", "Could not write project file")
-				}
-			})
+			return withCommand(locked(sandbox), (runtime) => writeProjectFile({ runtime, path, contents, operation }))
 		},
 		async readAttemptedConnections(sandbox, id): Promise<Observation> {
 			const item = state(sandbox).observations.get(id)

@@ -11,7 +11,15 @@ test("recovery deletes only orphaned deployment allocations across all inventory
 	const makeRuntime = (name: string): { id: string; display_name: string } => ({ id: randomUUID(), display_name: name })
 	const abandoned = makeRuntime("hc-site-demo-" + orphan)
 	const absent = makeRuntime("hc-site-demo-" + randomUUID())
-	const first = [makeRuntime("health-code-" + orphan), makeRuntime("hc-site-demox-" + orphan), abandoned]
+	const sibling = makeRuntime("hc-site-demo-" + orphan + "-relay")
+	const first = [
+		sibling,
+		makeRuntime("hc-site-demo-" + live + "-relay"),
+		makeRuntime("hc-site-demo-" + orphan + "-relay-extra"),
+		makeRuntime("health-code-" + orphan),
+		makeRuntime("hc-site-demox-" + orphan),
+		abandoned,
+	]
 	const second = [absent, makeRuntime("hc-site-demo-" + live), makeRuntime("hc-site-demo-bad")]
 	// record each deletion and tolerate an already absent runtime
 	const request = async (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
@@ -34,7 +42,7 @@ test("recovery deletes only orphaned deployment allocations across all inventory
 		fetch: request as typeof fetch,
 	})
 	// verify that deletion stays inside the named deployment
-	assert.deepEqual(deleted, [abandoned.id, absent.id])
+	assert.deepEqual(deleted, [sibling.id, abandoned.id, absent.id])
 	await assert.rejects(
 		reconcileSandboxes({ deployment: "", token: "test", liveInspectionIds: new Set(), fetch: request as typeof fetch }),
 	)

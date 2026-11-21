@@ -3,43 +3,24 @@ import { test } from "node:test"
 import { configureModels } from "./configureModels.ts"
 import { setupAccount } from "./setupAccount.ts"
 
-test("only the host model handles send the environment key", async () => {
-	// intercept model calls and inspect the credentials at the request boundary
+test("all four roles use origin-bound routes and ignore an inherited model key", async () => {
 	const environment = { RUNTA_TOKEN: "synthetic-sandbox-token", ANTHROPIC_API_KEY: "synthetic-model-key" }
-	const hits: string[] = []
-	const models = configureModels(environment, async (url, init) => {
-		assert.equal(init?.redirect, "error")
-		assert.equal(new Headers(init?.headers).get("x-api-key"), environment.ANTHROPIC_API_KEY)
-		hits.push(String(url))
-		return Response.json({
-			type: "message",
-			role: "assistant",
-			id: "test",
-			model: "claude-opus-5-5",
-			content: [{ type: "text", text: "example" }],
-			stop_reason: "end_turn",
-			stop_sequence: null,
-			usage: { input_tokens: 1, output_tokens: 1 },
-		})
-	})
-	// exercise both roles that run in the client process
-	for (const role of [models.releaseSummary, models.featureMatch]) {
-		await role.model.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "fixture" }] }] })
-	}
-	assert.deepEqual(hits, ["https://api.anthropic.com/v1/messages", "https://api.anthropic.com/v1/messages"])
+	const models = configureModels(environment)
+	assert.deepEqual(models, configureModels({ RUNTA_TOKEN: environment.RUNTA_TOKEN }))
 	// capture the secret name registered by setup
 	let registered = ""
 	await setupAccount(environment, {
 		version: "1.2.3",
 		client: {
 			check: async () => {},
+			probe: async () => {},
 			store: async ({ name }) => {
 				registered = name
 			},
 		},
 	})
 	// compare both guest routes with the registered secret reference
-	for (const route of [models.repair, models.featureAdoption]) {
+	for (const route of Object.values(models)) {
 		assert.equal(route.credential.name, registered)
 		assert.equal(route.modelId, "claude-opus-5-5")
 		assert.ok(!JSON.stringify(route).includes(environment.ANTHROPIC_API_KEY))

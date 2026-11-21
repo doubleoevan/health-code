@@ -112,11 +112,11 @@ export async function setCredentialBinding(options: Options): Promise<Binding> {
 
 /** Resolves the exact authenticated inference endpoint for the caller's protocol. */
 export function credentialTarget(route: ModelRoute): URL {
-	const base = new URL(route.baseUrl)
-	const { header, valueTemplate, name } = route.credential
+	const base = URL.parse(route.baseUrl)
+	const { header, valueTemplate, name } = route.credential ?? {}
 	// require an https endpoint without embedded credentials
 	if (
-		base.protocol !== "https:" ||
+		base?.protocol !== "https:" ||
 		base.username ||
 		base.password ||
 		base.search ||
