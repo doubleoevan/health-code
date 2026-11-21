@@ -23,7 +23,7 @@ export async function evaluatePatch(
 	evidence: PatchEvidence,
 	match?: FeatureMatch,
 ): Promise<void> {
-	const { report, card, context } = evidence
+	const { report, inspectionReport, context } = evidence
 	const confirmed = hasConfirmedFailure(report)
 	const actions: string[] = []
 	let attemptStart: number | undefined
@@ -33,7 +33,7 @@ export async function evaluatePatch(
 		if (!match && report.result.status !== "passed" && !confirmed) {
 			throw new Error("Upgrade lacks a confirmed result")
 		}
-		const parent = match ? report.patches[0]?.testedTip : card.repository.commit
+		const parent = match ? report.patches[0]?.testedTip : inspectionReport.repository.commit
 
 		// require a tested upgrade commit before feature adoption
 		if (!parent) {

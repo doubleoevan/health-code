@@ -1,6 +1,6 @@
-import type { ModelUsage, ReportCardV2, UpgradeReportV2 } from "health-code"
+import type { InspectionReportV2, ModelUsage, UpgradeReportV2 } from "health-code"
 
-type Limits = NonNullable<ReportCardV2["limits"]>
+type Limits = NonNullable<InspectionReportV2["limits"]>
 
 // Keep the grading contract independent of the engine defaults under evaluation.
 const expected: Limits = {

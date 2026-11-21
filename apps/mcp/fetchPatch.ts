@@ -1,7 +1,7 @@
 import type { Patch } from "health-code"
 import * as z from "zod"
 import { UserError } from "./modelSettings.ts"
-import { digest, type Outcome, type SavedCard, toHash } from "./storeInspection.ts"
+import { digest, type Outcome, type SavedReport, toHash } from "./storeInspection.ts"
 import { textPage } from "./trackInspections.ts"
 
 const artifact = z.object({
@@ -52,12 +52,12 @@ function verified(raw: object, patch: z.infer<typeof artifact>): boolean {
 	return true
 }
 function findPatch(
-	card: SavedCard,
+	report: SavedReport,
 	hash: string,
 ): { patch: z.infer<typeof artifact>; verdict: string; siblings: unknown[] } {
 	// Validate stored evidence before returning Patch bytes to the coding agent.
-	for (const upgrade of card.upgrades) {
-		if (card.version !== 2 || !Array.isArray(upgrade.patches)) {
+	for (const upgrade of report.upgrades) {
+		if (report.version !== 2 || !Array.isArray(upgrade.patches)) {
 			continue
 		}
 
@@ -76,11 +76,11 @@ function findPatch(
 			return { patch: parsed.data, verdict: upgrade.verdict, siblings: upgrade.patches }
 		}
 	}
-	throw new UserError("This Report Card has no tested Patch with that digest.")
+	throw new UserError("This Inspection Report has no tested Patch with that digest.")
 }
 
-export function fetchPatch(card: SavedCard, input: Fetch): z.infer<typeof patchOutput> {
-	const { patch, verdict, siblings } = findPatch(card, input.sha256)
+export function fetchPatch(report: SavedReport, input: Fetch): z.infer<typeof patchOutput> {
+	const { patch, verdict, siblings } = findPatch(report, input.sha256)
 	const page = textPage(patch.mailbox, input.offset)
 	const checkout = input.checkout ?? { relationship: "unknown", dirty: undefined }
 
@@ -116,9 +116,9 @@ export function fetchPatch(card: SavedCard, input: Fetch): z.infer<typeof patchO
 		nextOffset: page.nextOffset,
 		verdict,
 		base: patch.base,
-		inspectedCommit: card.repository.commit,
+		inspectedCommit: report.repository.commit,
 		testedTip: patch.testedTip,
-		repository: card.repository.url,
+		repository: report.repository.url,
 		checkout,
 		prerequisiteSha256: prerequisite?.digest ?? null,
 		agentPrompt: patch.prompt,
@@ -127,16 +127,16 @@ export function fetchPatch(card: SavedCard, input: Fetch): z.infer<typeof patchO
 			: "Compare the checkout to the inspected commit with local Git ancestry. Disclose ahead, behind, diverged or unknown history and preserve uncommitted work. Verify the SHA-256 of each complete mailbox, create a new branch, apply prerequisites in order, typecheck and test without editing tests, then open the authorized pull request.",
 	}
 }
-export function validateOutcome(card: SavedCard, outcome: Outcome): void {
-	// bind application results to a tested patch in this card
-	findPatch(card, outcome.sha256)
+export function validateOutcome(report: SavedReport, outcome: Outcome): void {
+	// bind application results to a tested patch in this report
+	findPatch(report, outcome.sha256)
 	if (outcome.application === "adapted" && !outcome.adaptation) {
 		throw new UserError("Describe what changed in the adapted Patch.")
 	}
 
 	// restrict pull request links to the inspected repository
 	if (outcome.pullRequest) {
-		const prefix = `${card.repository.url.toLowerCase()}/pull/`
+		const prefix = `${report.repository.url.toLowerCase()}/pull/`
 		const url = outcome.pullRequest.toLowerCase()
 		if (!url.startsWith(prefix) || !/^[1-9][0-9]*$/.test(url.slice(prefix.length))) {
 			throw new UserError("Use an HTTPS GitHub pull request URL for the inspected repository.")

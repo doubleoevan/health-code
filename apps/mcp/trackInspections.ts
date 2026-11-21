@@ -2,19 +2,19 @@ import { setTimeout as delay } from "node:timers/promises"
 import {
 	InspectionError,
 	type InspectionEvent,
+	type InspectionReport,
 	type ModelRequestSandboxEvent,
-	type ModelRequestSandboxReportCard,
-	type ReportCard,
+	type ModelRequestSandboxInspectionReport,
 } from "health-code"
 import * as z from "zod"
 import { UserError } from "./modelSettings.ts"
 import {
-	cardSchema,
 	type Event,
 	eventSchema,
 	type InspectionStore,
 	inspectionId,
 	outcomeSchema,
+	reportSchema,
 } from "./storeInspection.ts"
 
 const page = z.object({ text: z.string(), nextOffset: z.number().nullable() })
@@ -36,7 +36,7 @@ export type Inspect = (options: {
 	repositoryUrl: string
 	signal: AbortSignal
 	onEvent: (event: InspectionEvent | ModelRequestSandboxEvent) => void
-}) => Promise<ReportCard | ModelRequestSandboxReportCard>
+}) => Promise<InspectionReport | ModelRequestSandboxInspectionReport>
 
 // retain live progress until the report is saved
 type State = {
@@ -160,13 +160,13 @@ export class Inspections {
 					},
 				}),
 			)
-			.then(async (card) => {
-				// verify that the finished card belongs to this job
-				if (!id || card.inspectionId !== id) {
+			.then(async (report) => {
+				// verify that the finished report belongs to this job
+				if (!id || report.inspectionId !== id) {
 					throw new UserError("Inspection identity mismatch.")
 				}
-				this.store.guard(JSON.stringify(card))
-				const saved = cardSchema.parse(card)
+				this.store.guard(JSON.stringify(report))
+				const saved = reportSchema.parse(report)
 
 				// retry storage writes without repeating the inspection
 				for (let attempt = 0; ; attempt++) {
@@ -177,7 +177,7 @@ export class Inspections {
 						// retain the report in memory if every write fails
 						if (attempt === 2) {
 							state.reportText = JSON.stringify(saved)
-							throw new UserError("Report Card is available in memory only. Check local storage.")
+							throw new UserError("Inspection Report is available in memory only. Check local storage.")
 						}
 						await delay(100)
 					}
@@ -222,7 +222,7 @@ export class Inspections {
 		const { progress, signal } = request
 		let state = this.active.get(input.inspectionId)
 		const deadline = Date.now() + input.waitMs
-		let step = state?.step ?? "Reading saved Report Card"
+		let step = state?.step ?? "Reading saved Inspection Report"
 		await progress?.(step)
 
 		// Wait only while the reader has caught up to the live event sequence.
@@ -247,7 +247,7 @@ export class Inspections {
 		const state = this.active.get(input.inspectionId)
 		const saved = state ? undefined : await this.store.snapshot(input.inspectionId)
 		const report = saved?.text ?? state?.reportText
-		const timeline = state?.events ?? saved?.card.timeline ?? []
+		const timeline = state?.events ?? saved?.report.timeline ?? []
 
 		// page events while pinning sandbox activity across the whole timeline
 		const events = timeline.filter((event) => event.sequence > input.afterSequence).slice(0, 8)

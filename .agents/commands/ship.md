@@ -59,15 +59,15 @@ Security:
   Nothing from inside a sandbox can reach the host, another run, or a secret.
 - Keys never enter a sandbox. The model key reaches the model host only through
   the sandbox provider's credential capability (Runta secret stubs).
-- Secrets and keys are never logged, returned in a tool result, written to a
-  report card, or included in a patch.
+- Secrets and keys are never logged, returned in a tool result, written to an
+  inspection report, or included in a patch.
 - Network policy: every phase sets the allowlist it needs, and each set replaces
   the whole policy.
 - Untrusted text (release notes, repo files, command output) is fenced as data
   in every model prompt, with per-call nonce delimiters.
 - Agents cannot edit tests to pass, and the final patch check cannot be skipped.
 - Input at each trust boundary is validated and bounded: repo URLs, run IDs,
-  report card IDs, tool arguments. An oversized value gets a 4xx, never a 500.
+  inspection report IDs, tool arguments. An oversized value gets a 4xx, never a 500.
 - Every run goes through the spend caps, and a visitor cannot exceed them.
 - Patches are served by hash and can never be swapped.
 
@@ -89,7 +89,7 @@ finding as fixed, kept on purpose with the reason, or left for the user.
 
 Find every second copy that the diff adds or keeps, and give it one shared home
 in this change: logic, a type, a constant, a user-facing label, a style class,
-an event or report card shape, or a test fixture. Compare the diff against
+an event or inspection report shape, or a test fixture. Compare the diff against
 itself and against the codebase: grep for each new function's core expression,
 each new type's fields, each new string a user reads, and each repeated class
 list. A second copy gets a shared helper now (code-style rule 18).

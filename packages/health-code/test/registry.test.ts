@@ -130,14 +130,14 @@ test("a host deadline returns the partial report and deletes the busy sandbox", 
 	}
 
 	try {
-		const card = await inspectRepository({
+		const report = await inspectRepository({
 			repositoryUrl: fixtureUrl,
 			sandboxProvider,
 			limits: { timeouts: { registry: 25 } },
 		})
-		assert.match(card.selection.registryLookupIssue ?? "", /registry lookup timed out/)
+		assert.match(report.selection.registryLookupIssue ?? "", /registry lookup timed out/)
 		assert.deepEqual(actions, ["detect", "registry"])
-		assert.ok(card.timeline.some((event) => event.type === "sandbox.event" && event.action === "deleted"))
+		assert.ok(report.timeline.some((event) => event.type === "sandbox.event" && event.action === "deleted"))
 	} finally {
 		pending.reject(new Error("Released buffered command"))
 	}

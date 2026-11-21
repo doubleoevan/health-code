@@ -26,7 +26,7 @@ The engine SHALL capture install, applicable typecheck, and test results at the 
 #### Scenario: Known Baseline failures
 
 - **WHEN** the Baseline has named failing tests or file-load failures
-- **THEN** the Report Card retains their identities and excludes those failures when comparing the upgraded project
+- **THEN** the Inspection Report retains their identities and excludes those failures when comparing the upgraded project
 
 ### Requirement: Gate each Upgrade Check on installation evidence
 

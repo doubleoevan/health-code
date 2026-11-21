@@ -10,7 +10,7 @@ async function evaluateBaseline(record: boolean, signal: AbortSignal): Promise<v
 
 	// inspect the test inventory with upgrades disabled
 	const sandboxProvider = createSandboxProvider({ memoryMib: 8192, revision: fixture.commit })
-	const card = await inspectRepository({
+	const report = await inspectRepository({
 		repositoryUrl: fixture.repositoryUrl,
 		signal,
 		sandboxProvider,
@@ -42,13 +42,13 @@ async function evaluateBaseline(record: boolean, signal: AbortSignal): Promise<v
 	})
 
 	// score or record the observed inventory and its cost
-	const observed = await finish(card)
+	const observed = await finish(report)
 	console.log(
 		JSON.stringify({
 			case: fixture.id,
 			commit: fixture.commit,
 			status: record ? "pending-review" : "passed",
-			promptVersions: card.promptVersions,
+			promptVersions: report.promptVersions,
 			...observed,
 			verdict: null,
 			referenceDiff: null,

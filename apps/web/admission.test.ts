@@ -155,8 +155,8 @@ test("replay submits once and hydrates analytics only for an eligible foreign vi
 	assert.equal((await submit()).headers.get("location"), path)
 
 	// Open the report with a fresh visitor cookie.
-	const card = await app.request(origin + path)
-	const cookie = card.headers.get("set-cookie")?.split(";")[0] ?? ""
+	const reportResponse = await app.request(origin + path)
+	const cookie = reportResponse.headers.get("set-cookie")?.split(";")[0] ?? ""
 	const view = async (agent: string): Promise<Response> =>
 		app.request(`${origin}/api/inspections/${id}/view`, {
 			method: "POST",

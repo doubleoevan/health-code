@@ -1,6 +1,6 @@
 import { type ReactElement, type ReactNode, useState } from "react"
 import { PromptVersions } from "./PromptVersions.tsx"
-import { type Citation, mcpSetupUrl, type PublishedCard, toSummary, type UpgradeCard } from "./report.ts"
+import { type Citation, mcpSetupUrl, type PublishedReport, toSummary, type UpgradeCard } from "./report.ts"
 
 export function Link({ href, children }: { href?: string; children: ReactNode }): ReactElement {
 	// allow secure external links and root-relative paths
@@ -204,9 +204,9 @@ function UsageDetails({ usage }: { usage: UpgradeCard["usage"] }): ReactElement 
 	)
 }
 
-function Upgrade({ card, origin, commit }: { card: UpgradeCard; origin: string; commit: string }): ReactElement {
+function Upgrade({ upgrade, origin, commit }: { upgrade: UpgradeCard; origin: string; commit: string }): ReactElement {
 	// Preserve the dependency order in both the links and the application prompt.
-	const patches = card.patches.toSorted((a, b) => Number(a.role === "feature") - Number(b.role === "feature"))
+	const patches = upgrade.patches.toSorted((a, b) => Number(a.role === "feature") - Number(b.role === "feature"))
 	const prompt = patches
 		.map(
 			(patch) =>
@@ -217,87 +217,92 @@ function Upgrade({ card, origin, commit }: { card: UpgradeCard; origin: string; 
 		<article>
 			{/* upgrade verdict and version change */}
 			<header>
-				<h3>{card.dependency}</h3>
+				<h3>{upgrade.dependency}</h3>
 				<strong
-					className={card.verdict?.startsWith("Fixed") || card.verdict === "Passes as is" ? "positive" : "neutral"}
+					className={
+						upgrade.verdict?.startsWith("Fixed") || upgrade.verdict === "Passes as is" ? "positive" : "neutral"
+					}
 				>
-					{card.verdict ?? "Verdict unavailable"}
+					{upgrade.verdict ?? "Verdict unavailable"}
 				</strong>
 			</header>
 			<p className="mono">
-				{Object.entries(card.from)
+				{Object.entries(upgrade.from)
 					.map(([workspace, version]) => `${workspace} · ${version}`)
 					.join(", ")}{" "}
-				→ {card.to}
+				→ {upgrade.to}
 			</p>
 
 			{/* repair outcome and test changes */}
-			{card.verdict === "Untested" && card.untestedReason && (
+			{upgrade.verdict === "Untested" && upgrade.untestedReason && (
 				<p>
-					<strong>Why this upgrade was untested</strong> · {card.untestedReason}
+					<strong>Why this upgrade was untested</strong> · {upgrade.untestedReason}
 				</p>
 			)}
-			{card.reason && (
+			{upgrade.reason && (
 				<p>
-					<strong>Why repair stopped</strong> · {card.reason}
+					<strong>Why repair stopped</strong> · {upgrade.reason}
 				</p>
 			)}
-			{card.testChanges?.map((change) => (
+			{upgrade.testChanges?.map((change) => (
 				<p key={change}>Test change · {change}</p>
 			))}
 
 			{/* release summary and feature matches */}
-			<p>{card.summary ?? "Release summary unavailable."}</p>
+			<p>{upgrade.summary ?? "Release summary unavailable."}</p>
 			<dl>
 				<dt>Feature matches</dt>
 				<dd>
-					<FeatureMatches matches={card.matches} />
+					<FeatureMatches matches={upgrade.matches} />
 				</dd>
 
 				{/* observed installation activity */}
 				<dt>Installation findings</dt>
 				<dd>
-					{card.observation.findings
+					{upgrade.observation.findings
 						.map((finding) =>
 							finding.kind === "connection"
 								? `${finding.outcome} · ${finding.destination}`
 								: `File written · ${finding.path}`,
 						)
 						.join("; ")}
-					{card.observation.complete && !card.observation.findings.length && "No findings."}
-					{!card.observation.complete && (
+					{upgrade.observation.complete && !upgrade.observation.findings.length && "No findings."}
+					{!upgrade.observation.complete && (
 						<p>
-							Some install activity could not be recorded.{card.observation.reason && ` ${card.observation.reason}`}
+							Some install activity could not be recorded.
+							{upgrade.observation.reason && ` ${upgrade.observation.reason}`}
 						</p>
 					)}
 				</dd>
 
 				{/* install, typecheck and test results */}
 				<dt>Install check</dt>
-				<dd>{card.checks.install}</dd>
+				<dd>{upgrade.checks.install}</dd>
 				<dt>Typecheck and tests</dt>
 				<dd>
-					{card.checks.typecheck} · {card.checks.tests}
+					{upgrade.checks.typecheck} · {upgrade.checks.tests}
 				</dd>
-				<TestFileErrors errors={card.testFileErrors} />
+				<TestFileErrors errors={upgrade.testFileErrors} />
 
 				{/* diagnostic source locations */}
 				<dt>Source locations</dt>
 				<dd>
-					<Citations links={card.diagnostics} />
+					<Citations links={upgrade.diagnostics} />
 				</dd>
 
 				{/* installed size and added dependencies */}
 				<dt>Installed size change</dt>
 				<dd>
-					{card.sizeBytes === undefined ? "Unmeasured" : `${card.sizeBytes > 0 ? "+" : ""}${card.sizeBytes} bytes`}
+					{upgrade.sizeBytes === undefined
+						? "Unmeasured"
+						: `${upgrade.sizeBytes > 0 ? "+" : ""}${upgrade.sizeBytes} bytes`}
 				</dd>
-				{!!card.addedDependencies?.length && (
+				{!!upgrade.addedDependencies?.length && (
 					<>
 						<dt>Added dependencies</dt>
 						<dd>
 							<ul>
-								{card.addedDependencies.map((dep) => (
+								{upgrade.addedDependencies.map((dep) => (
 									<li key={dep.commit}>
 										{dep.name}@{dep.version} · {dep.reason}{" "}
 										<Link href={dep.patch && toPatchPath(dep.patch)}>
@@ -311,7 +316,7 @@ function Upgrade({ card, origin, commit }: { card: UpgradeCard; origin: string; 
 				)}
 
 				{/* model usage for this upgrade */}
-				<UsageDetails usage={card.usage} />
+				<UsageDetails usage={upgrade.usage} />
 			</dl>
 
 			{/* tested patches and application instructions */}
@@ -327,11 +332,11 @@ function Upgrade({ card, origin, commit }: { card: UpgradeCard; origin: string; 
 		</article>
 	)
 }
-export function ReportView({ card, url }: { card: PublishedCard; url: string }): ReactElement {
+export function ReportView({ report, url }: { report: PublishedReport; url: string }): ReactElement {
 	return (
 		<>
 			{/* inspection summary and sharing controls */}
-			<h1>{toSummary(card)}</h1>
+			<h1>{toSummary(report)}</h1>
 			<div className="buttons">
 				<Copy label="Copy link" text={url} />
 				<Copy label="Share" text={url} share />
@@ -339,21 +344,21 @@ export function ReportView({ card, url }: { card: PublishedCard; url: string }):
 
 			{/* inspected revision and project type */}
 			<p>
-				<Link href={`${card.repository.url}/tree/${card.repository.commit}`}>
-					{card.repository.url.slice(19)} · {card.repository.commit.slice(0, 8)}
+				<Link href={`${report.repository.url}/tree/${report.repository.commit}`}>
+					{report.repository.url.slice(19)} · {report.repository.commit.slice(0, 8)}
 				</Link>
 			</p>
-			{card.detection && (
+			{report.detection && (
 				<p role="status">
-					Health Code inspects JavaScript and TypeScript projects. Project detection · {card.detection}
+					Health Code inspects JavaScript and TypeScript projects. Project detection · {report.detection}
 				</p>
 			)}
 
 			{/* runtime usage cutoff */}
-			{card.usageAsOf && (
+			{report.usageAsOf && (
 				<p>
 					Usage as of{" "}
-					<time dateTime={card.usageAsOf}>{card.usageAsOf.replace("T", " ").replace(/(?:\.\d+)?Z$/, " UTC")}</time>
+					<time dateTime={report.usageAsOf}>{report.usageAsOf.replace("T", " ").replace(/(?:\.\d+)?Z$/, " UTC")}</time>
 				</p>
 			)}
 
@@ -361,46 +366,48 @@ export function ReportView({ card, url }: { card: PublishedCard; url: string }):
 			<details>
 				<summary>Checks before the upgrade</summary>
 				<dl>
-					{Object.entries(card.baseline).map(([name, status]) => (
+					{Object.entries(report.baseline).map(([name, status]) => (
 						<div key={name}>
 							<dt>{name}</dt>
 							<dd>{status}</dd>
 						</div>
 					))}
-					<TestFileErrors errors={card.baselineTestFileErrors} />
+					<TestFileErrors errors={report.baselineTestFileErrors} />
 				</dl>
 			</details>
-			<PromptVersions versions={card.promptVersions} />
+			<PromptVersions versions={report.promptVersions} />
 
 			{/* agent turn limits */}
-			{card.turnLimits && (
+			{report.turnLimits && (
 				<details>
 					<summary>Turn limit</summary>
 					<dl>
 						<dt>Repair</dt>
-						<dd>{card.turnLimits.repair}</dd>
+						<dd>{report.turnLimits.repair}</dd>
 						<dt>Feature adoption</dt>
-						<dd>{card.turnLimits.featureAdoption}</dd>
+						<dd>{report.turnLimits.featureAdoption}</dd>
 					</dl>
 				</details>
 			)}
 
 			{/* publication scope */}
-			{!card.license && <p>Findings only. GitHub could not confirm an OSI-approved license at the inspected commit.</p>}
+			{!report.license && (
+				<p>Findings only. GitHub could not confirm an OSI-approved license at the inspected commit.</p>
+			)}
 
 			{/* per-dependency results */}
 			<section>
 				<h2>Dependency upgrades</h2>
-				{card.registryLookupIssue && card.upgrades.length > 0 && <p>{card.registryLookupIssue}</p>}
-				{card.upgrades.map((upgrade) => (
+				{report.registryLookupIssue && report.upgrades.length > 0 && <p>{report.registryLookupIssue}</p>}
+				{report.upgrades.map((upgrade) => (
 					<Upgrade
 						key={upgrade.dependency + upgrade.to}
-						card={upgrade}
+						upgrade={upgrade}
 						origin={new URL(url).origin}
-						commit={card.repository.commit}
+						commit={report.repository.commit}
 					/>
 				))}
-				{card.upgrades.length === 0 && !card.registryLookupIssue && <p>No upgrades inspected.</p>}
+				{report.upgrades.length === 0 && !report.registryLookupIssue && <p>No upgrades inspected.</p>}
 			</section>
 
 			{/* local inspection setup */}

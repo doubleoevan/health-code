@@ -1,7 +1,7 @@
 import type { ReactElement } from "react"
-import type { PublishedCard } from "./report.ts"
+import type { PublishedReport } from "./report.ts"
 
-export function PromptVersions({ versions }: { versions: PublishedCard["promptVersions"] }): ReactElement {
+export function PromptVersions({ versions }: { versions: PublishedReport["promptVersions"] }): ReactElement {
 	return (
 		<details>
 			<summary>Prompt versions</summary>

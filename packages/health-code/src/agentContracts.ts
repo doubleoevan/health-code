@@ -3,9 +3,9 @@ import type {
 	Baseline,
 	InspectionEvent,
 	InspectionOptions,
+	InspectionReport,
 	Observation,
 	Operation,
-	ReportCard,
 	Sandbox,
 	UpgradeReport,
 } from "./contracts.ts"
@@ -191,7 +191,7 @@ export type UpgradeReportV2 = UpgradeReport & {
 }
 
 // preserve the pinned report envelope with version two results
-export type ReportCardV2 = Omit<ReportCard, "version" | "timeline" | "upgrades"> & {
+export type InspectionReportV2 = Omit<InspectionReport, "version" | "timeline" | "upgrades"> & {
 	version: 2
 	limits?: { maxDurationMs: number; maxCostUsd: number; agent: Record<AgentRole, AttemptLimits> }
 	runtimeUsage?: import("./modelRequestSandbox.ts").RuntimeUsage

@@ -2,8 +2,8 @@ import { createAnthropic } from "@ai-sdk/anthropic"
 import {
 	createSandboxProvider,
 	type InspectionOptionsV2,
+	type InspectionReportV2,
 	inspectRepository,
-	type ReportCardV2,
 	reconcileSandboxes,
 } from "health-code"
 import type { InspectionSource } from "./executeInspection.ts"
@@ -28,7 +28,7 @@ export function isReplayEnabled(environment: NodeJS.ProcessEnv): boolean {
 
 export function createLiveSource(
 	environment: NodeJS.ProcessEnv,
-	inspect: (options: InspectionOptionsV2) => Promise<ReportCardV2> = inspectRepository,
+	inspect: (options: InspectionOptionsV2) => Promise<InspectionReportV2> = inspectRepository,
 ): InspectionSource {
 	// require live credentials and a deployment namespace before accepting work
 	const token = environment.RUNTA_TOKEN
@@ -93,7 +93,11 @@ export function createLiveSource(
 			await reconcileSandboxes({ deployment, token, liveInspectionIds: new Set(), firstSeen, ...options })
 			return firstSeen.size
 		},
-		async inspect(repositoryUrl, onEvent, { revision, settings, signal } = {}): Promise<{ report: ReportCardV2 }> {
+		async inspect(
+			repositoryUrl,
+			onEvent,
+			{ revision, settings, signal } = {},
+		): Promise<{ report: InspectionReportV2 }> {
 			const report = await inspect({
 				repositoryUrl,
 				sandboxProvider,

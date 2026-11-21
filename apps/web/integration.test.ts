@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { createFakeSandboxProvider, inspectRepository, type ReportCard } from "health-code"
+import { createFakeSandboxProvider, type InspectionReport, inspectRepository } from "health-code"
 import { createLiveSource } from "./configureSite.ts"
 import { createTestSite, replay } from "./fixtures/createTestSite.ts"
 import { toLaunchLimits } from "./launchLimits.ts"
@@ -65,14 +65,14 @@ test("live inspections forward all four model roles, limits, credentials and eve
 		expect(events).toBe(1)
 
 		// inspect the published report for private account settings
-		const publicCard = JSON.stringify(publishReport(result, "MPL-2.0").card)
+		const publicReport = JSON.stringify(publishReport(result, "MPL-2.0").card)
 		for (const privateSetting of [
 			environment.RUNTA_TOKEN,
 			environment.ANTHROPIC_API_KEY,
 			environment.HEALTH_CODE_STORED_CREDENTIAL,
 			githubToken,
 		].filter((value): value is string => !!value)) {
-			expect(publicCard).not.toContain(privateSetting)
+			expect(publicReport).not.toContain(privateSetting)
 		}
 	}
 	expect(() => createLiveSource({ ...environment, HEALTH_CODE_STORED_CREDENTIAL: "" })).toThrow()
@@ -131,7 +131,9 @@ test("an unavailable sandbox quote stops an inspection before it allocates a run
 
 test("stored version 1 and version 2 reports show agent startup only with explicit sandbox evidence", async () => {
 	// load both report versions into the same web application
-	const legacy: ReportCard = await Bun.file(new URL("./fixtures/recorded/inspection.json", import.meta.url)).json()
+	const legacy: InspectionReport = await Bun.file(
+		new URL("./fixtures/recorded/inspection.json", import.meta.url),
+	).json()
 	const reportV2 = (await replay.inspect(repositoryUrl, () => {})).report
 	const store = new InspectionStore(":memory:")
 	const app = createTestSite(store)

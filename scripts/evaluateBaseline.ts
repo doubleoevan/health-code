@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { readFile, rename, unlink, writeFile } from "node:fs/promises"
 import { isDeepStrictEqual } from "node:util"
-import { type ReportCard, testInventorySummarySchema } from "health-code"
+import { type InspectionReport, testInventorySummarySchema } from "health-code"
 import { z } from "zod"
 
 const baselineCase = z.object({
@@ -19,7 +19,7 @@ export async function openBaseline(
 	record: boolean,
 ): Promise<{
 	fixture: z.infer<typeof baselineCase>
-	finish: (card: ReportCard) => Promise<z.infer<typeof testInventorySummarySchema>>
+	finish: (report: InspectionReport) => Promise<z.infer<typeof testInventorySummarySchema>>
 }> {
 	// load the original case and require review before scoring
 	const original = await readFile(path, "utf8")
@@ -29,29 +29,29 @@ export async function openBaseline(
 	}
 	return {
 		fixture,
-		finish: async (card: ReportCard): Promise<z.infer<typeof testInventorySummarySchema>> => {
+		finish: async (report: InspectionReport): Promise<z.infer<typeof testInventorySummarySchema>> => {
 			// parse the observed test inventory
-			const parsed = testInventorySummarySchema.safeParse(card.baseline.tests.inventory)
+			const parsed = testInventorySummarySchema.safeParse(report.baseline.tests.inventory)
 			const observed = parsed.data
 
 			// require a complete inspection of the pinned baseline
 			if (
-				card.repository.commit !== fixture.commit ||
-				card.upgrades.length ||
-				card.baseline.install.status !== "passed" ||
+				report.repository.commit !== fixture.commit ||
+				report.upgrades.length ||
+				report.baseline.install.status !== "passed" ||
 				!observed ||
-				card.baseline.tests.status === "untested" ||
-				!card.timeline.some((event) => event.type === "sandbox.event" && event.action === "deleted")
+				report.baseline.tests.status === "untested" ||
+				!report.timeline.some((event) => event.type === "sandbox.event" && event.action === "deleted")
 			) {
 				// include the last diagnostic from the incomplete check
-				const result = card.baseline.tests
-				const incomplete = [card.baseline.install, result].find((check) => check.status !== "passed")
+				const result = report.baseline.tests
+				const incomplete = [report.baseline.install, result].find((check) => check.status !== "passed")
 				const evidence = incomplete?.evidence.at(-1)
 				throw new Error(
 					"Incomplete Baseline: " +
 						JSON.stringify({
-							packageManager: card.packageManager,
-							install: card.baseline.install.status,
+							packageManager: report.packageManager,
+							install: report.baseline.install.status,
 							tests: result.status,
 							reason: result.status === "untested" ? result.reason : undefined,
 							diagnostic: evidence?.stderr.slice(-500),

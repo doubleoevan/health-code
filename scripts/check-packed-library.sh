@@ -36,10 +36,10 @@ import assert from "node:assert/strict"
 import { createFakeSandboxProvider, inspectRepository } from "health-code"
 import { readFileSync } from "node:fs"
 const sandboxProvider = createFakeSandboxProvider(JSON.parse(readFileSync("fixture.json", "utf8")))
-const card = await inspectRepository({repositoryUrl:"https://github.com/example/project",sandboxProvider,callerModelExecution:"local",models:{fix:"legacy"}})
-assert.equal(card.version,1)
-assert.equal(card.baseline.install.status,"passed")
-assert.equal(card.timeline.at(-1).type,"inspection.finished")
+const report = await inspectRepository({repositoryUrl:"https://github.com/example/project",sandboxProvider,callerModelExecution:"local",models:{fix:"legacy"}})
+assert.equal(report.version,1)
+assert.equal(report.baseline.install.status,"passed")
+assert.equal(report.timeline.at(-1).type,"inspection.finished")
 const pricing = {inputUsdPerMillion:1,outputUsdPerMillion:2,maxInputTokens:2048}
 const host = {model:{modelId:"fixture",doGenerate(){throw Error("Unexpected model call")}},pricing}
 const route = {protocol:"anthropic",modelId:"fixture",baseUrl:"https://model.example/v1",pricing,
@@ -96,14 +96,14 @@ cp "$root/scripts/fixtures/recorded/inspection.json" fixture.json
 node consumer.mjs
 bun consumer.mjs
 
-# typecheck both report card versions against the packed declarations
+# typecheck both inspection report versions against the packed declarations
 cat > consumer.ts <<'TS'
-import { inspectRepository, type InspectionOptions, type ReportCard } from "health-code"
-import type {InspectionOptionsV2, ReportCardV2} from "health-code"
-export function inspectWithModels(options: InspectionOptionsV2): Promise<ReportCardV2> {
+import { inspectRepository, type InspectionOptions, type InspectionReport } from "health-code"
+import type {InspectionOptionsV2, InspectionReportV2} from "health-code"
+export function inspectWithModels(options: InspectionOptionsV2): Promise<InspectionReportV2> {
   return inspectRepository(options)
 }
-export function modelRequestSandbox(options: import("health-code").ModelRequestSandboxOptions): Promise<import("health-code").ModelRequestSandboxReportCard> {
+export function modelRequestSandbox(options: import("health-code").ModelRequestSandboxOptions): Promise<import("health-code").ModelRequestSandboxInspectionReport> {
   return inspectRepository(options)
 }
 export const local: InspectionOptionsV2["onEvent"] = event => {
@@ -114,8 +114,14 @@ export const local: InspectionOptionsV2["onEvent"] = event => {
 export function checkFormerType(options: import("health-code").EnrichedInspectionOptions): Promise<import("health-code").EnrichedReportCard> {
   return inspectRepository(options)
 }
-export function inspect(options: InspectionOptions): Promise<ReportCard> {
+export function inspect(options: InspectionOptions): Promise<InspectionReport> {
   return inspectRepository(options)
 }
+
+// Compile existing consumers against the renamed public declarations.
+export const previous: (options: InspectionOptions) => Promise<import("health-code").ReportCard> = inspect
+export const previousV2: (options: InspectionOptionsV2) => Promise<import("health-code").ReportCardV2> = inspectWithModels
+export const previousSandbox: (options: import("health-code").ModelRequestSandboxOptions) =>
+  Promise<import("health-code").ModelRequestSandboxReportCard> = modelRequestSandbox
 TS
 "$root/node_modules/.bin/tsc" --types node,json-schema --typeRoots node_modules/health-code/node_modules/@types --strict --noEmit --module nodenext --target es2022 consumer.ts

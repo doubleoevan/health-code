@@ -102,7 +102,7 @@ A Sandbox Provider MAY offer a Model Request Sandbox. The capability SHALL send 
 #### Scenario: A request uses the developer’s stored credential
 
 - **WHEN** the model request sandbox sends a model request
-- **THEN** the provider has verified the effective egress policy and exact HTTPS destination, path, header and stored-secret reference. Only the gateway supplies the real key. The local MCP, both runtimes, diagnostics and Report Card never receive it.
+- **THEN** the provider has verified the effective egress policy and exact HTTPS destination, path, header and stored-secret reference. Only the gateway supplies the real key. The local MCP, both runtimes, diagnostics and Inspection Report never receive it.
 
 #### Scenario: Two roles select different hosts
 

@@ -8,10 +8,10 @@ The TypeScript library owns inspections. The site and MCP server expose the libr
 | Path | Responsibility |
 | --- | --- |
 | `packages/health-code/` | Library workspace. Owns inspection behavior and the public package entry. Read its AGENTS.md for the boundary. |
-| `apps/web/` | Web application (`@health-code/web`). Owns submission, SQLite persistence, SSE, browser interactions and Report Card publication. |
+| `apps/web/` | Web application (`@health-code/web`). Owns submission, SQLite persistence, SSE, browser interactions and Inspection Report publication. |
 | `apps/mcp/` | Source for the `health-code mcp` Node command and the published `@health-code/mcp` launcher. Owns account setup, MCP tools, Inspection storage and Patch handoff. |
 | `evals/` | On-demand, pinned inspection cases and the CarlNotes Baseline inventory for maintainer review. |
-| `scripts/` | Repository checks, preflight, and the developer inspection CLI. Use `bun run inspect <repo-url> [--fake]` for a rolling log and a local JSON Report Card. |
+| `scripts/` | Repository checks, preflight, and the developer inspection CLI. Use `bun run inspect <repo-url> [--fake]` for a rolling log and a local JSON Inspection Report. |
 | `.github/` | CI, CodeQL, weekly dependency updates, and shared Bun setup. |
 | `openspec/` | Specifications and change artifacts. |
 | `.agents/` | Project skills and commands. Claude Code uses the links under `.claude/`. |
@@ -22,11 +22,11 @@ The library ships the inspection engine. The site and MCP workspaces consume the
 
 | When changing | Start here | Guidance |
 | --- | --- | --- |
-| Baseline, install or upgrade checks, feature matching, agent attempts, patches, verdicts, events, or report cards | `packages/health-code/` | domain-model, code-style |
+| Baseline, install or upgrade checks, feature matching, agent attempts, patches, verdicts, events, or inspection reports | `packages/health-code/` | domain-model, code-style |
 | Sandbox creation, Model Request Sandbox credentials, network policy, command execution, teardown, or the fake provider | `packages/health-code/` | Sandbox Provider boundary. Use provider names in identifiers only inside their provider. |
 | Package-manager detection, install, bump, typecheck, tests, or upgrade discovery | `packages/health-code/` | Ecosystem Adapter boundary. |
 | Model-facing instructions, evidence interpolation, or model calls | `packages/health-code/` | prompt-authoring, ai-sdk |
-| Hosted submission, recovery, SSE, live log, timeline, or Report Card publication | `apps/web/` | jsx-conventions, vercel-react-best-practices, web-design-guidelines |
+| Hosted submission, recovery, SSE, live log, timeline, or Inspection Report publication | `apps/web/` | jsx-conventions, vercel-react-best-practices, web-design-guidelines |
 | MCP tools, arguments, or protocol responses | `apps/mcp/` | Consume the library through its public entry. |
 | Lint, types, dependency policy, import rules, or test discovery | `scripts/` and root tool configs | See scripts/AGENTS.md and the README Development section. |
 | CI or dependency updates | `.github/` | CI and /ship both invoke `bash scripts/preflight.sh`. |
@@ -52,7 +52,7 @@ The independent CI advisories job runs `bun run check:advisories` against the re
 - **Documentation.** Give every module its own `AGENTS.md` when you create it. Keep it current alongside the README in the same change. Document ownership, folders, public entry points, commands, and verification. Update the root map and routing entries when ownership changes.
 - **Git.** Work on `main` only. Suggest a Conventional Commit message that makes sense without project context. Get explicit approval before committing and separate explicit approval before pushing.
 - **Agent prompts.** State the task and reference the relevant skills in one line. Leave conventions in the skills and omit commit instructions.
-- **Secrets.** Use Doppler for the app and GitHub secrets for CI only. Never put secrets in the repository, a dotenv file, a log, a tool result, a prompt, or a report card.
+- **Secrets.** Use Doppler for the app and GitHub secrets for CI only. Never put secrets in the repository, a dotenv file, a log, a tool result, a prompt, or an inspection report.
 - **Tests.** Unit tests use a fake Sandbox Provider and recorded evidence. They never call Runta or a model. Contract tests that need Runta skip when `RUNTA_TOKEN` is absent. Model evaluations run separately and report results without gating preflight.
 - **Untrusted text.** Fence release notes, repository files, and command output in every model prompt with a fresh per-call nonce. Follow prompt-authoring for interpolation, bounds, and tests.
 - **Shipping order.** Implement the approved design and update its module guides and README. Run `/ship` and complete its review. Archive the change with the OpenSpec CLI, commit the implementation and archive together on `main`, then push to `origin/main` with authorization. Follow `.agents/commands/ship.md` for the checks and handoff.

@@ -161,23 +161,28 @@ export class InspectionStore {
 				return null
 			}
 			const events = this.publicEvents(id, 0)
-			const card: Snapshot["card"] = row.report ? JSON.parse(row.report) : null
+			const report: Snapshot["card"] = row.report ? JSON.parse(row.report) : null
 
-			// Preserve the reason on cards saved with the earlier field name.
-			if (card && !card.registryLookupIssue && "discoveryIssue" in card && typeof card.discoveryIssue === "string") {
-				card.registryLookupIssue = card.discoveryIssue
+			// Preserve the reason on reports saved with the earlier field name.
+			if (
+				report &&
+				!report.registryLookupIssue &&
+				"discoveryIssue" in report &&
+				typeof report.discoveryIssue === "string"
+			) {
+				report.registryLookupIssue = report.discoveryIssue
 			}
 
-			// Recover the reason from the timeline when an empty card has none.
+			// Recover the reason from the timeline when an empty report has none.
 			if (
-				card &&
-				!card.registryLookupIssue &&
-				!card.upgrades.length &&
+				report &&
+				!report.registryLookupIssue &&
+				!report.upgrades.length &&
 				events.some(
 					(event) => event.type === "step.finished" && event.summary === "registry" && event.status === "failed",
 				)
 			) {
-				card.registryLookupIssue = "Couldn’t list available upgrades: registry lookup failed."
+				report.registryLookupIssue = "Couldn’t list available upgrades: registry lookup failed."
 			}
 
 			return {
@@ -187,7 +192,7 @@ export class InspectionStore {
 				message: row.message,
 				repositoryUrl: row.repositoryUrl,
 				events,
-				card,
+				card: report,
 			}
 		})()
 	}
@@ -226,7 +231,7 @@ export class InspectionStore {
 		)
 	}
 	finish(id: string, publication: Publication): void {
-		// publish the original report, patch bytes and public card atomically
+		// publish the original report, patch bytes and public report atomically
 		this.database.transaction(() => {
 			const report = publication.original
 			if (report.version === 2) {

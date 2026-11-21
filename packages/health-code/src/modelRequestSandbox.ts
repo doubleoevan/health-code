@@ -2,10 +2,10 @@ import type {
 	InspectionEventV2,
 	InspectionModels,
 	InspectionOptionsV2,
+	InspectionReportV2,
 	ModelReply,
 	ModelRoute,
 	Pricing,
-	ReportCardV2,
 } from "./agentContracts.ts"
 import { bounded, checkOperation, type InspectionContext } from "./collectEvents.ts"
 import { InspectionError, type Operation } from "./contracts.ts"
@@ -26,7 +26,9 @@ export type ModelRequestSandboxOptions = Omit<InspectionOptionsV2, "models" | "o
 	onEvent?: (event: ModelRequestSandboxEvent) => void | Promise<void>
 }
 
-export type ModelRequestSandboxReportCard = Omit<ReportCardV2, "timeline"> & { timeline: ModelRequestSandboxEvent[] }
+export type ModelRequestSandboxInspectionReport = Omit<InspectionReportV2, "timeline"> & {
+	timeline: ModelRequestSandboxEvent[]
+}
 export type SandboxModelRequest = { role: CallerModelRole; route: ModelRoute; prompt: string; output: number }
 
 // Providers own the credential binding and one isolated runtime per name.

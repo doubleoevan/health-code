@@ -1,9 +1,9 @@
 import type {
 	CheckResult,
 	InspectionEvent,
+	InspectionReport,
 	ModelRequestSandboxEvent,
 	Patch,
-	ReportCard,
 	UpgradeReport,
 	Verdict,
 } from "health-code"
@@ -51,12 +51,12 @@ export type UpgradeCard = Pick<UpgradeReport, "dependency" | "from" | "to" | "ob
 }
 
 // combine baseline and upgrade evidence for the public report
-export type PublishedCard = {
-	promptVersions?: ReportCard["promptVersions"]
+export type PublishedReport = {
+	promptVersions?: InspectionReport["promptVersions"]
 	usageAsOf?: string
 
 	version: 1
-	repository: ReportCard["repository"]
+	repository: InspectionReport["repository"]
 	baseline: UpgradeCard["checks"]
 	baselineTestFileErrors?: UpgradeCard["testFileErrors"]
 	turnLimits?: { repair: number; featureAdoption: number }
@@ -81,7 +81,7 @@ export type Snapshot = {
 
 	// Resume the stream after the last event in this snapshot.
 	events: SiteEvent[]
-	card: PublishedCard | null
+	card: PublishedReport | null
 }
 
 export function toCheckText(check: CheckResult): string {
@@ -96,15 +96,15 @@ export function toCheckText(check: CheckResult): string {
 	return check.status
 }
 
-export function toSummary(card: PublishedCard): string {
-	const count = card.upgrades.length
-	if (!count && card.registryLookupIssue) {
-		return card.registryLookupIssue
+export function toSummary(report: PublishedReport): string {
+	const count = report.upgrades.length
+	if (!count && report.registryLookupIssue) {
+		return report.registryLookupIssue
 	}
 
 	// count blocked installation connections across upgrades
-	const blocked = card.upgrades
+	const blocked = report.upgrades
 		.flatMap((upgrade) => upgrade.observation.findings)
 		.filter((finding) => finding.kind === "connection" && finding.outcome === "blocked").length
-	return `${count} upgrade${count === 1 ? "" : "s"} inspected, ${card.featureCount} feature patch${card.featureCount === 1 ? "" : "es"}, ${blocked} connection${blocked === 1 ? "" : "s"} blocked during install`
+	return `${count} upgrade${count === 1 ? "" : "s"} inspected, ${report.featureCount} feature patch${report.featureCount === 1 ? "" : "es"}, ${blocked} connection${blocked === 1 ? "" : "s"} blocked during install`
 }

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
 import { pathToFileURL } from "node:url"
-import type { ReportCard } from "health-code"
+import type { InspectionReport } from "health-code"
 import { openBaseline } from "./evaluateBaseline.ts"
 
 test("record requires a complete pinned Baseline and scores only reviewed measurements", async () => {
@@ -20,21 +20,21 @@ test("record requires a complete pinned Baseline and scores only reviewed measur
 		const counts = { passed: 1, failed: 0, skipped: 1, todo: 0 }
 		const inventory = { counts, testFileErrors: [{ file: "missing.test.ts", reason: "Missing dependency" }] }
 		const passed = { status: "passed", evidence: [] }
-		const card = {
+		const report = {
 			repository: { commit: fixture.commit },
 			upgrades: [],
 			baseline: { install: passed, tests: { ...passed, inventory } },
 			timeline: [{ type: "sandbox.event", action: "deleted" }],
-		} as unknown as ReportCard
+		} as unknown as InspectionReport
 
 		// reject incomplete evidence and preserve the seed
 		await assert.rejects(openBaseline(path, false), /awaits review/)
 		const record = await openBaseline(path, true)
-		await assert.rejects(record.finish({ ...card, timeline: [] }), /Incomplete Baseline/)
+		await assert.rejects(record.finish({ ...report, timeline: [] }), /Incomplete Baseline/)
 		assert.deepEqual(JSON.parse(await readFile(path, "utf8")), seed)
 
 		// record the complete inventory for review
-		await record.finish(card)
+		await record.finish(report)
 		const pending = JSON.parse(await readFile(path, "utf8"))
 		assert.deepEqual(pending.expected, inventory)
 		assert.equal(pending.review, "pending-review")
@@ -48,13 +48,13 @@ test("record requires a complete pinned Baseline and scores only reviewed measur
 		// score current and historical inventory field names
 		await writeFile(path, reviewed)
 		const score = await openBaseline(path, false)
-		await score.finish(card)
-		const historicalCard = JSON.parse(JSON.stringify(card).replace('"testFileErrors":', '"exclusions":'))
-		assert.deepEqual(await score.finish(historicalCard), inventory)
+		await score.finish(report)
+		const historicalReport = JSON.parse(JSON.stringify(report).replace('"testFileErrors":', '"exclusions":'))
+		assert.deepEqual(await score.finish(historicalReport), inventory)
 
 		// reject drift without rewriting the reviewed case
 		inventory.testFileErrors = []
-		await assert.rejects(score.finish(card), /drift/)
+		await assert.rejects(score.finish(report), /drift/)
 		assert.equal(await readFile(path, "utf8"), reviewed)
 	} finally {
 		await rm(dir, { recursive: true, force: true })

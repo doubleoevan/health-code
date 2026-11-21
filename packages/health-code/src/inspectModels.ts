@@ -8,8 +8,8 @@ import {
 	InspectionError,
 	type InspectionEvent,
 	type InspectionOptions,
+	type InspectionReport,
 	type Observation,
-	type ReportCard,
 	type Sandbox,
 	type UpgradeReport,
 } from "./contracts.ts"
@@ -19,8 +19,8 @@ import {
 	callerOutputTokens,
 	ModelRequestSandboxAllocation,
 	type ModelRequestSandboxEvent,
+	type ModelRequestSandboxInspectionReport,
 	type ModelRequestSandboxOptions,
-	type ModelRequestSandboxReportCard,
 } from "./modelRequestSandbox.ts"
 import { matchSchema, selectFeatureMatches, verifyMatch } from "./rankFeatureMatches.ts"
 import { readReleases } from "./readReleases.ts"
@@ -238,7 +238,7 @@ export class ModelInspection {
 		context: InspectionContext,
 		adapter: NodeAdapter,
 		sandbox: Sandbox,
-		card: ReportCard,
+		inspectionReport: InspectionReport,
 		upgrade: UpgradeReport,
 	): Promise<void> {
 		// attribute subsequent model requests to this upgrade
@@ -265,13 +265,13 @@ export class ModelInspection {
 		const evidence = await context.step("setup", "Read release notes", (op) =>
 			readReleases({ upgrade, githubToken: this.options.githubToken, changelog, signal: op.signal }),
 		)
-		await this.matchFeatures({ context, report, usage, evidence, repository: card.repository })
+		await this.matchFeatures({ context, report, usage, evidence, repository: inspectionReport.repository })
 		report.releaseSummary.gaps = evidence.gaps
 		const patchEvidence: PatchEvidence = {
 			context,
 			adapter,
 			sandbox,
-			card,
+			inspectionReport,
 			report,
 			usage,
 			releaseNotes: evidence.notes,
@@ -282,9 +282,9 @@ export class ModelInspection {
 
 		// verify diagnostic locations against the pinned source
 		await locateDiagnostics({
-			repository: card.repository,
+			repository: inspectionReport.repository,
 			locators: report.locators,
-			read: (file) => workspace(patchEvidence, { kind: "read", revision: card.repository.commit, file }),
+			read: (file) => workspace(patchEvidence, { kind: "read", revision: inspectionReport.repository.commit, file }),
 		})
 		try {
 			await evaluatePatch(this, patchEvidence)
@@ -305,7 +305,7 @@ export class ModelInspection {
 		report: UpgradeReportV2
 		usage: UsageEvidence
 		evidence: Awaited<ReturnType<typeof readReleases>>
-		repository: ReportCard["repository"]
+		repository: InspectionReport["repository"]
 	}): Promise<void> {
 		// require a release source before asking for a summary
 		const sources = evidence.notes.map((note) => note.source)
@@ -355,10 +355,10 @@ export class ModelInspection {
 	}
 
 	// assemble the version two report from the measured upgrades
-	card(card: ReportCard): ModelRequestSandboxReportCard {
+	buildInspectionReport(inspectionReport: InspectionReport): ModelRequestSandboxInspectionReport {
 		const reports = new Map(this.upgrades.map((upgrade) => [upgradeKey(upgrade), upgrade]))
 		return {
-			...card,
+			...inspectionReport,
 			version: 2,
 			limits: {
 				maxDurationMs: this.limits.maxDurationMs,
@@ -369,7 +369,7 @@ export class ModelInspection {
 				},
 			},
 			upgrades: redactEvidence(
-				card.upgrades.map((upgrade) => reports.get(upgradeKey(upgrade)) ?? toUpgradeReport(upgrade)),
+				inspectionReport.upgrades.map((upgrade) => reports.get(upgradeKey(upgrade)) ?? toUpgradeReport(upgrade)),
 			),
 			timeline: this.timeline,
 			runtimeUsage: this.meter.snapshot(this.ledger.usage),

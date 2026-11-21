@@ -40,7 +40,7 @@ test("independent inspections share a provider without sharing event delivery", 
 	// capture a separate callback history for each inspection
 	const inspect = async (): Promise<string> => {
 		const events: InspectionEvent[] = []
-		const card = await inspectRepository({
+		const report = await inspectRepository({
 			repositoryUrl: fixtureUrl,
 			sandboxProvider,
 			onEvent: (e) => {
@@ -50,14 +50,14 @@ test("independent inspections share a provider without sharing event delivery", 
 		})
 
 		// compare the saved timeline with the ordered callback events
-		assert.deepEqual(card.timeline, events)
+		assert.deepEqual(report.timeline, events)
 		assert.deepEqual(
 			events.map((e) => e.sequence),
 			events.map((_, i) => i + 1),
 		)
-		assert.doesNotMatch(JSON.stringify(card), /private-sample/)
-		assert.equal(card.baseline.tests.status, "untested")
-		return card.inspectionId
+		assert.doesNotMatch(JSON.stringify(report), /private-sample/)
+		assert.equal(report.baseline.tests.status, "untested")
+		return report.inspectionId
 	}
 
 	// start both inspections concurrently and check their identities
@@ -131,9 +131,11 @@ test("unused credentials are never required by module import or fake callers", a
 })
 
 test("version one report can be replayed by a reader that ignores new fields", async () => {
-	const golden = JSON.parse(readFileSync(new URL("./fixtures/recorded/npm/report-card.json", import.meta.url), "utf8"))
+	const golden = JSON.parse(
+		readFileSync(new URL("./fixtures/recorded/npm/inspection-report.json", import.meta.url), "utf8"),
+	)
 	const sandboxProvider = offline("", "a".repeat(40))
-	const card = await inspectRepository({ repositoryUrl: "https://github.com/example/project", sandboxProvider })
+	const report = await inspectRepository({ repositoryUrl: "https://github.com/example/project", sandboxProvider })
 
 	// normalize volatile fields before comparing the recorded report
 	const stable: Record<string, string | number> = {
@@ -142,12 +144,12 @@ test("version one report can be replayed by a reader that ignores new fields", a
 		inspectionId: "inspection",
 		sandboxId: "sandbox",
 	}
-	const { promptVersions, ...legacy } = card
+	const { promptVersions, ...legacy } = report
 	assert.deepEqual(promptVersions, { model: [], handoff: [] })
 	assert.deepEqual(JSON.parse(JSON.stringify(legacy, (key, value) => stable[key] ?? value)), golden)
 
 	// read the same versioned fields when the report contains extra data
-	const reader = ({ version, timeline }: typeof card): unknown => ({ version, timeline })
+	const reader = ({ version, timeline }: typeof report): unknown => ({ version, timeline })
 	assert.deepEqual(reader(Object.assign({}, golden, { additional: "new" })), reader(golden))
 })
 
@@ -200,7 +202,7 @@ test("cleanup still starts when the host resumes past the admitted deadline", as
 
 test("structured credential values are scrubbed from detail events and the report", async () => {
 	const events: InspectionEvent[] = []
-	const card = await inspectRepository({
+	const report = await inspectRepository({
 		repositoryUrl: fixtureUrl,
 		sandboxProvider: offline(JSON.stringify({ password: "sample value with spaces" })),
 		onEvent(event) {
@@ -210,8 +212,8 @@ test("structured credential values are scrubbed from detail events and the repor
 
 	// verify redaction in both the callback stream and stored evidence
 	assert.doesNotMatch(JSON.stringify(events), /sample value/)
-	assert.doesNotMatch(JSON.stringify(card), /sample value/)
-	assert.ok(card.baseline.install.evidence[0]?.stdout.includes("[redacted]"))
+	assert.doesNotMatch(JSON.stringify(report), /sample value/)
+	assert.ok(report.baseline.install.evidence[0]?.stdout.includes("[redacted]"))
 })
 test("throwing callbacks leave exactly one finish for each recorded step start", async () => {
 	for (const type of ["step.started", "step.finished"]) {

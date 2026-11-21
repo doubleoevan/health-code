@@ -156,7 +156,7 @@ async function proveBehavior({
 	behaviorChange: z.infer<typeof decision>["behaviorChange"]
 }): Promise<void> {
 	requireBaseline(evidence)
-	const { adapter, card, baselineIntegrity, report, baseInstall } = evidence
+	const { adapter, inspectionReport, baselineIntegrity, report, baseInstall } = evidence
 
 	// locate the confirmed failure in the upgrade report
 	const failingCase =
@@ -176,7 +176,7 @@ async function proveBehavior({
 			failingCase &&
 			note.workspaces.includes(failingCase.workspace),
 	)
-	const original = await workspace(evidence, { kind: "read", file, revision: card.repository.commit })
+	const original = await workspace(evidence, { kind: "read", file, revision: inspectionReport.repository.commit })
 	const symbol = behaviorChange?.symbol
 
 	// require the old source and release evidence to support the change
@@ -218,7 +218,7 @@ async function proveBehavior({
 	try {
 		// compare both revisions before restoring the candidate
 		await requireFailure(state.bumpTip)
-		await requireFailure(card.repository.commit, contents)
+		await requireFailure(inspectionReport.repository.commit, contents)
 	} finally {
 		await workspace(evidence, { kind: "restore", tip: state.tip })
 	}

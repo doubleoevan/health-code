@@ -59,7 +59,7 @@ On startup the site SHALL mark every running Inspection interrupted, show that a
 
 ### Requirement: Resumable Inspection Events
 
-The service SHALL persist each Inspection Event before delivering it and replay events in sequence after the viewer's cursor. A completed Inspection SHALL lead to a readable Report Card. Failures SHALL leave the recorded timeline accessible.
+The service SHALL persist each Inspection Event before delivering it and replay events in sequence after the viewer's cursor. A completed Inspection SHALL lead to a readable Inspection Report. Failures SHALL leave the recorded timeline accessible.
 
 #### Scenario: Reconnect at the live boundary
 
@@ -69,7 +69,7 @@ The service SHALL persist each Inspection Event before delivering it and replay 
 #### Scenario: Reload after completion
 
 - **WHEN** a visitor reloads a completed Inspection or reconnects after its last library event
-- **THEN** the visitor can reach its persisted Report Card without starting another Inspection
+- **THEN** the visitor can reach its persisted Inspection Report without starting another Inspection
 
 ### Requirement: Live progress and sandbox evidence
 
@@ -87,12 +87,12 @@ The live page SHALL update one active step in place with a spinner and elapsed t
 
 ### Requirement: Offline fixture replay
 
-Development and test mode SHALL reproduce recorded event timing and the corresponding Report Card through the same public site routes without credentials or external calls. The public demo SHALL execute real Inspections.
+Development and test mode SHALL reproduce recorded event timing and the corresponding Inspection Report through the same public site routes without credentials or external calls. The public demo SHALL execute real Inspections.
 
 #### Scenario: End-to-end replay
 
 - **WHEN** a visitor submits a fixture Repository in development
-- **THEN** the site shows replay status, streams at recorded intervals and publishes the matching fixture card through the normal completion path
+- **THEN** the site shows replay status, streams at recorded intervals and publishes the matching fixture report through the normal completion path
 
 #### Scenario: Production configuration
 

@@ -5,6 +5,8 @@ import { join, relative, resolve } from "node:path"
 import * as z from "zod"
 import { UserError } from "./modelSettings.ts"
 
+const reportFile = "inspection-report.json"
+
 export const inspectionId = z.uuid()
 export const digest = z.string().regex(/^[a-f0-9]{64}$/)
 const commit = z.string().regex(/^[a-f0-9]{40}$/)
@@ -22,7 +24,7 @@ export const eventSchema = z.looseObject({
 		"inspection.failed",
 	]),
 })
-export const cardSchema = z.looseObject({
+export const reportSchema = z.looseObject({
 	version: z.union([z.literal(1), z.literal(2)]),
 	inspectionId,
 	repository,
@@ -30,7 +32,7 @@ export const cardSchema = z.looseObject({
 	upgrades: z.array(z.looseObject({ dependency: z.string() })),
 	timeline: z.array(eventSchema),
 })
-export type SavedCard = z.infer<typeof cardSchema>
+export type SavedReport = z.infer<typeof reportSchema>
 export type Event = z.infer<typeof eventSchema>
 export const outcomeSchema = z.object({
 	inspectionId,
@@ -58,7 +60,11 @@ export function protect(environment: NodeJS.ProcessEnv): (text: string) => void 
 	}
 }
 
-type Snapshot = { card: SavedCard; text: string }
+function hasFileErrorCode(error: unknown, code: "ENOENT" | "EEXIST"): boolean {
+	return error instanceof Error && "code" in error && error.code === code
+}
+
+type Snapshot = { report: SavedReport; text: string }
 
 export class InspectionStore {
 	private lastSnapshot?: { identity: string; snapshot: Snapshot }
@@ -76,6 +82,27 @@ export class InspectionStore {
 			throw new UserError("Inspection storage contains an unexpected link.")
 		}
 	}
+
+	// Resolve both report filenames through the inspection storage boundary.
+	private async reportPath(id: string): Promise<string> {
+		const folder = this.folder(id)
+		const path = join(folder, reportFile)
+		try {
+			await this.checkPath(path)
+			return path
+		} catch (error) {
+			// Propagate unreadable or unsafe paths before checking the earlier filename.
+			if (!hasFileErrorCode(error, "ENOENT")) {
+				throw error
+			}
+		}
+
+		// Open reports written by earlier MCP versions under the same inspection ID.
+		const previous = join(folder, "card.json")
+		await this.checkPath(previous)
+		return previous
+	}
+
 	private async read(path: string): Promise<unknown> {
 		// limit reads to regular files within the storage size limit
 		await this.checkPath(path)
@@ -89,21 +116,21 @@ export class InspectionStore {
 		this.guard(text)
 		return JSON.parse(text)
 	}
-	async save(input: SavedCard): Promise<void> {
+	async save(input: SavedReport): Promise<void> {
 		// validate the entire report before creating its directory
-		const card = cardSchema.parse(input)
-		const target = this.folder(card.inspectionId)
-		const text = JSON.stringify(card)
+		const report = reportSchema.parse(input)
+		const target = this.folder(report.inspectionId)
+		const text = JSON.stringify(report)
 		this.guard(text)
 		if (Buffer.byteLength(text) > 64 * 1024 * 1024) {
-			throw new UserError("Report Card exceeds local storage limit.")
+			throw new UserError("Inspection Report exceeds local storage limit.")
 		}
 
-		// stage the card and its result directory with private permissions
+		// stage the report and its result directory with private permissions
 		await mkdir(this.root, { recursive: true, mode: 0o700 })
 		const temp = await mkdtemp(join(this.root, ".pending-"))
 		try {
-			await writeFile(join(temp, "card.json"), text, { mode: 0o600 })
+			await writeFile(join(temp, reportFile), text, { mode: 0o600 })
 			await mkdir(join(temp, "results"), { mode: 0o700 })
 			await rename(temp, target)
 		} finally {
@@ -111,21 +138,20 @@ export class InspectionStore {
 			await rm(temp, { recursive: true, force: true })
 		}
 	}
-	async load(id: string): Promise<SavedCard> {
-		return (await this.snapshot(id)).card
+	async load(id: string): Promise<SavedReport> {
+		return (await this.snapshot(id)).report
 	}
 
-	// read the card together with the exact text used for paging
+	// read the report together with the exact text used for paging
 	async snapshot(id: string): Promise<Snapshot> {
 		try {
-			const path = join(this.folder(id), "card.json")
-			await this.checkPath(path)
+			const path = await this.reportPath(id)
 			const stat = await lstat(path, { bigint: true })
 			if (!stat.isFile() || stat.size > 64n * 1024n * 1024n) {
-				throw new UserError("Report Card has an unsupported size or type.")
+				throw new UserError("Inspection Report has an unsupported size or type.")
 			}
 
-			// Reuse one immutable card across cursor reads until its on-disk identity changes.
+			// Reuse one immutable report across cursor reads until its on-disk identity changes.
 			const identity = [id, stat.dev, stat.ino, stat.size, stat.ctimeNs, stat.mtimeNs].join("/")
 			if (this.lastSnapshot?.identity === identity) {
 				return this.lastSnapshot.snapshot
@@ -134,21 +160,21 @@ export class InspectionStore {
 			// validate a changed file before replacing the cached snapshot
 			const text = await readFile(path, "utf8")
 			this.guard(text)
-			const card = cardSchema.parse(JSON.parse(text))
-			if (card.inspectionId !== id || card.timeline.some((event) => event.inspectionId !== id)) {
+			const report = reportSchema.parse(JSON.parse(text))
+			if (report.inspectionId !== id || report.timeline.some((event) => event.inspectionId !== id)) {
 				throw new Error()
 			}
 
-			// cache the original text beside the validated card
-			const snapshot = { card, text }
+			// cache the original text beside the validated report
+			const snapshot = { report, text }
 			this.lastSnapshot = { identity, snapshot }
 			return snapshot
 		} catch (error) {
 			// distinguish a missing inspection from unreadable saved evidence
-			if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+			if (hasFileErrorCode(error, "ENOENT")) {
 				throw new UserError("Inspection not found. Active inspections belong to their server process.")
 			}
-			throw new UserError("Saved Report Card is unreadable.")
+			throw new UserError("Saved Inspection Report is unreadable.")
 		}
 	}
 	async record(outcome: Outcome): Promise<void> {
@@ -170,7 +196,7 @@ export class InspectionStore {
 			await link(temp, join(directory, `${toHash(text)}.json`))
 		} catch (error) {
 			// treat concurrent publication of identical results as a successful retry
-			if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) {
+			if (!hasFileErrorCode(error, "EEXIST")) {
 				throw error
 			}
 		} finally {
@@ -186,7 +212,7 @@ export class InspectionStore {
 			names = (await readdir(directory)).filter((name) => /^[a-f0-9]{64}\.json$/.test(name)).sort()
 		} catch (error) {
 			// return an empty history when result storage is absent
-			if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+			if (hasFileErrorCode(error, "ENOENT")) {
 				return []
 			}
 			throw error

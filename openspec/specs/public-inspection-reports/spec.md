@@ -1,4 +1,4 @@
-# public-report-cards Specification
+# public-inspection-reports Specification
 
 ## Purpose
 Give a shared link a durable record of what Health Code inspected, what Runta enforced and which tested Patches a visitor can apply.
@@ -7,7 +7,7 @@ Give a shared link a durable record of what Health Code inspected, what Runta en
 
 ### Requirement: Durable, readable evidence
 
-A stable Report Card URL SHALL render a one-line summary, the Repository and pinned commit, Baseline under “Checks before the upgrade”, and one card per inspected Upgrade. Each card SHALL identify the dependency, all source versions, target, textual Verdict, plain-language changes, Feature Matches, Install Check findings, typecheck and deprecation evidence, size difference and available Patches. Evidence links SHALL use GitHub permalinks where supplied. Missing evidence SHALL be visible.
+A stable Inspection Report URL SHALL render a one-line summary, the Repository and pinned commit, Baseline under “Checks before the upgrade”, and one card per inspected Upgrade. Each card SHALL identify the dependency, all source versions, target, textual Verdict, plain-language changes, Feature Matches, Install Check findings, typecheck and deprecation evidence, size difference and available Patches. Evidence links SHALL use GitHub permalinks where supplied. Missing evidence SHALL be visible.
 
 #### Scenario: Every Verdict and sparse evidence
 
@@ -35,7 +35,7 @@ The server SHALL deliver the report content, canonical URL, Open Graph title, UR
 
 #### Scenario: A crawler opens the shared link
 
-- **WHEN** a client requests a completed Report Card with JavaScript disabled
+- **WHEN** a client requests a completed Inspection Report with JavaScript disabled
 - **THEN** it receives the report and text preview describing actual Upgrade, feature Patch and confirmed install block counts from that Inspection
 
 #### Scenario: Share on a desktop without native sharing
@@ -73,18 +73,18 @@ The report SHALL provide a next step for Claude Code or Codex, with links to Hea
 
 ### Requirement: Display the prompts used
 
-The completed public Report Card SHALL show effective model prompt names and versions and distinguish a generated Patch handoff. Previously persisted cards lacking provenance SHALL remain readable.
+The completed public Inspection Report SHALL show effective model prompt names and versions and distinguish a generated Patch handoff. Previously persisted reports lacking provenance SHALL remain readable.
 
 #### Scenario: Known empty versus legacy evidence
 
-- **WHEN** a new card records no model calls
-- **THEN** the page explains that no model prompts were used, while a legacy card without this field says prompt versions are unavailable
+- **WHEN** a new report records no model calls
+- **THEN** the page explains that no model prompts were used, while a legacy report without this field says prompt versions are unavailable
 
 ### Requirement: Offer a useful next step at the daily limit
 
 The public home and admission response SHALL explain when new paid Inspections are paused for the daily budget, show the UTC reset and link to the personally funded MCP setup. The existing report and Patch URLs SHALL remain available.
 
-#### Scenario: Share a card during a pause
+#### Scenario: Share a report during a pause
 
-- **WHEN** a visitor opens a shared card while daily paid admission is paused
+- **WHEN** a visitor opens a shared report while daily paid admission is paused
 - **THEN** the report, its evidence, the Patch handoff and the MCP setup destination remain accessible

@@ -69,7 +69,7 @@ test("pins once when a branch moves after acquisition", async () => {
 
 	// inspect a fixture that moves the source branch after checkout
 	const sandboxProvider = createFakeSandboxProvider(fixture)
-	const card = await inspectRepository({
+	const report = await inspectRepository({
 		repositoryUrl: fixtureUrl,
 		sandboxProvider,
 		onEvent: (event) => {
@@ -80,8 +80,8 @@ test("pins once when a branch moves after acquisition", async () => {
 	})
 
 	// verify the report retains the originally acquired commit
-	assert.equal(card.repository.commit, fixtureCommit)
-	assert.deepEqual(card.packageManager, { reason: "Unsupported project" })
+	assert.equal(report.repository.commit, fixtureCommit)
+	assert.deepEqual(report.packageManager, { reason: "Unsupported project" })
 })
 test("unavailable repository releases its sandbox before any repository code executes", async () => {
 	const sandboxProvider = createFakeSandboxProvider({ commit: fixtureCommit, commands: [] })

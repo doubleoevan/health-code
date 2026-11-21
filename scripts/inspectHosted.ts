@@ -127,13 +127,13 @@ async function inspect(
 	const verdicts: string[] = []
 	for (const upgrade of snapshot.card.upgrades) {
 		const { verdict } = upgrade
-		assert.ok(verdict && text.includes(verdict), "Verdict missing from rendered card")
+		assert.ok(verdict && text.includes(verdict), "Verdict missing from rendered report")
 		verdicts.push(verdict)
 
 		// Require the actual diagnostic for an inconclusive or unsuccessful upgrade.
 		if (verdict === "Untested" || verdict === "Can't fix") {
 			const reason = verdict === "Untested" ? upgrade.untestedReason : upgrade.reason
-			assert.ok(reason && text.includes(reason), "Verdict explanation missing from rendered card")
+			assert.ok(reason && text.includes(reason), "Verdict explanation missing from rendered report")
 		}
 	}
 

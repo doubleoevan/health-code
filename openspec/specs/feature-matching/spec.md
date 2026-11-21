@@ -17,7 +17,7 @@ For each selected Upgrade the engine SHALL read package-specific releases newer 
 #### Scenario: Release host unavailable
 
 - **WHEN** GitHub rate limits a release request and no relevant changelog is available
-- **THEN** the Report Card explains the missing evidence and the regular Upgrade Check may proceed.
+- **THEN** the Inspection Report explains the missing evidence and the regular Upgrade Check may proceed.
 
 ### Requirement: Rank cited Feature Matches across the Inspection
 

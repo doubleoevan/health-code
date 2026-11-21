@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import type { FeatureMatch, InspectionModels, UpgradeReportV2 } from "../src/agentContracts.ts"
 import { NodeAdapter } from "../src/checkProject.ts"
 import { InspectionContext } from "../src/collectEvents.ts"
-import type { CheckResult, ReportCard } from "../src/contracts.ts"
+import type { CheckResult, InspectionReport } from "../src/contracts.ts"
 import { createFakeSandboxProvider } from "../src/createFakeSandboxProvider.ts"
 import { ModelInspection } from "../src/inspectModels.ts"
 import { registryHosts } from "../src/networkPolicy.ts"
@@ -92,7 +92,7 @@ export async function replayPatch(
 	starts: number
 	engine: ModelInspection
 	adapter: NodeAdapter
-	card: ReportCard
+	inspectionReport: InspectionReport
 }> {
 	// replay a repair reply and optionally a feature adoption reply
 	const reply = repairReply(mode)
@@ -329,10 +329,10 @@ export async function replayPatch(
 	}
 
 	// assemble pinned usage and baseline integrity for patch evaluation
-	const card = { repository: { url: options.repositoryUrl, commit: base } } as ReportCard
+	const inspectionReport = { repository: { url: options.repositoryUrl, commit: base } } as InspectionReport
 	const evidence: PatchEvidence = {
 		report,
-		card,
+		inspectionReport,
 		adapter,
 		context,
 		sandbox,
@@ -374,7 +374,7 @@ export async function replayPatch(
 		report,
 		engine,
 		adapter,
-		card,
+		inspectionReport,
 		starts: engine.timeline.filter((event) => event.type === "sandbox.event" && event.action === "agent-started")
 			.length,
 	}

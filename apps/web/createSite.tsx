@@ -15,10 +15,10 @@ import { identifyVisitor, isSecureRequest, verifyAdmin } from "./verifyVisitor.t
 type Assets = { script: string; styles: string[] }
 function render(props: PageProps, assets: Assets): string {
 	// describe the inspected revision in the page metadata
-	const card = props.snapshot?.card
-	const title = card ? `Health Code: ${toSummary(card)}` : "Health Code · Dependency inspections"
-	const description = card
-		? `Dependency upgrade evidence for ${card.repository.url} at ${card.repository.commit.slice(0, 8)}.`
+	const report = props.snapshot?.card
+	const title = report ? `Health Code: ${toSummary(report)}` : "Health Code · Dependency inspections"
+	const description = report
+		? `Dependency upgrade evidence for ${report.repository.url} at ${report.repository.commit.slice(0, 8)}.`
 		: "Watch dependency upgrades being tested in a Runta sandbox."
 	const head = renderToStaticMarkup(
 		<head>

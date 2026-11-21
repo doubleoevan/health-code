@@ -17,7 +17,7 @@ The Node Ecosystem Adapter SHALL detect Bun, pnpm, Yarn, or npm from the root lo
 #### Scenario: Competing lockfiles
 
 - **WHEN** different managers have root lockfiles and the committed package manager declaration does not select exactly one of them
-- **THEN** the Report Card records the ambiguity and the engine skips installation
+- **THEN** the Inspection Report records the ambiguity and the engine skips installation
 
 ### Requirement: Install and change one direct dependency
 

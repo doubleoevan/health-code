@@ -233,7 +233,7 @@ test("an empty report explains registry failure on the shared report page", asyn
 	expect(html).toContain(`name="twitter:title" content="Health Code: ${reason}"`)
 	expect(html).not.toContain("No upgrades inspected")
 
-	// Preserve the recorded timeout when opening a card saved with the earlier field name.
+	// Preserve the recorded timeout when opening a report saved with the earlier field name.
 	store.database
 		.query(
 			"UPDATE inspections SET report = json_remove(json_set(report, '$.discoveryIssue', ?), '$.registryLookupIssue') WHERE id = ?",

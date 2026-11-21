@@ -150,7 +150,7 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 		<>
 			{/* published report or live inspection status */}
 			{snapshot.card ? (
-				<ReportView card={snapshot.card} url={url} />
+				<ReportView report={snapshot.card} url={url} />
 			) : (
 				<>
 					<h1>

@@ -188,7 +188,7 @@ export interface EcosystemAdapter {
 	readonly project?: Project
 	resetProject(): Promise<void>
 	detectProject(): Promise<Project>
-	listUpgrades(project: Project, limit: number): Promise<ReportCard["selection"]>
+	listUpgrades(project: Project, limit: number): Promise<InspectionReport["selection"]>
 
 	// run the package manager's install and verification checks
 	install(): Promise<CheckResult>
@@ -198,14 +198,14 @@ export interface EcosystemAdapter {
 }
 
 // identify the pinned repository and its baseline
-export type ReportCard = {
+export type InspectionReport = {
 	promptVersions?: {
 		model: import("./readPrompt.ts").PromptReference[]
 		handoff: import("./readPrompt.ts").PromptReference[]
 	}
 	version: 1
 
-	// Identify the revision associated with the Report Card.
+	// Identify the revision associated with the Inspection Report.
 	inspectionId: string
 	repository: { url: string; commit: string }
 	packageManager: { name: PackageManager; version: string } | { reason: string }
@@ -227,7 +227,7 @@ export type ReportCard = {
 }
 
 export class InspectionError extends Error {
-	promptVersions?: ReportCard["promptVersions"]
+	promptVersions?: InspectionReport["promptVersions"]
 	timeline: InspectionEvent[] | import("./modelRequestSandbox.ts").ModelRequestSandboxEvent[] = []
 
 	// preserve cleanup state on typed inspection failures

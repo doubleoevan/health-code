@@ -128,7 +128,7 @@ async function main(args: string[]): Promise<void> {
 	process.on("SIGINT", cancel)
 	process.on("SIGTERM", cancel)
 	try {
-		const card = await inspectRepository({
+		const report = await inspectRepository({
 			repositoryUrl,
 			sandboxProvider,
 			onEvent: createInspectionLog(process.stdout),
@@ -137,16 +137,16 @@ async function main(args: string[]): Promise<void> {
 
 		// save the report privately under its inspection id
 		await mkdir("logs", { recursive: true })
-		const path = join("logs", `${card.inspectionId + (fake ? ".fake" : "")}.json`)
+		const path = join("logs", `${report.inspectionId + (fake ? ".fake" : "")}.json`)
 		const temporary = `${path}.tmp`
 		try {
-			await writeFile(temporary, `${JSON.stringify(card, null, 2)}\n`, { flag: "wx", mode: 0o600 })
+			await writeFile(temporary, `${JSON.stringify(report, null, 2)}\n`, { flag: "wx", mode: 0o600 })
 			await rename(temporary, path)
 		} finally {
 			// remove partial output after a write or rename failure
 			await rm(temporary, { force: true })
 		}
-		console.log(`Report card written to ${path}`)
+		console.log(`Inspection report written to ${path}`)
 	} finally {
 		process.off("SIGINT", cancel)
 		process.off("SIGTERM", cancel)

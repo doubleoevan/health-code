@@ -131,23 +131,26 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 
 			// Read the saved artifact from the packed server’s private store.
 			assert.equal(status, "complete")
-			const text = await readFile(join(home, ".health-code", "inspections", accepted.inspectionId, "card.json"), "utf8")
+			const text = await readFile(
+				join(home, ".health-code", "inspections", accepted.inspectionId, "inspection-report.json"),
+				"utf8",
+			)
 			assert.ok(!text.includes(modelKey) && !text.includes(settings.RUNTA_TOKEN))
-			const card = JSON.parse(text)
+			const inspectionReport = JSON.parse(text)
 			assert.deepEqual(
-				card.upgrades[0].modelUsage
+				inspectionReport.upgrades[0].modelUsage
 					.filter((item: { execution?: string }) => item.execution === "modelRequestSandbox")
 					.map((item: { role: string }) => item.role),
 				["releaseSummary", "featureMatch"],
 			)
-			assert.ok(card.timeline.some((item: { action?: string }) => item.action === "agent-started"))
+			assert.ok(inspectionReport.timeline.some((item: { action?: string }) => item.action === "agent-started"))
 			assert.ok(
-				card.runtimeUsage.runtimes.length === 2 &&
-					card.runtimeUsage.runtimes.every((item: { deleted: boolean }) => item.deleted),
+				inspectionReport.runtimeUsage.runtimes.length === 2 &&
+					inspectionReport.runtimeUsage.runtimes.every((item: { deleted: boolean }) => item.deleted),
 			)
 			const patch = await replay.callTool({
 				name: "get_tested_patch",
-				arguments: { inspectionId: accepted.inspectionId, sha256: card.upgrades[0].patches[0].digest },
+				arguments: { inspectionId: accepted.inspectionId, sha256: inspectionReport.upgrades[0].patches[0].digest },
 			})
 			assert.equal(patch.isError, undefined)
 		} finally {
@@ -311,7 +314,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			mailbox: featureMail,
 			digest: featureDigest,
 		}
-		const card = {
+		const inspectionReport = {
 			version: 2,
 			inspectionId: id,
 			repository: { url: repositoryUrl, commit: "a".repeat(40) },
@@ -319,7 +322,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			timeline: [],
 			upgrades: [{ dependency: "widget", verdict: "Fixed", patches: [base, feature] }],
 		}
-		await writeFile(join(mailboxDir, "card.json"), JSON.stringify(card))
+		await writeFile(join(mailboxDir, "card.json"), JSON.stringify(inspectionReport))
 		assert.ok(entry)
 
 		// Start from a separate checkout and resolve the installed package from the temporary home.
@@ -331,8 +334,8 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			// verify discovery and read evidence written by another session
 			assert.equal(client.getServerVersion()?.version, packed.version)
 			assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name).sort(), expectedTools)
-			const reportCard = await client.callTool({ name: "read_inspection", arguments: { inspectionId: id } })
-			assert.ok(!reportCard.isError)
+			const inspectionReport = await client.callTool({ name: "read_inspection", arguments: { inspectionId: id } })
+			assert.ok(!inspectionReport.isError)
 			const selected = await client.callTool({
 				name: "get_tested_patch",
 				arguments: { inspectionId: id, sha256: featureDigest, checkout: { relationship: "ahead", dirty: false } },

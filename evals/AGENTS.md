@@ -6,4 +6,4 @@ Run `bun run eval --case typescript-7` or `bun run eval --all` from the reposito
 
 Record CarlNotes with `bun run eval --case carlnotes-baseline --record`. The Baseline uses a pinned 8 GiB sandbox with application variables absent. Review the counts and test file errors in the case file, then change `review` to `reviewed` to enable read-only scoring. Each test file error records the file and reason for a load, setup or runner error outside a named test. Failed and skipped cases have their own counts. Preflight exercises the offline tests.
 
-The runner includes the Report Card’s model and handoff prompt references in the result for each Inspection. Compare names, versions and SHA-256 digests when reproducing an Inspection.
+The runner includes the Inspection Report’s model and handoff prompt references in the result for each Inspection. Compare names, versions and SHA-256 digests when reproducing an Inspection.

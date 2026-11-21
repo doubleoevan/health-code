@@ -60,7 +60,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	// inspect the exact repository revision and dependency upgrade
 	const provider = createSandboxProvider({ revision: fixture.commit })
 	const started = Date.now()
-	const card = await inspectRepository({
+	const inspectionReport = await inspectRepository({
 		repositoryUrl: fixture.repositoryUrl,
 		signal,
 		upgrade: fixture.upgrade,
@@ -91,14 +91,14 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	})
 
 	// require evidence from the pinned commit
-	const report = card.upgrades[0]
-	if (!report || card.repository.commit !== fixture.commit) {
+	const report = inspectionReport.upgrades[0]
+	if (!report || inspectionReport.repository.commit !== fixture.commit) {
 		throw new Error(
 			"Pinned upgrade did not produce evidence: " +
 				JSON.stringify({
-					manager: card.packageManager,
-					selection: card.selection,
-					baseline: card.baseline.tests.status,
+					manager: inspectionReport.packageManager,
+					selection: inspectionReport.selection,
+					baseline: inspectionReport.baseline.tests.status,
 				}),
 		)
 	}
@@ -122,10 +122,10 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	// score model usage and sandbox time against the shared budget
 	const durationMs = Date.now() - started
 	const sandboxCostUpperBoundUsd =
-		card.runtimeUsage?.runtimes.reduce((sum, runtime) => sum + runtime.upperBoundUsd, 0) ??
+		inspectionReport.runtimeUsage?.runtimes.reduce((sum, runtime) => sum + runtime.upperBoundUsd, 0) ??
 		provider.estimateMaxCost(durationMs)
 	const withinBudget = scoreBudget({
-		limits: card.limits,
+		limits: inspectionReport.limits,
 		modelUsage: report.modelUsage,
 		attemptDurationMs: report.attemptDurationMs,
 		durationMs,
@@ -144,13 +144,15 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 			verified.typecheck.status === "passed" &&
 			verified.tests.status === "passed",
 	})
-	const deleted = card.timeline.some((event) => event.type === "sandbox.event" && event.action === "deleted")
+	const deleted = inspectionReport.timeline.some(
+		(event) => event.type === "sandbox.event" && event.action === "deleted",
+	)
 	const passed = score.budgetAcceptance && deleted
 
 	// save the tested mailbox beside the evaluation report
 	const directory = new URL("../logs/", import.meta.url)
 	await mkdir(directory, { recursive: true })
-	const filename = `typescript-7-${card.inspectionId}.patch`
+	const filename = `typescript-7-${inspectionReport.inspectionId}.patch`
 	if (upgradePatch) {
 		await writeFile(new URL(filename, directory), upgradePatch.mailbox)
 	}
@@ -175,9 +177,9 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 			digest: upgradePatch.digest,
 		},
 		deleted,
-		effectiveLimits: card.limits,
-		promptVersions: card.promptVersions,
-		commit: card.repository.commit,
+		effectiveLimits: inspectionReport.limits,
+		promptVersions: inspectionReport.promptVersions,
+		commit: inspectionReport.repository.commit,
 		verdict: report.verdict,
 		confirmed: repeated,
 		locators: report.locators,
@@ -195,14 +197,17 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	}
 
 	// write the full comparison and print a compact summary
-	await writeFile(new URL(`typescript-7-${card.inspectionId}.json`, directory), `${JSON.stringify(outcome, null, 2)}\n`)
+	await writeFile(
+		new URL(`typescript-7-${inspectionReport.inspectionId}.json`, directory),
+		`${JSON.stringify(outcome, null, 2)}\n`,
+	)
 	console.log(
 		JSON.stringify(
 			{
 				...outcome,
 				sourceDiff: outcome.sourceDiff === null ? null : "See evaluation report",
 				sourceEvidence: {
-					baseline: card.baseline.tests.status,
+					baseline: inspectionReport.baseline.tests.status,
 					result: report.result.status,
 					observation: report.observation.reason,
 				},

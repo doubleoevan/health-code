@@ -10,7 +10,7 @@ import { parse as parseToml } from "smol-toml"
 import { createServer } from "./createServer.ts"
 import { fetchPatch, validateOutcome } from "./fetchPatch.ts"
 import { setupAccount } from "./setupAccount.ts"
-import { InspectionStore, protect, type SavedCard, toHash } from "./storeInspection.ts"
+import { InspectionStore, protect, type SavedReport, toHash } from "./storeInspection.ts"
 import { Inspections } from "./trackInspections.ts"
 
 const key = "synthetic-model-key-for-tests"
@@ -99,7 +99,7 @@ test("setup registers and rotates a host-bound secret and prints name-only clien
 	}
 })
 
-test("start returns before allocation, progress is request-scoped, and a new reader recovers the card", async () => {
+test("start returns before allocation, progress is request-scoped, and a new reader recovers the report", async () => {
 	// hold sandbox allocation until the client has received its inspection id
 	const root = await mkdtemp(join(tmpdir(), "mcp-inspection-"))
 	const store = new InspectionStore(root, protect(environment))
@@ -120,7 +120,7 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 		const tools = await client.listTools()
 		assert.deepEqual(Object.fromEntries(tools.tools.map((tool) => [tool.name, tool.title])), {
 			get_tested_patch: "Get a tested patch by SHA-256",
-			read_inspection: "Read inspection progress and report card",
+			read_inspection: "Read progress and the inspection report",
 			report_patch_result: "Record a patch result",
 			start_inspection: "Start an inspection",
 		})
@@ -199,12 +199,12 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 		assert.equal(startProgress.length, 1)
 		assert.ok(snapshot.pinned.some((event) => event.action === "deleted"))
 
-		// reopen the card through a path with a trailing separator
+		// reopen the report through a path with a trailing separator
 		const replay = await new InspectionStore(root + sep).load(id)
 		assert.equal(replay.repository.commit, fixture.commit)
 		assert.equal(replay.timeline.at(-1)?.type, "inspection.finished")
 
-		// reject a digest absent from the recovered card
+		// reject a digest absent from the recovered report
 		const missing = await client.callTool({
 			name: "get_tested_patch",
 			arguments: { inspectionId: id, sha256: "a".repeat(64) },
@@ -250,7 +250,7 @@ test("replay delivers exact Patch pages and durable application results", async 
 		mailbox: "adopt feature\n",
 		digest: toHash("adopt feature\n"),
 	}
-	const card: SavedCard = {
+	const report: SavedReport = {
 		version: 2,
 		inspectionId,
 		repository: { url: repo, commit: "a".repeat(40) },
@@ -260,7 +260,7 @@ test("replay delivers exact Patch pages and durable application results", async 
 	}
 	try {
 		// reconstruct the saved mailbox and verify its digest
-		await store.save(card)
+		await store.save(report)
 		const saved = await store.load(inspectionId)
 		const first = fetchPatch(saved, { sha256, offset: 0 })
 		const rest = fetchPatch(saved, { sha256, offset: first.nextOffset ?? 0 })
@@ -295,7 +295,7 @@ test("replay delivers exact Patch pages and durable application results", async 
 		// reject changed bytes under a previously verified digest
 		assert.throws(() =>
 			fetchPatch(
-				{ ...card, upgrades: [{ dependency: "widget", patches: [{ ...patch, mailbox: "altered" }] }] },
+				{ ...report, upgrades: [{ dependency: "widget", patches: [{ ...patch, mailbox: "altered" }] }] },
 				{ sha256, offset: 0 },
 			),
 		)
@@ -304,7 +304,7 @@ test("replay delivers exact Patch pages and durable application results", async 
 		assert.match(
 			fetchPatch(
 				{
-					...card,
+					...report,
 					upgrades: [
 						{
 							dependency: "widget",
@@ -319,8 +319,8 @@ test("replay delivers exact Patch pages and durable application results", async 
 		)
 
 		// reject credentials and corrupt report data on disk
-		await assert.rejects(store.save({ ...card, inspectionId: randomUUID(), exposed: key }))
-		await writeFile(join(root, inspectionId, "card.json"), "partial")
+		await assert.rejects(store.save({ ...report, inspectionId: randomUUID(), exposed: key }))
+		await writeFile(join(root, inspectionId, "inspection-report.json"), "partial")
 		await assert.rejects(store.load(inspectionId), /unreadable/)
 		await assert.rejects(store.load("../escape"))
 

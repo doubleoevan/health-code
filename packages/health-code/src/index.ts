@@ -13,9 +13,9 @@ export type {
 	 */
 	InspectionEventV2 as EnrichedInspectionEvent,
 	/**
-	 * @deprecated Use ReportCardV2.
+	 * @deprecated Use InspectionReportV2.
 	 */
-	ReportCardV2 as EnrichedReportCard,
+	InspectionReportV2 as EnrichedReportCard,
 	/**
 	 * @deprecated Use UpgradeReportV2.
 	 */
@@ -33,11 +33,15 @@ export type {
 	InspectionEventV2,
 	InspectionModels,
 	InspectionOptionsV2,
+	InspectionReportV2,
+	/**
+	 * @deprecated Use InspectionReportV2.
+	 */
+	InspectionReportV2 as ReportCardV2,
 	ModelRoute,
 	ModelUsage,
 	Patch,
 	Pricing,
-	ReportCardV2,
 	UpgradeReportV2,
 	Verdict,
 } from "./agentContracts.ts"
@@ -51,11 +55,15 @@ export type {
 	InspectionEvent,
 	InspectionLimits,
 	InspectionOptions,
+	InspectionReport,
+	/**
+	 * @deprecated Use InspectionReport.
+	 */
+	InspectionReport as ReportCard,
 	InstallationFinding,
 	Observation,
 	Operation,
 	PackageManager,
-	ReportCard,
 	Sandbox,
 	SandboxProvider,
 	TestFailure,
@@ -68,8 +76,12 @@ export { inspectRepository } from "./inspectRepository.ts"
 export type {
 	ModelRequestSandbox,
 	ModelRequestSandboxEvent,
+	ModelRequestSandboxInspectionReport,
+	/**
+	 * @deprecated Use ModelRequestSandboxInspectionReport.
+	 */
+	ModelRequestSandboxInspectionReport as ModelRequestSandboxReportCard,
 	ModelRequestSandboxOptions,
-	ModelRequestSandboxReportCard,
 	RuntimeUsage,
 	SandboxModelRequest,
 	SandboxModelRoutes,

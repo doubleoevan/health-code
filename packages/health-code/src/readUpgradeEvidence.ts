@@ -1,7 +1,7 @@
 import { z } from "zod"
 import type { Locator } from "./agentContracts.ts"
 import type { NodeAdapter } from "./checkProject.ts"
-import type { CheckResult, ReportCard } from "./contracts.ts"
+import type { CheckResult, InspectionReport } from "./contracts.ts"
 
 export const usageEvidence = z.object({
 	usage: z.array(
@@ -22,7 +22,7 @@ export async function sizeBytes(adapter: NodeAdapter): Promise<number | undefine
 	const measured = await adapter.data(["installed-size"])
 	return typeof measured === "number" && Number.isSafeInteger(measured) && measured >= 0 ? measured : undefined
 }
-export function permalink(repository: ReportCard["repository"], file: string, line: number): string {
+export function permalink(repository: InspectionReport["repository"], file: string, line: number): string {
 	// link evidence to the pinned file and line
 	const path = file.split("/").map(encodeURIComponent).join("/")
 	return `${repository.url.replace(/\.git$/, "")}/blob/${repository.commit}/${path}#L${line}`
@@ -68,7 +68,7 @@ function readDiagnostics(check: CheckResult, locators: Map<string, Locator>): vo
 }
 export async function locateDiagnostics(options: {
 	// describe the revision and reader for source verification
-	repository: ReportCard["repository"]
+	repository: InspectionReport["repository"]
 	locators: Locator[]
 	read: (file: string) => Promise<string>
 }): Promise<void> {

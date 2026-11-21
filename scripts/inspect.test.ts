@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
-import type { ReportCard } from "health-code"
+import type { InspectionReport } from "health-code"
 import { createInspectionLog } from "./inspect.ts"
 
 const entry = fileURLToPath(new URL("./inspect.ts", import.meta.url))
@@ -22,7 +22,7 @@ test("the active terminal line survives detail output and clears on failure", ()
 	expect(writes.join("")).toBe("… Install\r\x1b[2K  stdout evidence\n… Install\r\x1b[2KInspection failed · cancelled\n")
 })
 
-test("fake inspection writes plain progress and a complete report card", () => {
+test("fake inspection writes plain progress and a complete inspection report", () => {
 	const cwd = mkdtempSync(join(tmpdir(), "health-code-cli-"))
 	try {
 		// run the recorded inspection without a terminal
@@ -32,17 +32,17 @@ test("fake inspection writes plain progress and a complete report card", () => {
 		expect(child.stdout).toContain("◆ deleted")
 		expect(child.stdout).not.toContain("\x1b[")
 
-		// locate the single saved report card
+		// locate the single saved inspection report
 		const [filename, ...extra] = readdirSync(join(cwd, "logs"))
 		expect(extra).toHaveLength(0)
-		const card: ReportCard = JSON.parse(readFileSync(join(cwd, "logs", filename ?? ""), "utf8"))
-		expect(filename).toBe(`${card.inspectionId}.fake.json`)
+		const report: InspectionReport = JSON.parse(readFileSync(join(cwd, "logs", filename ?? ""), "utf8"))
+		expect(filename).toBe(`${report.inspectionId}.fake.json`)
 
 		// verify the reported repository, result and final event
-		expect(card.repository.url).toBe(repositoryUrl)
-		expect(card.upgrades[0]?.result.status).toBe("passed")
-		expect(card.timeline.at(-1)?.type).toBe("inspection.finished")
-		expect(child.stdout).toContain(`Report card written to logs/${filename}`)
+		expect(report.repository.url).toBe(repositoryUrl)
+		expect(report.upgrades[0]?.result.status).toBe("passed")
+		expect(report.timeline.at(-1)?.type).toBe("inspection.finished")
+		expect(child.stdout).toContain(`Inspection report written to logs/${filename}`)
 	} finally {
 		rmSync(cwd, { recursive: true, force: true })
 	}

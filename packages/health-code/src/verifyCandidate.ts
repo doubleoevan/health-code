@@ -4,7 +4,7 @@ import type { Patch, PatchOperation, PatchVerification, UpgradeReportV2 } from "
 import { lockfiles } from "./bumpManifest.ts"
 import type { NodeAdapter } from "./checkProject.ts"
 import { bounded, type InspectionContext } from "./collectEvents.ts"
-import { InspectionError, type Observation, type ReportCard, type Sandbox } from "./contracts.ts"
+import { InspectionError, type InspectionReport, type Observation, type Sandbox } from "./contracts.ts"
 import type { ReleaseNote } from "./readReleases.ts"
 import type { UsageEvidence } from "./readUpgradeEvidence.ts"
 import { caseMatchesTitle } from "./testCaseName.ts"
@@ -24,7 +24,7 @@ export type PatchEvidence = {
 	context: InspectionContext
 	adapter: NodeAdapter
 	sandbox: Sandbox
-	card: ReportCard
+	inspectionReport: InspectionReport
 	report: UpgradeReportV2
 
 	// retain release and baseline observations for independent verification

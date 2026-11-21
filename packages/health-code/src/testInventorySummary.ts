@@ -5,7 +5,7 @@ const counts = z.object({ passed: count, failed: count, skipped: count, todo: co
 const testFileErrors = z.array(z.object({ file: z.string(), reason: z.string() }))
 
 /**
- * Reads current and earlier test measurements into the public Report Card shape.
+ * Reads current and earlier test measurements into the public Inspection Report shape.
  */
 export const testInventorySummarySchema = z.union([
 	z.object({ counts, testFileErrors }),

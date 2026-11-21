@@ -4,7 +4,7 @@ import { createFakeSandboxProvider, InspectionError } from "health-code"
 import { fetchPatch } from "./fetchPatch.ts"
 import { modelRequestSandboxFixture } from "./fixtures/modelRequestSandboxInspection.ts"
 import { inspectWithAccount } from "./inspectWithAccount.ts"
-import { cardSchema, toHash } from "./storeInspection.ts"
+import { reportSchema, toHash } from "./storeInspection.ts"
 
 test("the paid entry point routes each credential and closes the guest binding on a replay", async () => {
 	const environment = {
@@ -26,28 +26,28 @@ test("the paid entry point routes each credential and closes the guest binding o
 			onEvent(): void {},
 		}
 		assert.throws(() => inspectWithAccount(options, {}), /RUNTA_TOKEN/)
-		const card = await inspectWithAccount(options, { ...environment, ANTHROPIC_API_KEY: undefined })
-		assert.equal(card.version, 2)
+		const report = await inspectWithAccount(options, { ...environment, ANTHROPIC_API_KEY: undefined })
+		assert.equal(report.version, 2)
 		assert.deepEqual(requested, ["registry", "releases"])
 		assert.deepEqual(
 			provider.modelRequestSandboxEvents.map((item) => item.request?.role ?? item.action),
 			["open", "releaseSummary", "featureMatch", "close"],
 		)
 		assert.deepEqual(
-			card.runtimeUsage?.runtimes.map((item) => [item.resource, item.deleted]),
+			report.runtimeUsage?.runtimes.map((item) => [item.resource, item.deleted]),
 			[
 				["repository", true],
 				["modelRequestSandbox", true],
 			],
 		)
 		assert.deepEqual(phases, ["open", "verify", "generate", "close"])
-		assert.ok(card.timeline.some((event) => event.type === "sandbox.event" && event.action === "agent-started"))
-		assert.ok(!Object.values(environment).some((value) => JSON.stringify(card).includes(value)))
+		assert.ok(report.timeline.some((event) => event.type === "sandbox.event" && event.action === "agent-started"))
+		assert.ok(!Object.values(environment).some((value) => JSON.stringify(report).includes(value)))
 
 		// recover the exact mailbox and library prompt by digest
-		const patch = fetchPatch(cardSchema.parse(card), { sha256: toHash(mailbox), offset: 0 })
+		const patch = fetchPatch(reportSchema.parse(report), { sha256: toHash(mailbox), offset: 0 })
 		assert.equal(patch.text, mailbox)
-		assert.equal(patch.agentPrompt, card.upgrades[0]?.patches[0]?.prompt)
+		assert.equal(patch.agentPrompt, report.upgrades[0]?.patches[0]?.prompt)
 	} finally {
 		restore()
 	}

@@ -65,7 +65,7 @@ Both clients SHALL discover four titled tools with input and output schemas, pla
 
 ### Requirement: Follow live and recorded evidence
 
-`read_inspection` SHALL return status, current step, ordered rolling log and highlighted, pinned Sandbox Events. It SHALL expose the terminal Report Card or failure reason. Start and read calls SHALL send current-step progress only during a live request with a supplied progress token.
+`read_inspection` SHALL return status, current step, ordered rolling log and highlighted, pinned Sandbox Events. It SHALL expose the terminal Inspection Report or failure reason. Start and read calls SHALL send current-step progress only during a live request with a supplied progress token.
 
 #### Scenario: Poll and resume
 
@@ -78,18 +78,18 @@ Both clients SHALL discover four titled tools with input and output schemas, pla
 - **THEN** the client receives labeled progress during that call and receives subsequent progress through later reads
 - **AND** completing or cancelling a read ends its notifications and the Inspection continues
 
-### Requirement: Recover private Report Cards
+### Requirement: Recover private Inspection Reports
 
-The MCP server SHALL save completed Report Cards with their exact Patch artifacts beneath `~/.health-code/inspections/`. A fresh session SHALL read them and their recorded application results without credentials. The library SHALL remain free of storage responsibilities. Local Inspections SHALL have no public site link.
+The MCP server SHALL save completed Inspection Reports with their exact Patch artifacts beneath `~/.health-code/inspections/`. A fresh session SHALL read them and their recorded application results without credentials. The library SHALL remain free of storage responsibilities. Local Inspections SHALL have no public site link.
 
 #### Scenario: Restart between inspection and adoption
 
 - **WHEN** a second server opens an Inspection ID after the first server saved it
-- **THEN** it returns the same Report Card, timeline and available Patches from disk, including for a legacy card with no Patches
+- **THEN** it returns the same Inspection Report, timeline and available Patches from disk, including for a legacy report with no Patches
 
 #### Scenario: No recoverable record
 
-- **WHEN** a reader supplies an unknown ID, a malformed record or an ID from an interrupted process with no saved card
+- **WHEN** a reader supplies an unknown ID, a malformed record or an ID from an interrupted process with no saved report
 - **THEN** it reports the corresponding missing or unreadable record without starting another paid Inspection
 
 ### Requirement: Deliver a tested Patch
@@ -105,7 +105,7 @@ The MCP server SHALL save completed Report Cards with their exact Patch artifact
 
 - **WHEN** local ancestry cannot be established
 - **THEN** the handoff reports the comparison as unknown and supplies the inspected base
-- **AND** if the card offers no such Patch, the tool explains its absence without generating a substitute
+- **AND** if the report offers no such Patch, the tool explains its absence without generating a substitute
 
 ### Requirement: Record the developer’s result
 

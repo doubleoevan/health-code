@@ -94,8 +94,8 @@ export function createServer(inspections: Inspections, version: string): McpServ
 	server.registerTool(
 		"read_inspection",
 		{
-			title: "Read inspection progress and report card",
-			description: "Read status, rolling events, pinned Runta moments, saved results and Report Card JSON pages.",
+			title: "Read progress and the inspection report",
+			description: "Read status, rolling events, pinned Runta moments, saved results and Inspection Report JSON pages.",
 			annotations: toHints(true, false),
 			inputSchema: z.object({
 				inspectionId,
@@ -128,9 +128,9 @@ export function createServer(inspections: Inspections, version: string): McpServ
 		},
 		async (input) =>
 			respond(async () => {
-				// verify the requested digest against the saved card
-				const card = await inspections.store.load(input.inspectionId)
-				const details = fetchPatch(card, input)
+				// verify the requested digest against the saved report
+				const report = await inspections.store.load(input.inspectionId)
+				const details = fetchPatch(report, input)
 				return {
 					summary: `${details.verdict} · checkout ${details.checkout.relationship} · ${details.action}`,
 					details,
@@ -149,8 +149,8 @@ export function createServer(inspections: Inspections, version: string): McpServ
 		},
 		async (input) =>
 			respond(async () => {
-				const card = await inspections.store.load(input.inspectionId)
-				validateOutcome(card, input)
+				const report = await inspections.store.load(input.inspectionId)
+				validateOutcome(report, input)
 				await inspections.store.record(input)
 				return { summary: `Recorded ${input.application} application · tests ${input.tests}`, details: input }
 			}),

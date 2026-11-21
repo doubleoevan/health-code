@@ -95,7 +95,7 @@ test("shares one provider contract with the credentialed suite", async () => {
 test("records existing, flaky and confirmed tests with exact callback replay", async () => {
 	// collect callback events as the fixture repeats the failing tests
 	const timeline: InspectionEvent[] = []
-	const card = await inspectRepository({
+	const inspectionReport = await inspectRepository({
 		repositoryUrl: fixtureUrl,
 		sandboxProvider: provider(scripts(["existing"], ["existing", "flaky", "regression"], ["existing", "regression"])),
 		limits: { maxUpgrades: 1 },
@@ -105,20 +105,20 @@ test("records existing, flaky and confirmed tests with exact callback replay", a
 	})
 
 	// compare the saved timeline and selection with the delivered evidence
-	assert.deepEqual(JSON.parse(JSON.stringify(card.timeline)), timeline)
+	assert.deepEqual(JSON.parse(JSON.stringify(inspectionReport.timeline)), timeline)
 	assert.deepEqual(
-		card.selection.omitted.map((u) => u.to),
+		inspectionReport.selection.omitted.map((u) => u.to),
 		["2.0.0"],
 	)
 
 	// attribute only the reproducible new failure to the upgrade
-	const outcome = card.upgrades[0]?.result
+	const outcome = inspectionReport.upgrades[0]?.result
 	assert.equal(outcome?.status, "failed")
 	assert.deepEqual(
 		outcome.failingTests.map((t) => t.name),
 		["regression"],
 	)
-	assert.equal(card.timeline.at(-1)?.type, "inspection.finished")
+	assert.equal(inspectionReport.timeline.at(-1)?.type, "inspection.finished")
 })
 test("a transient outside write stops the trial on a successful install", async () => {
 	// inject a transient write into the successful install
@@ -126,15 +126,15 @@ test("a transient outside write stops the trial on a successful install", async 
 	const install = entries.at(-1)
 	assert.ok(install)
 	install.files = { complete: true, findings: [{ kind: "write", path: "/tmp/transient" }] }
-	const card = await inspectRepository({
+	const inspectionReport = await inspectRepository({
 		repositoryUrl: fixtureUrl,
 		sandboxProvider: provider(entries),
 		limits: { maxUpgrades: 1 },
 	})
 
 	// verify that the finding survives the skipped check
-	assert.equal(card.upgrades[0]?.result.status, "untested")
-	assert.equal(card.upgrades[0]?.observation.findings.length, 1)
+	assert.equal(inspectionReport.upgrades[0]?.result.status, "untested")
+	assert.equal(inspectionReport.upgrades[0]?.observation.findings.length, 1)
 })
 test("incomplete observation cannot pass; only confirmed denials become sandbox events", async () => {
 	// mark the network trace incomplete and vary the connection outcomes
@@ -148,23 +148,26 @@ test("incomplete observation cannot pass; only confirmed denials become sandbox 
 			{ kind: "connection", destination: "192.0.2.1", outcome: "unknown" },
 		],
 	}
-	const card = await inspectRepository({
+	const inspectionReport = await inspectRepository({
 		repositoryUrl: fixtureUrl,
 		sandboxProvider: provider(entries),
 		limits: { maxUpgrades: 1 },
 	})
 
 	// check that only the confirmed denial produces a sandbox event
-	assert.equal(card.upgrades[0]?.result.status, "untested")
-	assert.equal(card.timeline.filter((e) => e.type === "sandbox.event" && e.action === "connection-blocked").length, 1)
+	assert.equal(inspectionReport.upgrades[0]?.result.status, "untested")
+	assert.equal(
+		inspectionReport.timeline.filter((e) => e.type === "sandbox.event" && e.action === "connection-blocked").length,
+		1,
+	)
 })
 test("broken Baseline prevents all trials", async () => {
 	// fail the baseline install before either upgrade trial
 	const entries = scripts([], [], []).slice(0, 3)
 	entries[2] = command(["install"], "broken", 1)
-	const card = await inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider: provider(entries) })
-	assert.equal(card.upgrades.length, 2)
-	assert.ok(card.upgrades.every((u) => u.result.status === "untested"))
+	const inspectionReport = await inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider: provider(entries) })
+	assert.equal(inspectionReport.upgrades.length, 2)
+	assert.ok(inspectionReport.upgrades.every((u) => u.result.status === "untested"))
 })
 test("expired token and invalid sources fail before allocation", async () => {
 	// simulate expired credentials in the provider availability check
@@ -226,8 +229,12 @@ test("a confirmation deadline preserves the first result and the clean install e
 	}
 
 	// check that the original install and unconfirmed failure survive the deadline
-	const card = await inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider, limits: { maxUpgrades: 1 } })
-	const check = card.upgrades[0]
+	const inspectionReport = await inspectRepository({
+		repositoryUrl: fixtureUrl,
+		sandboxProvider,
+		limits: { maxUpgrades: 1 },
+	})
+	const check = inspectionReport.upgrades[0]
 	assert.equal(check?.install.status, "passed")
 	assert.equal(check?.tests.status, "untested")
 	assert.equal(check.tests.reason, "inspection-deadline")
@@ -235,26 +242,26 @@ test("a confirmation deadline preserves the first result and the clean install e
 	assert.equal(check.tests.evidence.length, 1)
 })
 
-test("a dirty confirmation install stops the check and redacts the finding in the saved card", async () => {
+test("a dirty confirmation install stops the check and redacts the finding in the saved report", async () => {
 	// add a sensitive path to the confirmation install findings
 	const entries = scripts([], [], []).slice(0, 8)
 	entries[7] = command(["typecheck", "build"], "error TS999", 1)
 	const retry = command(["install", "widget", "1.3.0"], "confirmation install")
 	retry.files = { complete: true, findings: [{ kind: "write", path: "/tmp/sk-sensitivefixture" }] }
 	entries.push(retry)
-	const card = await inspectRepository({
+	const inspectionReport = await inspectRepository({
 		repositoryUrl: fixtureUrl,
 		sandboxProvider: provider(entries),
 		limits: { maxUpgrades: 1 },
 	})
 
 	// verify that the saved evidence includes only the redacted path
-	const check = card.upgrades[0]
+	const check = inspectionReport.upgrades[0]
 	assert.equal(check?.tests.status, "untested")
 	assert.equal(check.tests.reason, "installation-finding")
 	assert.deepEqual(check.observation.findings, [{ kind: "write", path: "/tmp/[redacted]" }])
 	assert.equal(check.install.evidence.length, 2)
-	assert.doesNotMatch(JSON.stringify(card), /sensitivefixture/)
+	assert.doesNotMatch(JSON.stringify(inspectionReport), /sensitivefixture/)
 })
 
 test("malformed registry data leaves the baseline runnable", async () => {
@@ -262,45 +269,48 @@ test("malformed registry data leaves the baseline runnable", async () => {
 	entries[1] = command(["registry", "widget"], '{"widget":null}')
 
 	// check that malformed registry data permits the baseline and skips selection
-	const card = await inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider: provider(entries) })
-	assert.equal(card.baseline.install.status, "passed")
-	assert.equal(card.upgrades.length, 0)
-	assert.match(card.selection.skipped.join(" "), /registry/)
+	const inspectionReport = await inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider: provider(entries) })
+	assert.equal(inspectionReport.baseline.install.status, "passed")
+	assert.equal(inspectionReport.upgrades.length, 0)
+	assert.match(inspectionReport.selection.skipped.join(" "), /registry/)
 	assert.ok(
-		card.timeline.some(
+		inspectionReport.timeline.some(
 			(event) => event.type === "step.finished" && event.summary === "registry" && event.status === "failed",
 		),
 	)
-	assert.equal(card.selection.registryLookupIssue, "Couldn’t list available upgrades: registry lookup failed.")
+	assert.equal(
+		inspectionReport.selection.registryLookupIssue,
+		"Couldn’t list available upgrades: registry lookup failed.",
+	)
 })
 test("exit 124 retains identified test failures when the provider reports no timeout", async () => {
 	// replay a failed baseline test with a known case and exit code
 	const entries = scripts(["known"], [], []).slice(0, 6)
 	entries[4] = command(["tests"], "", 124)
 	entries.splice(1, 1)
-	const card = await inspectRepository({
+	const inspectionReport = await inspectRepository({
 		repositoryUrl: fixtureUrl,
 		sandboxProvider: provider(entries),
 		limits: { maxUpgrades: 0 },
 	})
 
 	// verify the provider still attributes the failure to the named case
-	assert.equal(card.baseline.tests.status, "failed")
-	assert.equal(card.baseline.tests.failingTests[0]?.name, "known")
+	assert.equal(inspectionReport.baseline.tests.status, "failed")
+	assert.equal(inspectionReport.baseline.tests.failingTests[0]?.name, "known")
 })
 test("a failed confirmation install prevents tests on the incomplete checkout", async () => {
 	// fail the confirmation install after the initial typecheck failure
 	const entries = scripts([], [], []).slice(0, 8)
 	entries[7] = command(["typecheck", "build"], "type error", 1)
 	entries.push(command(["install", "widget", "1.3.0"], "install error", 1))
-	const card = await inspectRepository({
+	const inspectionReport = await inspectRepository({
 		repositoryUrl: fixtureUrl,
 		sandboxProvider: provider(entries),
 		limits: { maxUpgrades: 1 },
 	})
 
 	// check that the incomplete install prevents a test verdict
-	const result = card.upgrades[0]?.tests
+	const result = inspectionReport.upgrades[0]?.tests
 	assert.equal(result?.status, "untested")
 	assert.equal(result.reason, "confirmation-install-unavailable")
 })
@@ -313,13 +323,13 @@ test("a branch move cannot replace the requested checkout", async () => {
 		assert.equal(options.revision, fixtureCommit)
 		return prepare(sandbox, url, options)
 	}
-	const card = await inspectRepository({
+	const inspectionReport = await inspectRepository({
 		repositoryUrl: fixtureUrl,
 		revision: fixtureCommit,
 		sandboxProvider,
 		limits: { maxUpgrades: 1 },
 	})
-	assert.equal(card.repository.commit, fixtureCommit)
+	assert.equal(inspectionReport.repository.commit, fixtureCommit)
 })
 
 test("rejects malformed revisions before allocation and reclaims failed checkouts", async () => {
@@ -367,17 +377,17 @@ test("registry lookup has its own timeout and preserves that failure in the repo
 	}
 
 	// A short detection budget must leave the full registry window available.
-	const card = await inspectRepository({
+	const inspectionReport = await inspectRepository({
 		repositoryUrl: fixtureUrl,
 		sandboxProvider,
 		limits: { timeouts: { detect: 100, registry: 60000 } },
 	})
 	assert.equal(registryBudget, 60000)
 	assert.equal(
-		card.selection.registryLookupIssue,
+		inspectionReport.selection.registryLookupIssue,
 		"Couldn’t list available upgrades: registry lookup timed out after 60s.",
 	)
-	assert.equal(card.baseline.install.status, "passed")
+	assert.equal(inspectionReport.baseline.install.status, "passed")
 })
 
 test("partial registry failures preserve upgrades from successful lookups", async () => {
@@ -396,19 +406,19 @@ test("partial registry failures preserve upgrades from successful lookups", asyn
 			unavailable: "timed-out",
 		}),
 	)
-	const card = await inspectRepository({
+	const inspectionReport = await inspectRepository({
 		repositoryUrl: fixtureUrl,
 		sandboxProvider: provider(entries),
 		limits: { maxUpgrades: 1 },
 	})
 	assert.equal(
-		card.selection.registryLookupIssue,
+		inspectionReport.selection.registryLookupIssue,
 		"Couldn’t list available upgrades for 1 of 2 dependencies: registry requests timed out.",
 	)
 	assert.ok(
-		card.timeline.some(
+		inspectionReport.timeline.some(
 			(event) => event.type === "step.finished" && event.summary === "registry" && event.status === "untested",
 		),
 	)
-	assert.equal(card.upgrades[0]?.dependency, "widget")
+	assert.equal(inspectionReport.upgrades[0]?.dependency, "widget")
 })

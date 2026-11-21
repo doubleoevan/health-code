@@ -1,6 +1,6 @@
 import { z } from "zod"
 import type { FeatureMatch, Locator, UpgradeReportV2 } from "./agentContracts.ts"
-import type { ReportCard } from "./contracts.ts"
+import type { InspectionReport } from "./contracts.ts"
 import type { ReleaseNote } from "./readReleases.ts"
 import { permalink, type UsageEvidence } from "./readUpgradeEvidence.ts"
 
@@ -30,7 +30,7 @@ export function verifyMatch({
 	match: z.infer<typeof matchSchema>[number]
 	usage: UsageEvidence
 	notes: ReleaseNote[]
-	repository: ReportCard["repository"]
+	repository: InspectionReport["repository"]
 }): FeatureMatch | undefined {
 	// match the cited location and symbol against observed usage
 	const candidates = usage.usage.filter((entry) => entry.file === match.file && entry.line === match.line)

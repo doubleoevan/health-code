@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto"
-import type { Baseline, ModelRequestSandboxReportCard, ReportCard, UpgradeReportV2 } from "health-code"
+import type { Baseline, InspectionReport, ModelRequestSandboxInspectionReport, UpgradeReportV2 } from "health-code"
 import { testInventorySummarySchema } from "health-code"
-import { type Citation, type PatchLink, type PublishedCard, toCheckText, type UpgradeCard } from "./report.ts"
+import { type Citation, type PatchLink, type PublishedReport, toCheckText, type UpgradeCard } from "./report.ts"
 
-export type InspectionOutput = { report: ReportCard | ModelRequestSandboxReportCard }
-export type Publication = { original: InspectionOutput["report"]; card: PublishedCard; blobs: Map<string, Uint8Array> }
+export type InspectionOutput = { report: InspectionReport | ModelRequestSandboxInspectionReport }
+export type Publication = {
+	original: InspectionOutput["report"]
+	card: PublishedReport
+	blobs: Map<string, Uint8Array>
+}
 
 function toChecks(checks: Baseline): UpgradeCard["checks"] {
 	return {
@@ -80,7 +84,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 		return patches
 	}
 
-	// project both report versions into the public card format
+	// project both report versions into the public report format
 	const upgrades = report.upgrades.map((upgrade, index): UpgradeCard => {
 		const upgradeV2 = report.version === 2 ? report.upgrades[index] : undefined
 		const patches = collectPatches(upgradeV2?.patches ?? [])

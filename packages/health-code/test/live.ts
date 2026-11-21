@@ -17,28 +17,28 @@ for (const [url, commit] of [
 		// inspect the pinned commit with upgrade trials disabled
 		const started = Date.now()
 		const sandboxProvider = connectProvider({}, commit)
-		const card = await inspectRepository({
+		const report = await inspectRepository({
 			repositoryUrl: url,
 			sandboxProvider,
 			limits: { maxUpgrades: 0, maxDurationMs: 540000 },
 		})
 
 		// confirm the pinned baseline produced installation evidence
-		assert.equal(card.repository.commit, commit)
-		assert.ok("name" in card.packageManager, JSON.stringify(card.packageManager))
-		assert.ok(card.baseline.install.evidence.length, "Missing Baseline installation evidence")
+		assert.equal(report.repository.commit, commit)
+		assert.ok("name" in report.packageManager, JSON.stringify(report.packageManager))
+		assert.ok(report.baseline.install.evidence.length, "Missing Baseline installation evidence")
 		if (url === fixtureUrl) {
 			// Exercise oxlint's sparse allocator through Nano ID's pinned test script.
-			assert.equal(card.baseline.tests.status, "passed", JSON.stringify(card.baseline.tests))
+			assert.equal(report.baseline.tests.status, "passed", JSON.stringify(report.baseline.tests))
 		}
 
 		// report cleanup, elapsed time and the provider cost estimate
-		assert.ok(card.timeline.some((e) => e.type === "sandbox.event" && e.action === "deleted"))
+		assert.ok(report.timeline.some((e) => e.type === "sandbox.event" && e.action === "deleted"))
 		console.log(
 			JSON.stringify({
 				commit,
-				baseline: card.baseline.install.status,
-				installEvidence: card.baseline.install.evidence.map((e) => (e.stderr || e.stdout).slice(-450)),
+				baseline: report.baseline.install.status,
+				installEvidence: report.baseline.install.evidence.map((e) => (e.stderr || e.stdout).slice(-450)),
 				durationMs: Date.now() - started,
 				costUpperBoundUsd: sandboxProvider.estimateMaxCost(Date.now() - started),
 				deleted: true,

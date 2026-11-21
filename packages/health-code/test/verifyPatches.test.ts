@@ -114,13 +114,13 @@ test("feature adoption ranks all four categories and shares one cap across upgra
 
 test("two targets of one dependency retain their own verdict, patch and charge", async () => {
 	// replay a repaired target and add an untested version of the same dependency
-	const { engine, report, card } = await replayPatch("repair")
+	const { engine, report, inspectionReport } = await replayPatch("repair")
 	report.modelUsage = [...engine.ledger.usage]
 	const minor = { ...report, to: "1.1.0", verdict: "Untested" as const, patches: [], modelUsage: [] }
 	engine.upgrades.push(minor, report)
 
 	// verify that charges and patches stay with their original targets
-	const result = engine.card({ ...card, upgrades: [report, minor] })
+	const result = engine.buildInspectionReport({ ...inspectionReport, upgrades: [report, minor] })
 	assert.ok(result.upgrades[0]?.modelUsage.length)
 	assert.equal(result.upgrades[1]?.modelUsage.length, 0)
 	assert.deepEqual(

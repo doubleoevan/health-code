@@ -7,10 +7,10 @@ import type {
 	CommandResult,
 	EcosystemAdapter,
 	Evidence,
+	InspectionReport,
 	Observation,
 	Operation,
 	Project,
-	ReportCard,
 	Sandbox,
 	Upgrade,
 	UpgradeReport,
@@ -96,7 +96,7 @@ export class NodeAdapter implements EcosystemAdapter {
 	}
 
 	// return the full skipped list for an empty selection
-	async listUpgrades(project: Project, limit: number): Promise<ReportCard["selection"]> {
+	async listUpgrades(project: Project, limit: number): Promise<InspectionReport["selection"]> {
 		if (limit === 0) {
 			return { eligible: [], selected: [], omitted: [], skipped: [...project.skipped] }
 		}
@@ -118,7 +118,7 @@ export class NodeAdapter implements EcosystemAdapter {
 		return this.discoverUpgrades(project, limit)
 	}
 
-	private async discoverUpgrades(project: Project, limit: number): Promise<ReportCard["selection"]> {
+	private async discoverUpgrades(project: Project, limit: number): Promise<InspectionReport["selection"]> {
 		const names = Object.keys(project.sources)
 		const seconds = Math.max(0, Math.ceil(this.context.operation("registry").timeoutMs / 1000))
 		const timeoutReason = `registry lookup timed out after ${seconds}s`

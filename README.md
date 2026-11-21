@@ -1,11 +1,12 @@
 # Health Code
 
-Health Code inspects dependency upgrades in public GitHub repositories inside a Runta sandbox.
-Its TypeScript library is the shared engine for the site and MCP server. [Hosted site](https://runhealthcode.dev)
+Health Code checks dependency upgrades against your own unit tests in a Runta sandbox. It runs your repository’s test script at a pinned commit, then reruns it with each selected upgrade. If an upgrade introduces a reproducible failure, an agent attempts a repair. Health Code replays the patch in a fresh checkout and reruns the checks before offering it.
 
 ## Try an inspection
 
-Open [Health Code](https://runhealthcode.dev), enter a public JavaScript or TypeScript GitHub repository and follow the inspection. Share its Report Card link to show the inspected commit, checks and sandbox timeline. For a local coding agent, run `npx @health-code/mcp setup` after configuring your Runta account as described under MCP setup.
+Paste a public JavaScript or TypeScript GitHub repository URL into the hosted site. The shareable Inspection Report shows which checks passed, which failures were already present, and any tested patch you can apply. If the repository has no test script, the report marks that check as untested. [Try Health Code](https://runhealthcode.dev)
+
+To inspect a repository from Claude Code or Codex, follow the [MCP setup](#mcp-setup).
 
 ```mermaid
 flowchart LR
@@ -20,12 +21,12 @@ Live inspections create Runta runtimes, restrict installation traffic to registr
 
 ## Inspect a repository
 
-The `health-code` package exports the same ESM entry to Node and Bun. Supply a Sandbox Provider and consume the returned versioned JSON Report Card. Each caller owns storage and scheduling.
+The `health-code` package exports the same ESM entry to Node and Bun. Supply a Sandbox Provider and consume the returned versioned JSON Inspection Report. Each caller owns storage and scheduling.
 
 ```ts
 import { createSandboxProvider, inspectRepository } from "health-code"
 
-const card = await inspectRepository({
+const report = await inspectRepository({
   repositoryUrl: "https://github.com/ai/nanoid",
   sandboxProvider: createSandboxProvider(),
   limits: { maxUpgrades: 6, maxDurationMs: 1_800_000, maxCostUsd: 0.25 },
@@ -33,10 +34,10 @@ const card = await inspectRepository({
     console.log(event.sequence, event.type)
   },
 })
-console.log(card.repository.commit, card.upgrades)
+console.log(report.repository.commit, report.upgrades)
 ```
 
-Use `provider.checkAvailability()` to check a credential without allocating a sandbox. `SandboxUnavailableError` identifies authentication, permission, and availability errors. Other fatal inspection errors carry the event timeline and any unresolved cleanup identifier. A partial Report Card explains untested checks.
+Use `provider.checkAvailability()` to check a credential without allocating a sandbox. `SandboxUnavailableError` identifies authentication, permission, and availability errors. Other fatal inspection errors carry the event timeline and any unresolved cleanup identifier. A partial Inspection Report explains untested checks.
 
 The live sandbox has 4 GiB of physical memory. Tools such as oxlint can reserve larger virtual address ranges and consume RAM as they use the pages.
 
@@ -46,11 +47,11 @@ Read each upgrade's `install.status` for the install command's Check Result. Its
 
 ## Inspection site
 
-Build the library with `bun run --cwd packages/health-code build`, then run `bun run --cwd apps/web dev`. Open `http://localhost:3000` and submit the prefilled fixture URL. The same short link displays the live log and the completed Report Card. Development replay streams a recorded library inspection with fixture model responses.
+Build the library with `bun run --cwd packages/health-code build`, then run `bun run --cwd apps/web dev`. Open `http://localhost:3000` and submit the prefilled fixture URL. The same short link displays the live log and the completed Inspection Report. Development replay streams a recorded library inspection with fixture model responses.
 
 The live server runs all four model roles with Claude Opus 5.5. Reports publish verified Patch bytes and application prompts when GitHub detects an OSI-approved license at the inspected commit. See [site operations](apps/web/AGENTS.md) for the Northflank Dockerfile, SQLite backups, deployment namespace and startup recovery.
 
-To apply a tested Patch from a licensed Report Card, choose **Copy patch instructions** and paste them into Claude Code or Codex from the repository checkout. The instructions include the download URL, SHA-256 digest and tested commit. A Feature Patch also identifies its required Upgrade Patch.
+To apply a tested Patch from a licensed Inspection Report, choose **Copy patch instructions** and paste them into Claude Code or Codex from the repository checkout. The instructions include the download URL, SHA-256 digest and tested commit. A Feature Patch also identifies its required Upgrade Patch.
 
 ## MCP setup
 
@@ -63,7 +64,7 @@ The next `health-code` npm release includes the library and the MCP executable. 
 3. Paste the Claude Code entry inside `mcpServers` in the project’s `.mcp.json`, or the Codex entry at the top level of `~/.codex/config.toml`. Both pin the installed version and resolve the command from your home directory.
 4. Start or restart your client with `RUNTA_TOKEN`. The MCP uses the model key stored in Runta for all four roles. When migrating an existing configuration, replace the old client entry and remove its model-key reference. You can remove your local model key after setup succeeds.
 
-Library callers can select `callerModelExecution: "modelRequestSandbox"` and pass stored-credential routes for all four roles. Omitting the option keeps summaries and Feature Matches in the caller’s process. A model request sandbox starts on the first eligible request. Each model request sandbox call has up to 120 seconds within the Inspection’s remaining work time. The Report Card records runtime cost bounds separately from model charges. **Usage as of** (`runtimeUsage.usageAsOf`) gives the time through which runtime usage was measured.
+Library callers can select `callerModelExecution: "modelRequestSandbox"` and pass stored-credential routes for all four roles. Omitting the option keeps summaries and Feature Matches in the caller’s process. A model request sandbox starts on the first eligible request. Each model request sandbox call has up to 120 seconds within the Inspection’s remaining work time. The Inspection Report records runtime cost bounds separately from model charges. **Usage as of** (`runtimeUsage.usageAsOf`) gives the time through which runtime usage was measured.
 
 To use an unpublished checkout, build the library with `bun run --cwd packages/health-code build`, then run `bun run --cwd apps/mcp build`. Use `node packages/health-code/dist/mcp/cli.js mcp setup` in your secret environment. In the printed client entry, use `node` as the command and pass the absolute path to that file followed by `mcp` as the arguments.
 
@@ -78,15 +79,15 @@ To use an unpublished checkout, build the library with `bun run --cwd packages/h
 
 ### Example agent session
 
-Ask your agent to **inspect this repository, read the Report Card and apply the feature Patch**.
+Ask your agent to **inspect this repository, read the Inspection Report and apply the feature Patch**.
 
 1. Call `start_inspection` with `repositoryUrl` set to the public GitHub HTTPS URL. Keep the returned `inspectionId` and the stdio process open while the Inspection runs.
-2. Call `read_inspection` using that ID. For the next log page pass `nextSequence` as `afterSequence`. Sandbox Events appear in the pinned list. Follow `report.nextOffset` with `reportOffset` to read the completed card.
+2. Call `read_inspection` using that ID. For the next log page pass `nextSequence` as `afterSequence`. Sandbox Events appear in the pinned list. Follow `report.nextOffset` with `reportOffset` to read the completed report.
 3. Compare the local remote and HEAD with the inspected Repository and commit. Use Git ancestry to distinguish ahead, behind and diverged. Report unknown if history is incomplete. Call `get_tested_patch` with the ID, selected `sha256` and optional `checkout` relationship and dirty flag.
 4. Concatenate each Patch’s text pages verbatim. Verify the SHA-256 digest, follow the library prompt and apply the prerequisite series first on a new branch. Run the typecheck and tests without editing tests. Open the authorized pull request.
 5. Call `report_patch_result` with the ID, digest, `application` (clean or adapted), `tests` (passed, failed or not_run) and optional `pullRequest`. Supply `adaptation` for an adapted Patch.
 
-Completed Report Cards live under `~/.health-code/inspections/<inspection-id>/card.json`. Restart either client and read by the same ID without credentials. Developer-reported results are separate from the library Verdict. Closing the local server interrupts active Inspections. Public links belong to hosted Inspections.
+Completed Inspection Reports live under `~/.health-code/inspections/<inspection-id>/inspection-report.json`. Restart either client and read by the same ID without credentials. Developer-reported results are separate from the library Verdict. Closing the local server interrupts active Inspections. Public links belong to hosted Inspections.
 
 ## Development
 
@@ -104,7 +105,7 @@ Use the Bun version in `.bun-version`. From the repository root, run `bun instal
 | `bun run typecheck` | Typechecks the scripts and every product workspace. |
 | `bun run test` | Runs the tooling and workspace test suites with Bun. |
 | `bun run --cwd packages/health-code build` | Builds the ESM library, declarations, and the sandbox guest tools. |
-| `bun run inspect <repo-url> [--fake]` | Prints the live inspection log and saves the versioned Report Card to `logs/`. Use `--fake` for a credential-free fixture replay. For a live inspection, use `doppler run -- bun run inspect <repo-url>`. |
+| `bun run inspect <repo-url> [--fake]` | Prints the live inspection log and saves the versioned Inspection Report to `logs/`. Use `--fake` for a credential-free fixture replay. For a live inspection, use `doppler run -- bun run inspect <repo-url>`. |
 | `bun run --cwd apps/mcp build` | Compiles the Node CLI from `apps/mcp` into `packages/health-code/dist/mcp/`. |
 | `bun test ./apps/mcp` | Exercises the four tools, account setup, private storage and the packed Node subprocess offline. |
 | `bun run --cwd apps/web build` | Builds the Vite browser entry for the Hono server. |
@@ -137,7 +138,7 @@ const report = await inspectRepository({ repositoryUrl, sandboxProvider, models 
 Run `bun run test:credential` with the sandbox token and `HEALTH_CODE_STORED_CREDENTIAL` set to the stored Anthropic key's name to verify the live gateway. Run `bun run eval --case typescript-7` to score the pinned repair against the default budgets. The CarlNotes case supports `--record` for a new measurement. Scoring requires reviewed counts and test file errors.
 
 
-The public type for a version 2 Report Card is `ReportCardV2`. The product calls it a **Report Card**. A **Direct replacement** cites release text connecting the feature to its **Source location**. An **Inferred replacement** records the evidence available. The report also identifies **Affected call sites** and the **Adoption outcome** for each match.
+The public type for a version 2 Inspection Report is `InspectionReportV2`. A **Direct replacement** cites release text connecting the feature to its **Source location**. An **Inferred replacement** records the evidence available. The report also identifies **Affected call sites** and the **Adoption outcome** for each match.
 
 A **Final patch check** produces **Patch verification**. **Download patch** provides the Git mailbox. **Applies to commit**, **Tested commit** and **Required upgrade patch** identify how to apply it. Each entry under **Added dependencies** identifies the reviewed commit. **Why repair stopped** gives the recorded diagnosis. **Installed size change** reports the difference in bytes.
 
