@@ -11,6 +11,7 @@
 		"@ai-sdk/anthropic": "4.0.105",
 		"@ai-sdk/openai-compatible": "3.0.92",
 		"@babel/parser": "8.1.2",
+		"@modelcontextprotocol/server": "2.4.0",
 		"@runta/runta-sdk": "0.2.0",
 		"@types/json-schema": "7.0.15",
 		"@types/node": "26.6.6",
@@ -35,6 +36,13 @@
 	],
 	"types": "./dist/index.d.ts",
 	"scripts": {
-		"build": "tsc -p tsconfig.build.json && bun build guest/project.ts --target=node --format=esm --outfile=dist/guest.mjs && bun build guest/observe.ts --target=node --format=esm --outfile=dist/observe.mjs && bun build guest/agent.ts --target=node --format=esm --outfile=dist/agent.mjs && bun build guest/managePatch.ts --target=node --format=esm --outfile=dist/patch.mjs"
+		"build": "tsc -p tsconfig.build.json && bun build guest/project.ts --target=node --format=esm --outfile=dist/guest.mjs && bun build guest/observe.ts --target=node --format=esm --outfile=dist/observe.mjs && bun build guest/agent.ts --target=node --format=esm --outfile=dist/agent.mjs && bun build guest/managePatch.ts --target=node --format=esm --outfile=dist/patch.mjs",
+		"prepack": "bun run build && bun run --cwd ../../apps/mcp build"
+	},
+	"bin": {
+		"health-code": "dist/mcp/cli.js"
+	},
+	"engines": {
+		"node": "^22.18.0 || >=24.11.0"
 	}
 }

@@ -1,0 +1,129 @@
+import type { Patch } from "health-code"
+import * as z from "zod"
+import { UserError } from "./modelSettings.ts"
+import { digest, type Outcome, type SavedCard, toHash } from "./storeInspection.ts"
+import { textPage } from "./trackInspections.ts"
+
+const artifact = z.object({
+	filename: z.string().min(1),
+	id: z.string().min(1),
+	base: z.string().regex(/^[a-f0-9]{40}$/),
+	testedTip: z.string().regex(/^[a-f0-9]{40}$/),
+	digest,
+	mailbox: z.string().min(1),
+	prompt: z.string().min(1),
+	role: z.enum(["upgrade", "feature"]),
+	prerequisite: z.string().optional(),
+	commits: z.array(z.object({ subject: z.string(), sha: z.string(), flag: z.enum(["dependency", "test"]).optional() })),
+}) satisfies z.ZodType<Patch>
+export const checkoutSchema = z.object({
+	relationship: z.enum(["equal", "ahead", "behind", "diverged", "unknown"]),
+	dirty: z.boolean(),
+})
+export const patchOutput = z.object({
+	sha256: digest,
+	text: z.string(),
+	nextOffset: z.number().nullable(),
+	verdict: z.string(),
+	base: z.string(),
+	inspectedCommit: z.string(),
+	testedTip: z.string(),
+	repository: z.string(),
+	checkout: z.object({ relationship: z.string(), dirty: z.boolean().optional() }),
+	prerequisiteSha256: digest.nullable(),
+	agentPrompt: z.string(),
+	action: z.string(),
+})
+
+type Fetch = { sha256: string; offset: number; checkout?: z.infer<typeof checkoutSchema> }
+const verifiedBytes = new WeakMap<object, { mailbox: string; digest: string }>()
+function verified(raw: object, patch: z.infer<typeof artifact>): boolean {
+	const previous = verifiedBytes.get(raw)
+	if (previous?.mailbox === patch.mailbox && previous.digest === patch.digest) {
+		return true
+	}
+	if (toHash(patch.mailbox) !== patch.digest) {
+		return false
+	}
+	verifiedBytes.set(raw, { mailbox: patch.mailbox, digest: patch.digest })
+	return true
+}
+function findPatch(
+	card: SavedCard,
+	hash: string,
+): { patch: z.infer<typeof artifact>; verdict: string; siblings: unknown[] } {
+	// Validate stored evidence before returning Patch bytes to the coding agent.
+	for (const upgrade of card.upgrades) {
+		if (card.version !== 2 || !Array.isArray(upgrade.patches)) {
+			continue
+		}
+		const raw = upgrade.patches.find((candidate) => candidate?.digest === hash)
+		if (raw) {
+			const parsed = artifact.safeParse(raw)
+			if (!parsed.success || !verified(raw, parsed.data)) {
+				throw new UserError("Patch is unreadable or its SHA-256 digest differs from the saved bytes.")
+			}
+			if (typeof upgrade.verdict !== "string") {
+				throw new UserError("Patch has no recorded Verdict.")
+			}
+			return { patch: parsed.data, verdict: upgrade.verdict, siblings: upgrade.patches }
+		}
+	}
+	throw new UserError("This Report Card has no tested Patch with that digest.")
+}
+
+export function fetchPatch(card: SavedCard, input: Fetch): z.infer<typeof patchOutput> {
+	const { patch, verdict, siblings } = findPatch(card, input.sha256)
+	const page = textPage(patch.mailbox, input.offset)
+	const checkout = input.checkout ?? { relationship: "unknown", dirty: undefined }
+
+	const raw =
+		patch.prerequisite &&
+		siblings.find(
+			(candidate): candidate is object =>
+				typeof candidate === "object" && candidate !== null && "id" in candidate && candidate.id === patch.prerequisite,
+		)
+	const prerequisite = raw ? artifact.safeParse(raw).data : undefined
+	if (
+		patch.prerequisite &&
+		(prerequisite?.role !== "upgrade" ||
+			patch.role !== "feature" ||
+			prerequisite.prerequisite ||
+			prerequisite.testedTip !== patch.base ||
+			!raw ||
+			!verified(raw, prerequisite))
+	) {
+		throw new UserError("Invalid Patch prerequisite order or digest.")
+	}
+	const blocked = [...patch.commits, ...(prerequisite?.commits ?? [])].some((commit) => commit.flag === "test")
+
+	return {
+		sha256: patch.digest,
+		text: page.text,
+		nextOffset: page.nextOffset,
+		verdict,
+		base: patch.base,
+		inspectedCommit: card.repository.commit,
+		testedTip: patch.testedTip,
+		repository: card.repository.url,
+		checkout,
+		prerequisiteSha256: prerequisite?.digest ?? null,
+		agentPrompt: patch.prompt,
+		action: blocked
+			? "Stop. This series includes test edits."
+			: "Compare the checkout to the inspected commit with local Git ancestry. Disclose ahead, behind, diverged or unknown history and preserve uncommitted work. Verify the SHA-256 of each complete mailbox, create a new branch, apply prerequisites in order, typecheck and test without editing tests, then open the authorized pull request.",
+	}
+}
+export function validateOutcome(card: SavedCard, outcome: Outcome): void {
+	findPatch(card, outcome.sha256)
+	if (outcome.application === "adapted" && !outcome.adaptation) {
+		throw new UserError("Describe what changed in the adapted Patch.")
+	}
+	if (outcome.pullRequest) {
+		const prefix = `${card.repository.url.toLowerCase()}/pull/`
+		const url = outcome.pullRequest.toLowerCase()
+		if (!url.startsWith(prefix) || !/^[1-9][0-9]*$/.test(url.slice(prefix.length))) {
+			throw new UserError("Use an HTTPS GitHub pull request URL for the inspected repository.")
+		}
+	}
+}

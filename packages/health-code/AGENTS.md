@@ -10,7 +10,7 @@ The public ESM package `health-code` owns Repository inspections. Its single ent
 | `prompts/` | Versioned instructions for the four model roles, included in the published package. |
 | `test/` | Offline tests, shared provider contract, and live fixture harness. |
 
-Run `bun run --cwd packages/health-code build` from the root. The package emits JavaScript and declarations into `dist/` and builds the standalone guest modules. Verify the published shape with `bun run check:package` and verify production operations with `bun run test:provider`. Each module maintains its own AGENTS.md alongside the root README.
+Run `bun run --cwd packages/health-code build` from the root. The package emits JavaScript and declarations into `dist/` and builds the standalone guest modules. Verify the published shape with `bun run check:package` and verify production operations with `bun run test:provider`. Each module maintains its own AGENTS.md alongside the root README. The npm prepack hook also builds the private MCP workspace into `dist/mcp/`. The `health-code` bin points to its Node CLI. Pack the release from the repository root with `npm pack ./packages/health-code`.
 
 The Node adapter supports npm, pnpm, Yarn, and Bun. Recognized Bun, Vitest, and Jest scripts produce per-test evidence. Other scripts report their exit status. The optional live suite requires `RUNTA_TOKEN` and verifies registry access, installation observation, timeouts, and deletion. See the root README for the public call, event delivery, partial Report Cards, and typed errors.
 

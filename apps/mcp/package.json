@@ -1,5 +1,20 @@
 {
 	"name": "@health-code/mcp",
-	"private": true,
-	"type": "module"
+	"type": "module",
+	"dependencies": {
+		"@ai-sdk/anthropic": "4.0.105",
+		"@modelcontextprotocol/server": "2.4.0",
+		"@runta/runta-sdk": "0.2.0",
+		"health-code": "workspace:*",
+		"zod": "4.6.7"
+	},
+	"description": "Inspect public repositories from a local coding agent using your Runta account.",
+	"scripts": {
+		"build": "tsc -p tsconfig.build.json"
+	},
+	"devDependencies": {
+		"@modelcontextprotocol/client": "2.4.0",
+		"smol-toml": "1.9.1"
+	},
+	"private": true
 }

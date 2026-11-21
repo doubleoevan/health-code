@@ -3,8 +3,7 @@ set -euo pipefail
 root=$(pwd)
 consumer=$(mktemp -d)
 trap 'rm -rf "$consumer"' EXIT
-bun run --cwd packages/health-code build
-npm_config_cache="$consumer/npm-cache" npm pack ./packages/health-code --ignore-scripts --silent --pack-destination "$consumer" >/dev/null
+npm_config_cache="$consumer/npm-cache" npm pack ./packages/health-code --silent --pack-destination "$consumer" >/dev/null
 cd "$consumer"
 archive=$(basename ./*.tgz)
 tar -tf "$archive" | awk '/^package\/(test|src|fixtures|guest|scripts|\.tsbuild)\// { bad=1 } END {exit bad}'

@@ -35,11 +35,41 @@ Build the library with `bun run --cwd packages/health-code build`, then run `bun
 
 The live server runs all four model roles with Claude Opus 5.5. Reports publish verified Patch bytes and application prompts when GitHub detects an OSI-approved license at the inspected commit. See [site operations](apps/web/AGENTS.md) for the Northflank Dockerfile, SQLite backups, deployment namespace and startup recovery.
 
+To apply a tested Patch from a licensed Report Card, choose **Copy patch instructions** and paste them into Claude Code or Codex from the repository checkout. The instructions include the download URL, SHA-256 digest and tested commit. A Feature Patch also identifies its required Upgrade Patch.
+
 ## MCP setup
 
-You can apply a tested Patch in Claude Code or Codex today. Open a licensed Report Card, choose **Copy patch instructions**, and paste them into your agent from the repository checkout. The instructions include the download URL, SHA-256 digest and tested commit. A Feature Patch also identifies its required Upgrade Patch.
+Health Code runs as a local Node stdio server in Claude Code or Codex. The server saves evidence on your machine. Your Runta account pays for sandbox time and your model account pays for inference. The coding agent uses its own checkout and GitHub permissions for the pull request.
 
-The local Health Code MCP server is a separate upcoming release. This section will carry the setup command when the CLI ships.
+The next `health-code` npm release includes the library and the MCP executable. It supports Node 22.18 or later on the 22.x line, or Node 24.11 and later.
+
+1. Create a Runta account and token. Set `RUNTA_TOKEN` and `ANTHROPIC_API_KEY` in your secret manager. [Runta signup](https://dashboard.runta.com)
+2. From your home directory, run `npx health-code mcp setup` in that environment, for example `doppler run -- npx health-code mcp setup`. Setup checks your token, stores or rotates the model secret in Runta, and prints both client entries.
+3. Paste the Claude Code entry inside `mcpServers` in the project’s `.mcp.json`, or the Codex entry at the top level of `~/.codex/config.toml`. Both launch `npx health-code mcp` from your home directory with `-y` and the installed version pinned. This keeps repository-local executables out of startup.
+4. Launch the client from the same secret environment, for example `doppler run -- claude` or `doppler run -- codex`. The generated entries reference variables by name. Keep the model key available to the MCP process for summaries and matching. Sandbox repair and feature adoption use a host-bound reference to the secret stored by setup.
+
+To use an unpublished checkout, build the library with `bun run --cwd packages/health-code build`, then run `bun run --cwd apps/mcp build`. Use `node packages/health-code/dist/mcp/cli.js mcp setup` in your secret environment. In the printed client entry, use `node` as the command and pass the absolute path to that file followed by `mcp` as the arguments.
+
+| Environment variable | Use |
+| --- | --- |
+| `RUNTA_TOKEN` | Account check, secret registration and live sandbox access. |
+| `ANTHROPIC_API_KEY` | Setup and host-side model requests. Run setup again after rotating the key. |
+| `HEALTH_CODE_MODEL_HOST` | HTTPS Anthropic-compatible origin. Defaults to `https://api.anthropic.com`. Run setup for the chosen origin. |
+| `HEALTH_CODE_SUMMARY_MODEL`, `HEALTH_CODE_MATCH_MODEL`, `HEALTH_CODE_REPAIR_MODEL`, `HEALTH_CODE_ADOPTION_MODEL` | Select each live model role. The default is `claude-opus-5-5`. |
+| `HEALTH_CODE_INPUT_USD_PER_MILLION`, `HEALTH_CODE_OUTPUT_USD_PER_MILLION` | Upper bounds for model cost reservations. Supply both for a custom host or model. |
+| `GITHUB_TOKEN` | Optional release-note access for public repositories. |
+
+### Example agent session
+
+Ask your agent to **inspect this repository, read the Report Card and apply the feature Patch**.
+
+1. Call `start_inspection` with `repositoryUrl` set to the public GitHub HTTPS URL. Keep the returned `inspectionId` and the stdio process open while the Inspection runs.
+2. Call `read_inspection` using that ID. For the next log page pass `nextSequence` as `afterSequence`. Sandbox Events appear in the pinned list. Follow `report.nextOffset` with `reportOffset` to read the completed card.
+3. Compare the local remote and HEAD with the inspected Repository and commit. Use Git ancestry to distinguish ahead, behind and diverged. Report unknown if history is incomplete. Call `get_tested_patch` with the ID, selected `sha256` and optional `checkout` relationship and dirty flag.
+4. Concatenate each Patch’s text pages verbatim. Verify the SHA-256 digest, follow the library prompt and apply the prerequisite series first on a new branch. Run the typecheck and tests without editing tests. Open the authorized pull request.
+5. Call `report_patch_result` with the ID, digest, `application` (clean or adapted), `tests` (passed, failed or not_run) and optional `pullRequest`. Supply `adaptation` for an adapted Patch.
+
+Completed Report Cards live under `~/.health-code/inspections/<inspection-id>/card.json`. Restart either client and read by the same ID without credentials. Developer-reported results are separate from the library Verdict. Closing the local server interrupts active Inspections. Public links belong to hosted Inspections.
 
 ## Development
 
@@ -57,6 +87,8 @@ Use the Bun version in `.bun-version`. From the repository root, run `bun instal
 | `bun run test` | Runs the tooling and workspace test suites with Bun. |
 | `bun run --cwd packages/health-code build` | Builds the ESM library, declarations, and the sandbox guest tools. |
 | `bun run inspect <repo-url> [--fake]` | Prints the live inspection log and saves the versioned Report Card to `logs/`. Use `--fake` for a credential-free fixture replay. For a live inspection, use `doppler run -- bun run inspect <repo-url>`. |
+| `bun run --cwd apps/mcp build` | Compiles the Node CLI from `apps/mcp` into `packages/health-code/dist/mcp/`. |
+| `bun test ./apps/mcp` | Exercises the four tools, account setup, private storage and the packed Node subprocess offline. |
 | `bun run --cwd apps/web build` | Builds the Vite browser entry for the Hono server. |
 | `bun run --cwd apps/web start` | Serves the built page, Inspection API and event stream. |
 | `bun run --cwd apps/web dev` or `replay` | Serves credential-free replay with React Fast Refresh, live CSS and server source reload. |

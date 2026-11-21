@@ -7,7 +7,7 @@ Run these commands from the repository root. The root package manifest names the
 | `evaluate.ts`, `evaluateUpgrade.ts` | Development runners for the cases in `../evals/`. Record one Baseline or score pinned inputs with the public library. |
 | `inspect.ts` | Developer CLI for `bun run inspect <repo-url> [--fake]`. Uses the library’s public entry, renders progress, and saves JSON to the root logs directory. Fake mode reads `fixtures/recorded/`. |
 | `preflight.sh` | Runs the offline checks in order. CI, /ship, and `bun run check` invoke this file. |
-| `check-packed-library.sh` | Builds and packs the library and checks Node, Bun, and declaration consumers. |
+| `check-packed-library.sh` | Packs the release through its prepack hook and checks Node, Bun, and declaration consumers. |
 | `check-structure.sh` | Checks tracked and untracked package manifests with Git. |
 | `check-package-boundaries.ts` | Discovers app and package workspaces. Checks literal imports, declarations, and project references. |
 | `check-dependency-pins.ts` | Compares the package manager with the Bun version file. Verifies each patched dependency exists at the specified version in the lockfile. |
