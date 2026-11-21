@@ -36,6 +36,7 @@ type Options = {
 	request: typeof fetch
 	token: string
 	runtimeId: string
+	// scope attachment or removal to a single model route
 	route: ModelRoute
 	remove?: Binding
 	signal?: AbortSignal
@@ -59,6 +60,7 @@ export async function setCredentialBinding(options: Options): Promise<Binding> {
 		}
 		return response.json()
 	}
+	// read the runtime revision and verify its network configuration
 	const runtimePath = `/v2/runtimes/${encodeURIComponent(options.runtimeId)}`
 	const read = async (): Promise<z.infer<typeof metadata>["data"]> => {
 		const { data } = metadata.parse(await request(runtimePath))
@@ -67,6 +69,7 @@ export async function setCredentialBinding(options: Options): Promise<Binding> {
 		}
 		return data
 	}
+	// compare the complete existing binding set before changing it
 	const before = await read()
 	const expected = options.remove ? [options.remove] : []
 	if (!isDeepStrictEqual(before.secret_configuration, expected)) {
@@ -74,6 +77,7 @@ export async function setCredentialBinding(options: Options): Promise<Binding> {
 	}
 	let binding = options.remove
 	if (!binding) {
+		// resolve the requested secret name to one stored secret
 		const { data } = z.object({ data: z.array(secret) }).parse(await request("/v2/secrets"))
 		const named = data.filter((entry) => entry.display_name === options.route.credential.name)
 		if (named.length !== 1 || !named[0]) {
@@ -110,6 +114,7 @@ export async function setCredentialBinding(options: Options): Promise<Binding> {
 export function credentialTarget(route: ModelRoute): URL {
 	const base = new URL(route.baseUrl)
 	const { header, valueTemplate, name } = route.credential
+	// require an https endpoint without embedded credentials
 	if (
 		base.protocol !== "https:" ||
 		base.username ||
@@ -117,11 +122,13 @@ export function credentialTarget(route: ModelRoute): URL {
 		base.search ||
 		base.hash ||
 		base.port ||
+		// constrain the hostname and path used for gateway matching
 		!/^[a-z0-9.-]+$/.test(base.hostname) ||
 		!base.hostname.includes(".") ||
 		/[%*]/.test(base.pathname) ||
 		!/^[a-z][a-z0-9-]*$/i.test(header) ||
 		/^(?:host|connection|content-.*|proxy-.*|cookie|forwarded|transfer-encoding)$/i.test(header) ||
+		// limit credential substitution to the configured header template
 		!/^(?:Bearer )?\$\{credential\}$/.test(valueTemplate) ||
 		!name ||
 		!route.modelId ||
@@ -129,6 +136,7 @@ export function credentialTarget(route: ModelRoute): URL {
 	) {
 		throw new InspectionError("invalid-model-route", "Invalid scoped credential route")
 	}
+	// append the protocol's exact inference path
 	base.pathname =
 		base.pathname.replace(/\/$/, "") + (route.protocol === "anthropic" ? "/messages" : "/chat/completions")
 	return base

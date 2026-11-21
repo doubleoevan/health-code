@@ -17,6 +17,7 @@ export function translate(error: unknown): Error {
 	}
 	return failure
 }
+// translate rejected sdk requests into inspection errors
 export async function providerRequest<T>(request: Promise<T>): Promise<T> {
 	try {
 		return await request
@@ -24,11 +25,13 @@ export async function providerRequest<T>(request: Promise<T>): Promise<T> {
 		throw translate(error)
 	}
 }
+// share one deadline across successive runtime operations
 export function remainingOperation(options: Operation): () => Operation {
 	const end = Date.now() + options.timeoutMs
 	return () => {
 		checkOperation(options.signal)
 		const timeoutMs = end - Date.now()
+		// reject expired operations before contacting the provider
 		if (timeoutMs <= 0) {
 			throw new InspectionError("deadline", "Inspection interrupted")
 		}
@@ -82,6 +85,7 @@ export async function checked(
 	if (result.stdoutTruncated && requireFullOutput) {
 		throw new InspectionError("output-limit", "Project file exceeds the read limit")
 	}
+	// surface bounded diagnostics for unsuccessful guest commands
 	if (result.exitCode !== 0) {
 		throw new InspectionError("sandbox-command", `Sandbox operation failed: ${redact(result.stderr).slice(-600)}`)
 	}
@@ -92,6 +96,7 @@ export function availabilityReason(status?: number): SandboxUnavailableError["re
 	if (status === 401) {
 		return "authentication"
 	}
+	// distinguish insufficient permission from invalid authentication
 	if (status === 403) {
 		return "permission"
 	}

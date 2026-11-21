@@ -20,11 +20,13 @@ const reviewed = z.array(
 
 /** Lists open high and critical advisories and exceptions that no longer match the audit. */
 export function toAdvisoryViolations(output: string, allowlistText: string): string[] {
+	// index reviewed exceptions by package and advisory
 	const advisories = audit.parse(JSON.parse(output))
 	const entries = reviewed.parse(JSON.parse(allowlistText))
 	const allowed = new Set(entries.map((entry) => toAdvisoryKey(entry.packageName, entry.advisoryId)))
 	const listed = new Set<string>()
 	const violations: string[] = []
+	// compare each registry finding with its reviewed exception
 	for (const [name, findings] of Object.entries(advisories)) {
 		for (const finding of findings) {
 			// Prefer the stable GHSA identifier over the registry's numeric id.
@@ -36,6 +38,7 @@ export function toAdvisoryViolations(output: string, allowlistText: string): str
 			}
 		}
 	}
+	// report exceptions whose advisories have cleared
 	return [
 		...violations,
 		...[...allowed].filter((key) => !listed.has(key)).map((key) => `remove stale exception: ${key}`),
@@ -53,6 +56,7 @@ if (import.meta.main) {
 	if (result.exitCode !== 0 && (result.exitCode !== 1 || !output || output === "{}")) {
 		throw new Error("bun audit could not complete the registry check")
 	}
+	// print every unreviewed finding and stale exception
 	const violations = toAdvisoryViolations(output, readFileSync("dependency-advisories.json", "utf8"))
 	if (violations.length > 0) {
 		console.error(violations.join("\n"))

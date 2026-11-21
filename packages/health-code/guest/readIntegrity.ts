@@ -11,6 +11,7 @@ export function readIntegrity(offset: number): {
 	testFileErrors: string[]
 	cases: [string, string, string][]
 } {
+	// require a nonnegative inventory page offset
 	if (!Number.isSafeInteger(offset) || offset < 0) {
 		throw new Error("Invalid inventory page")
 	}
@@ -18,6 +19,7 @@ export function readIntegrity(offset: number): {
 		readFileSync(join(inventoryFile, offset + ".json"), "utf8"),
 	)
 	const { cases } = page
+	// leave project-wide evidence on the first page
 	if (offset) {
 		return { cases, files: [], hooks: [], testFileErrors: [] }
 	}
@@ -32,17 +34,20 @@ export function readIntegrity(offset: number): {
 }
 
 export function readLifecycleHooks(): string[] {
+	// reject installs whose lifecycle inventory cannot be enumerated
 	if ([".pnp.cjs", ".pnp.js", ".pnp.loader.mjs"].some((file) => existsSync(file))) {
 		throw new Error("Lifecycle inventory unavailable for Yarn Plug'n'Play")
 	}
 	const hooks = new Set<string>()
 	const visited = new Set<string>()
 	const copies = new Map<string, number>()
+	// inspect each installed package manifest for lifecycle hooks
 	function inspect(path: string): void {
 		if (!existsSync(join(path, "package.json"))) {
 			return
 		}
 		const manifest = JSON.parse(readText(join(path, "package.json")))
+		// hash hook bodies together with their package and location
 		for (const name of ["preinstall", "install", "postinstall", "prepare", "prepublish", "prepack", "postpack"]) {
 			if (typeof manifest.scripts?.[name] === "string") {
 				const location = path.replace(/(\/(?:\.pnpm|\.bun)\/[^/]+?)@\d[^/]*(?=\/)/g, "$1")
@@ -52,6 +57,7 @@ export function readLifecycleHooks(): string[] {
 					createHash("sha256").update(manifest.scripts[name]).digest("hex"),
 					location,
 				]
+				// distinguish repeated installed copies of the same hook
 				const key = JSON.stringify(identity)
 				const index = copies.get(key) ?? 0
 				copies.set(key, index + 1)
@@ -59,6 +65,7 @@ export function readLifecycleHooks(): string[] {
 			}
 		}
 	}
+	// traverse each on-disk package directory inside the repository once
 	function visit(directory: string): void {
 		if (!existsSync(directory)) {
 			return
@@ -67,6 +74,7 @@ export function readLifecycleHooks(): string[] {
 		if (!actual.startsWith(`${realpathSync(".")}/`) || visited.has(actual)) {
 			return
 		}
+		// record the directory before descending into nested installations
 		visited.add(actual)
 		for (const entry of readdirSync(directory, { withFileTypes: true })) {
 			const path = join(directory, entry.name)
@@ -74,6 +82,7 @@ export function readLifecycleHooks(): string[] {
 				visit(path)
 				continue
 			}
+			// skip entries that cannot lead to a package manifest
 			if (!entry.isDirectory() && !entry.isSymbolicLink()) {
 				continue
 			}
@@ -81,6 +90,7 @@ export function readLifecycleHooks(): string[] {
 			visit(join(path, "node_modules"))
 		}
 	}
+	// include the root package and every declared workspace
 	for (const dir of [".", ...workspaceDirectories()]) {
 		inspect(dir)
 		visit(join(dir, "node_modules"))

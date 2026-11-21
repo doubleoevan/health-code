@@ -11,6 +11,7 @@ export function confirmNetworkPolicy(
 	policy: { mode: string; allowedHosts: readonly string[]; deniedHosts: readonly string[] },
 ): void {
 	if (
+		// require the observed allowlist and policy mode to match the request
 		policy.mode !== "allowlist" ||
 		policy.deniedHosts.length ||
 		JSON.stringify([...hosts].sort()) !== JSON.stringify([...policy.allowedHosts].sort())

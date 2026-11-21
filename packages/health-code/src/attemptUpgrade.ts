@@ -25,6 +25,7 @@ export async function attemptUpgrade(
 	state: State,
 	match?: FeatureMatch,
 ): Promise<void> {
+	// choose the role and its budget from the upgrade evidence
 	const { report } = evidence
 	const manifest = JSON.parse(await workspace(evidence, { kind: "read", file: "package.json", revision: state.tip }))
 	const declaredDependencies = Object.assign({}, ...sections.map((section) => manifest[section] ?? {}))
@@ -35,6 +36,7 @@ export async function attemptUpgrade(
 		...evidence.usage.usage.map((entry) => entry.file),
 		...report.locators.filter((entry) => entry.url && !entry.reason).map((entry) => entry.file),
 	])
+	// load the allowed source set and snapshot the starting candidate
 	const testFiles = discoveredTests(evidence.baselineIntegrity)
 	await loadAllowedFiles({ evidence, state, files })
 	const initial = structuredClone(state)
@@ -43,12 +45,14 @@ export async function attemptUpgrade(
 	const publishedVersions = new Map<string, string[]>()
 	let started = false
 	let turn = 0
+	// collect failed check details for the first prompt
 	const diagnostics = [report.install, report.typecheck, report.tests]
 		.flatMap((check) => check.evidence.map((item) => (item.stdout + item.stderr).slice(-4000)))
 		.join("\n")
 	let lastEvidence = ""
 	while (budget.turns > 0 && Date.now() < budget.end) {
 		turn++
+		// include prior attempts and pinned source evidence in the request
 		const prompt = await buildPrompt(role, {
 			requestedTests: state.requestedTests,
 			diagnostics,
@@ -65,11 +69,13 @@ export async function attemptUpgrade(
 			match,
 			files: Object.fromEntries([...state.files].filter(([file]) => !testFiles.has(file))),
 		})
+		// request the next bounded model turn
 		const answer = await requestAgentTurn({ engine, evidence, role, prompt, started, budget })
 		started = true
 		let proposedEdit = false
 		try {
 			const edit = readDecision(parseAnswer(answer))
+			// handle read-only evidence requests before applying edits
 			const lookup = await readRequestedEvidence({ edit, evidence, state, testFiles, publishedVersions, initial })
 			if (lookup !== undefined) {
 				lastEvidence = lookup
@@ -77,15 +83,18 @@ export async function attemptUpgrade(
 			}
 			delete state.requestedTests
 			proposedEdit = true
+			// apply the proposed change before checking the committed tree
 			await applyDecision({ evidence, state, match, edit, testFiles })
 
 			await workspace(evidence, { kind: "restore", tip: state.tip })
 			await verifyTree(evidence, state)
+			// measure an adoption against the original source
 			if (match) {
 				recordBenefit({ match, evidence, state, initialSource, testFiles })
 			}
 			return
 		} catch (error) {
+			// preserve terminal inspection errors across rejected turns
 			rethrowInspectionFailure(error, evidence.context)
 			lastEvidence = await reportRejectedTurn({ evidence, state, role, turn, error, proposedEdit })
 		}
@@ -111,6 +120,7 @@ async function reportRejectedTurn({
 	error: unknown
 	proposedEdit: boolean
 }): Promise<string> {
+	// bound the diagnostic returned to the next model turn
 	const lastEvidence = (error instanceof Error ? error.message : "Invalid edit").slice(0, 4000)
 	state.actions.push(lastEvidence)
 	const step = evidence.context.timeline.findLast(
@@ -142,9 +152,11 @@ async function readRequestedEvidence({
 	evidence: PatchEvidence
 	state: State
 	initial: State
+	// retain discovered tests and registry lookups for this attempt
 	testFiles: Set<string>
 	publishedVersions: Map<string, string[]>
 }): Promise<string | undefined> {
+	// restore the original candidate when the model requests a restart
 	if (edit.restart) {
 		await workspace(evidence, { kind: "restore", tip: initial.tip })
 		delete state.requestedTests
@@ -153,6 +165,7 @@ async function readRequestedEvidence({
 		state.actions.push(edit.reason)
 		return "Restored the starting candidate. The attempt’s time, cost and turn limits still apply."
 	}
+	// restrict requested test reads to the baseline inventory
 	if (edit.readTests) {
 		if (!edit.readTests.every((file) => testFiles.has(file))) {
 			throw new Error("Read requires a discovered Baseline test path")
@@ -160,6 +173,7 @@ async function readRequestedEvidence({
 		await loadAllowedFiles({ evidence, state, files: new Set(edit.readTests) })
 		state.requestedTests = Object.fromEntries(
 			edit.readTests.map((file) => {
+				// record availability for each requested test source
 				const source = state.files.get(file)
 				if (source === undefined) {
 					return [file, "Test source unavailable"]
@@ -175,16 +189,19 @@ async function readRequestedEvidence({
 		)
 		return "The requestedTests field gives the requested source or its availability limit."
 	}
+	// reuse version lookups made earlier in the attempt
 	if (edit.lookup) {
 		state.actions.push(edit.reason)
 		const names = edit.lookup.filter((name) => !publishedVersions.has(name))
 		const versions = await evidence.adapter.registry(names)
+		// cache only names present in the registry response
 		for (const name of names) {
 			const list = versions[name]
 			if (list) {
 				publishedVersions.set(name, list.slice(-24))
 			}
 		}
+		// give the next turn access to the verified registry versions
 		return "Published versions are listed under publishedVersions. Choose an exact version before proposing dependency and source changes."
 	}
 }
@@ -198,11 +215,13 @@ async function loadAllowedFiles({
 	state: State
 	files: Set<string>
 }): Promise<void> {
+	// restrict model-visible files to the baseline inventory
 	for (const file of files) {
 		if (!evidence.baselineIntegrity?.files.includes(file)) {
 			continue
 		}
 		const text = await workspace(evidence, { kind: "read", file, revision: state.tip }).catch(() => undefined)
+		// retain source only when redaction leaves the bytes intact
 		if (text !== undefined && redact(text) === text) {
 			state.files.set(file, text)
 		}
@@ -210,18 +229,21 @@ async function loadAllowedFiles({
 }
 async function collectDiagnostics(evidence: PatchEvidence, state: State): Promise<string> {
 	const { adapter } = evidence
+	// restore the committed candidate before collecting diagnostics
 	await workspace(evidence, { kind: "restore", tip: state.tip })
 	for (const file of state.files.keys()) {
 		state.files.set(file, await workspace(evidence, { kind: "read", file }))
 	}
 	requireBaseline(evidence)
 	const checks = await adapter.install()
+	// require comparable install observations for diagnostic checks
 	if (!adapter.lastObservation || !cleanInstall(adapter.lastObservation, evidence.baseInstall)) {
 		throw new Error("Diagnostic installation observation failed")
 	}
 	if (checks.status === "passed") {
 		const check = await adapter.typecheck()
 		const tests = await adapter.test()
+		// return bounded typecheck and test details
 		return (
 			"\n" +
 			[check, tests]
@@ -229,8 +251,10 @@ async function collectDiagnostics(evidence: PatchEvidence, state: State): Promis
 				.join("\n")
 		)
 	}
+	// omit check diagnostics when installation fails
 	return ""
 }
+// record the adoption benefit against its original evidence
 function recordBenefit({
 	match,
 	evidence,
@@ -244,6 +268,7 @@ function recordBenefit({
 	initialSource: Map<string, string>
 	testFiles: Set<string>
 }): void {
+	// locate the affected symbol before measuring the replacement
 	const symbol =
 		match.kind === "deprecated"
 			? evidence.usage.usage.find((entry) => entry.file === match.location.file && entry.line === match.location.line)

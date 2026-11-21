@@ -23,6 +23,7 @@ export function untested(reason: string, evidence: Evidence[] = []): CheckResult
 function toTestFailureKey(test: TestFailure): string {
 	return JSON.stringify([test.workspace, test.file, test.name ?? null])
 }
+// compare stable diagnostic text for failures without case identities
 function toFailureSignature(result: CheckResult): string {
 	const evidence = result.evidence[0]
 	const output = (evidence?.stderr || evidence?.stdout || "").trim()
@@ -30,6 +31,7 @@ function toFailureSignature(result: CheckResult): string {
 		.split("\n")
 		.filter((line) => /error|failed/i.test(line))
 		.join("\n")
+	// strip elapsed times before comparing diagnostics
 	return `${String(evidence?.exitCode)}:${(diagnostics || output).replace(/\d+ms|\d+\.\d+s/g, "")}`
 }
 export async function confirm(
@@ -37,12 +39,14 @@ export async function confirm(
 	baseline: CheckResult,
 	retry: () => Promise<CheckResult>,
 ): Promise<CheckResult> {
+	// propagate missing baseline evidence before comparing outcomes
 	if (baseline.status === "untested") {
 		return untested(baseline.reason, first.evidence)
 	}
 	if (first.status !== "failed") {
 		return first
 	}
+	// exclude known baseline failures by workspace and identity
 	const known = new Set(baseline.status === "failed" ? baseline.failingTests.map(toTestFailureKey) : [])
 	const added = first.failingTests.filter((test) => !known.has(toTestFailureKey(test)))
 	if (baseline.status === "failed" && (!first.failingTests.length || !known.size)) {
@@ -51,6 +55,7 @@ export async function confirm(
 	if (first.failingTests.length && !added.length) {
 		return { status: "passed", evidence: first.evidence, excluded: first.failingTests }
 	}
+	// retry new failures before attributing them to the upgrade
 	let second: CheckResult
 	try {
 		second = await retry()
@@ -58,6 +63,7 @@ export async function confirm(
 		if (!isDeadline(error)) {
 			throw error
 		}
+		// retain unconfirmed failures when the retry reaches its deadline
 		return {
 			...untested("inspection-deadline", first.evidence),
 			attempts: [toAttempt(first)],
@@ -79,10 +85,12 @@ function compareAttempts({
 	known: Set<string>
 	added: TestFailure[]
 }): CheckResult {
+	// combine evidence and distinguish excluded baseline failures
 	const evidence = [...first.evidence, ...second.evidence]
 	const attempts = [first, second].map(toAttempt)
 	const excluded = first.failingTests.filter((test) => known.has(toTestFailureKey(test)))
 	const observed = { attempts, excluded }
+	// retain the first attempt's failures when they cannot be reproduced
 	if (second.status !== "failed") {
 		return {
 			...untested(second.status === "untested" ? second.reason : "unconfirmed-failure", evidence),

@@ -1,6 +1,7 @@
 import type { AgentCapability, InspectionEventV2, PatchOperation } from "./agentContracts.ts"
 export type Stage = "setup" | "detect" | "install" | "typecheck" | "tests"
 export type Evidence = {
+	// retain bounded output alongside exit status and timing
 	stdout: string
 	stderr: string
 	exitCode: number
@@ -8,6 +9,7 @@ export type Evidence = {
 	stdoutTruncated: boolean
 	stderrTruncated: boolean
 }
+// distinguish observed network attempts from filesystem writes
 export type InstallationFinding =
 	| {
 			kind: "connection"
@@ -16,6 +18,7 @@ export type InstallationFinding =
 			outcome: "attempted" | "blocked" | "unknown"
 	  }
 	| { kind: "write"; path: string }
+// report coverage and destinations alongside installation findings
 export type Observation = {
 	complete: boolean
 	findings: InstallationFinding[]
@@ -24,6 +27,7 @@ export type Observation = {
 }
 export type TestCounts = Record<"passed" | "failed" | "skipped" | "todo", number>
 export type TestCase = { file: string; name: string; status: keyof TestCounts }
+// group discovered tests and file loading errors
 export type TestInventory = {
 	discoveredFiles?: string[]
 	counts: TestCounts
@@ -31,6 +35,7 @@ export type TestInventory = {
 	testFileErrors: { file: string; reason: string }[]
 }
 export type TestFailure = { file: string; name?: string; workspace: string }
+// represent check outcomes with their evidence
 export type CheckResult = (
 	| { status: "passed"; evidence: Evidence[] }
 	| { status: "failed"; evidence: Evidence[]; failingTests: TestFailure[] }
@@ -38,23 +43,27 @@ export type CheckResult = (
 ) & {
 	inventory?: Omit<TestInventory, "cases">
 	inventoryUnavailable?: string
+	// distinguish baseline exclusions from unconfirmed failures
 	excluded?: TestFailure[]
 	unconfirmedTests?: TestFailure[]
 	attempts?: { status: "passed" | "failed" | "untested"; failingTests: TestFailure[] }[]
 }
 export type Upgrade = { dependency: string; from: Record<string, string>; to: string; kind: "minor" | "major" }
 export type PackageManager = "npm" | "bun" | "pnpm" | "yarn"
+// describe the detected manager and workspace dependencies
 export type Project = {
 	manager: PackageManager
 	version: string
 	sources: Record<string, Record<string, string>>
 	skipped: string[]
+	// record available checks and required environment names
 	typecheck: "build" | "check" | "none"
 	testScript?: string
 	environment: string[]
 }
 export type Sandbox = { id: string }
 type SandboxAction = "created" | "credentials-withheld" | "network-locked" | "connection-blocked" | "deleted"
+// distinguish inspection lifecycle, sandbox and check events
 export type EventPayload =
 	| { type: "inspection.started"; repositoryUrl: string }
 	| { type: "step.started"; stepId: string; label: string }
@@ -62,6 +71,7 @@ export type EventPayload =
 			type: "step.finished"
 			stepId: string
 			summary: string
+			// capture the duration and status of a completed step
 			durationMs: number
 			status: "passed" | "failed" | "untested"
 	  }
@@ -69,6 +79,7 @@ export type EventPayload =
 	| { type: "sandbox.event"; sandboxId: string; action: SandboxAction; detail?: string }
 	| { type: "inspection.finished"; inspected: number; durationMs: number }
 	| { type: "inspection.failed"; code: string; message: string; cleanupId?: string }
+// assign each event a stable inspection id and sequence
 export type InspectionEvent = EventPayload & {
 	version: 1
 	inspectionId: string
@@ -76,6 +87,7 @@ export type InspectionEvent = EventPayload & {
 	timestamp: string
 	upgradeId?: string
 }
+// specify the command, its deadline and observation mode
 export type Command = {
 	argv: string[]
 	timeoutMs: number
@@ -83,6 +95,7 @@ export type Command = {
 	environment?: string[]
 	signal?: AbortSignal
 }
+// attach capture metadata to a command's evidence
 export type CommandResult = Evidence & { observationId?: string; timedOut?: boolean }
 export type Operation = { timeoutMs: number; signal?: AbortSignal }
 export interface SandboxProvider {
@@ -90,6 +103,7 @@ export interface SandboxProvider {
 	patchWorkspace?(sandbox: Sandbox, request: PatchOperation, operation: Operation): Promise<string | null>
 	checkAvailability(options?: Operation): Promise<void>
 	estimateMaxCost(durationMs: number): number
+	// bind repository and policy operations to an allocated sandbox
 	createSandbox(name: string, options: Operation): Promise<Sandbox>
 	prepareRepository(sandbox: Sandbox, repositoryUrl: string, options: Operation): Promise<string>
 	setNetworkPolicy(sandbox: Sandbox, hosts: readonly string[], options: Operation): Promise<void>
@@ -97,10 +111,12 @@ export interface SandboxProvider {
 	executeCommand(sandbox: Sandbox, command: Command): Promise<CommandResult>
 	readFile(sandbox: Sandbox, path: string, options: Operation): Promise<string>
 	writeFile(sandbox: Sandbox, path: string, contents: string, options: Operation): Promise<void>
+	// read captured evidence and release the sandbox
 	readAttemptedConnections(sandbox: Sandbox, evidenceId: string): Promise<Observation>
 	readFileChanges(sandbox: Sandbox, evidenceId: string): Promise<Observation>
 	destroySandbox(sandbox: Sandbox, options: Operation): Promise<void>
 }
+// bound inspections by upgrade count, time and cost
 export type InspectionLimits = {
 	maxUpgrades?: number
 	maxDurationMs?: number
@@ -108,17 +124,20 @@ export type InspectionLimits = {
 	timeouts?: Partial<Record<Stage, number>>
 }
 export type InspectionOptions = {
+	// select a public repository and its execution provider
 	repositoryUrl: string
 	sandboxProvider: SandboxProvider
 	limits?: InspectionLimits
 	onEvent?: (event: InspectionEvent) => void | Promise<void>
 	includeTestInventory?: boolean
 	applicationEnvironment?: "empty" | "placeholders"
+	// optionally pin an upgrade and supply role configuration
 	upgrade?: { dependency: string; from: string; to: string }
 	models?: Readonly<Record<string, string>>
 	signal?: AbortSignal
 }
 export type Baseline = { install: CheckResult; typecheck: CheckResult; tests: CheckResult }
+// associate upgrade checks with their installation observations
 export type UpgradeReport = Upgrade & {
 	install: CheckResult
 	observation: Observation
@@ -132,23 +151,27 @@ export interface EcosystemAdapter {
 	resetProject(): Promise<void>
 	detectProject(): Promise<Project>
 	listUpgrades(project: Project, limit: number): Promise<ReportCard["selection"]>
+	// run the package manager's install and verification checks
 	install(): Promise<CheckResult>
 	bumpDependency(upgrade: Upgrade): Promise<{ check: CheckResult; observation: Observation }>
 	typecheck(): Promise<CheckResult>
 	test(): Promise<CheckResult>
 }
+// identify the pinned repository and its baseline
 export type ReportCard = {
 	version: 1
 	inspectionId: string
 	repository: { url: string; commit: string }
 	packageManager: { name: PackageManager; version: string } | { reason: string }
 	baseline: Baseline
+	// retain selected upgrades and their ordered timeline
 	selection: { limit?: number; eligible: Upgrade[]; selected: Upgrade[]; omitted: Upgrade[]; skipped: string[] }
 	upgrades: UpgradeReport[]
 	timeline: InspectionEvent[]
 }
 export class InspectionError extends Error {
 	timeline: InspectionEvent[] | InspectionEventV2[] = []
+	// preserve cleanup state on typed inspection failures
 	cleanupId?: string
 	constructor(
 		readonly code: string,
@@ -158,6 +181,7 @@ export class InspectionError extends Error {
 		this.name = "InspectionError"
 	}
 }
+// distinguish provider availability errors by reason
 export class SandboxUnavailableError extends InspectionError {
 	constructor(readonly reason: "authentication" | "permission" | "unavailable") {
 		super("sandbox-unavailable", `Sandbox provider ${reason}`)

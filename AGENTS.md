@@ -38,7 +38,7 @@ Keep secret files such as `.env` and `.env.*` out of agent context. Skip install
 
 ## Verification
 
-Run `bash scripts/preflight.sh` from the repository root before handoff. It stops at the first failure. It checks Biome, manifest placement, package boundaries, dependency pins, Knip, the TypeScript projects, and tests.
+Run `bash scripts/preflight.sh` from the repository root before handoff. It stops at the first failure. It checks comment groups, Biome, manifest placement, package boundaries, dependency pins, Knip, the TypeScript projects, and tests.
 
 The independent CI advisories job runs `bun run check:advisories` against the registry. Record a reviewed exception in `dependency-advisories.json` with its advisory ID, package, reason, and review date. Remove it once the advisory clears.
 
@@ -46,7 +46,7 @@ The independent CI advisories job runs `bun run check:advisories` against the re
 
 - **Local development.** Start site development and preview sessions with hot reload enabled by default. Use the site’s development command and verify an edit appears in the open browser.
 
-- **Comments.** Use imperative voice for inline comments and third person for JSDoc. Keep a short why for a non-obvious choice. Delete restatements, decision history, NOT-X notes, trailing “since” or “because” justifications, definitions by negation, and notes about other modules. Rewrite a comment when its claim changes.
+- **Comments.** Preflight checks tracked TypeScript, JavaScript and shell files for runs over eight uncommented statement lines. Claude Code runs the checker after edits and writes. Review TSX section comments with jsx-conventions during /ship. Use imperative voice for inline comments and third person for JSDoc. Keep a short why for a non-obvious choice. Delete restatements, decision history, NOT-X notes, trailing “since” or “because” justifications, definitions by negation, and notes about other modules. Rewrite a comment when its claim changes.
 - **Code style.** Follow code-style. Use verb-plus-noun names for modules that perform an action and a `to` prefix for cheap synchronous transforms. Write explicit return types. Use an options object for three or more parameters. Use only abbreviations on the skill's whitelist. Write multi-line `if` blocks with braces. Give a second copy one shared home. Review any file past about 400 lines and split distinct responsibilities.
 - **Vocabulary.** Follow domain-model in code, comments, and specs. Add a new domain noun to the skill in the same change. Use descriptive identifiers and keep branding in customer copy. Highlight and pin Sandbox Events in the live log and timeline.
 - **Documentation.** Give every module its own `AGENTS.md` when you create it. Keep it current alongside the README in the same change. Document ownership, folders, public entry points, commands, and verification. Update the root map and routing entries when ownership changes.

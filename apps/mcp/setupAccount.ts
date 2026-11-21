@@ -39,6 +39,7 @@ export async function setupAccount(
 	} catch {
 		throw new UserError("Runta account check failed. Check RUNTA_TOKEN and account access.")
 	}
+	// register the model key under the selected origin's secret name
 	const name = secretName(origin)
 	try {
 		await client.store({ token, key, name })
@@ -54,6 +55,7 @@ export async function setupAccount(
 	const args = windows
 		? ["/d", "/c", `cd /d "%USERPROFILE%" && npx -y health-code@${version} mcp`]
 		: ["-c", 'cd "$HOME" && exec npx "$@"', "npx", "-y", `health-code@${version}`, "mcp"]
+	// render shared launcher settings in each client's configuration format
 	const env = Object.fromEntries(names.map((name) => [name, toEnvironmentReference(name)]))
 	return [
 		"Runta account checked and model secret stored.",

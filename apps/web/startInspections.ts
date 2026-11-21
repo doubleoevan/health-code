@@ -10,12 +10,15 @@ export async function startInspections(): Promise<{
 	origin: string
 	inspections: Inspections
 }> {
+	// resolve the public origin and development replay setting
 	const replay = isReplayEnabled(process.env)
 	const port = Number(process.env.PORT ?? 3000)
 	const origin = new URL(process.env.HEALTH_CODE_ORIGIN ?? `http://localhost:${port}`).origin
+	// choose a separate default database for recorded inspections
 	const storage =
 		process.env.HEALTH_CODE_DATABASE ??
 		(replay ? resolve(import.meta.dir, "../../logs/site-replay.sqlite") : "/data/inspections.sqlite")
+	// open the selected source and storage before starting the workers
 	const source = replay ? (await import("./replayInspection.ts")).createReplaySource() : createLiveSource(process.env)
 	mkdirSync(dirname(storage), { recursive: true })
 	const inspections = new Inspections(

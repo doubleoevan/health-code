@@ -17,6 +17,7 @@ function toHints(
 type ToolContext = Parameters<Parameters<McpServer["registerTool"]>[2]>[1]
 
 function progressReporter({ mcpReq }: ToolContext): (step: string) => Promise<void> {
+	// keep the progress counter local to the requesting client
 	const progressToken = mcpReq._meta?.progressToken
 	let progress = 0
 	return async (message) => {
@@ -35,6 +36,7 @@ export function createServer(inspections: Inspections, version: string): McpServ
 		action: () => Promise<{ summary: string; details: Record<string, unknown>; lines?: string[] }>,
 	): Promise<CallToolResult> {
 		try {
+			// screen structured evidence before rendering terminal output
 			const { summary, details, lines } = await action()
 			const body = JSON.stringify(details, null, 2)
 			inspections.store.guard(body)
@@ -48,10 +50,12 @@ export function createServer(inspections: Inspections, version: string): McpServ
 					.map((unit) => `\\u${unit.charCodeAt(0).toString(16).padStart(4, "0")}`)
 					.join(""),
 			)
+			// check the summary and rendered details together before delivery
 			const text = [...readable, printable].join("\n")
 			inspections.store.guard(text)
 			return { content: [{ type: "text", text }], structuredContent: details }
 		} catch (error) {
+			// expose only errors intended for the tool caller
 			const message =
 				error instanceof UserError
 					? error.message
@@ -76,6 +80,7 @@ export function createServer(inspections: Inspections, version: string): McpServ
 		},
 		async ({ repositoryUrl }, ctx) =>
 			respond(async () => {
+				// report the accepted id before the inspection finishes
 				const id = await inspections.start(repositoryUrl)
 				await progressReporter(ctx)(inspections.currentStep(id))
 				return {
@@ -100,6 +105,7 @@ export function createServer(inspections: Inspections, version: string): McpServ
 		},
 		async (input, ctx) =>
 			respond(async () => {
+				// attach the current request's cancellation and progress handlers
 				const details = await inspections.read(input, { signal: ctx.mcpReq.signal, progress: progressReporter(ctx) })
 				return {
 					summary: `${details.status} · ${details.failure ?? details.currentStep}`,
@@ -120,6 +126,7 @@ export function createServer(inspections: Inspections, version: string): McpServ
 		},
 		async (input) =>
 			respond(async () => {
+				// verify the requested digest against the saved card
 				const card = await inspections.store.load(input.inspectionId)
 				const details = fetchPatch(card, input)
 				return {

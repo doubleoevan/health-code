@@ -21,6 +21,7 @@ function staysInProject(path: string, links: FileLinks): boolean {
 		if (!part || part === ".") {
 			continue
 		}
+		// reject traversal outside the project before expanding links
 		directory = posix.join(directory, part)
 		if (!isProjectPath(directory)) {
 			return false
@@ -35,6 +36,7 @@ function staysInProject(path: string, links: FileLinks): boolean {
 		if (!target || followed > 40) {
 			return false
 		}
+		// resolve the target relative to its link's parent
 		directory = target.startsWith("/") ? "/" : posix.dirname(directory)
 		remaining.push(...target.split("/").reverse())
 	}
@@ -43,12 +45,14 @@ function staysInProject(path: string, links: FileLinks): boolean {
 
 function hasLinkedParent(path: string, links: FileLinks): boolean {
 	let parent = posix.dirname(path)
+	// inspect each ancestor for a recorded link
 	while (parent !== "/") {
 		if (links.has(parent)) {
 			return true
 		}
 		parent = posix.dirname(parent)
 	}
+	// finish once traversal reaches the filesystem root
 	return false
 }
 
@@ -71,6 +75,7 @@ function recordLinkChange(change: LinkChange): void {
 		links.set(first, links.has(first) ? undefined : target)
 		return
 	}
+	// invalidate targets affected by unlink or rename
 	if (call.startsWith("unlink") && links.has(first)) {
 		links.set(first, undefined)
 	}
@@ -87,12 +92,14 @@ function invalidateMovedLinks({ call, line, paths: [first, second], links }: Lin
 	const rename = call.startsWith("rename")
 	const exchange = line.includes("RENAME_EXCHANGE")
 	for (const link of [...links.keys()]) {
+		// invalidate the targets of links moved beneath the source
 		if (containsPath(first, link)) {
 			links.set(second + link.slice(first.length), undefined)
 			if (rename) {
 				links.set(link, undefined)
 			}
 		}
+		// invalidate links beneath the destination of a rename
 		if (rename && containsPath(second, link)) {
 			links.set(link, undefined)
 			if (exchange) {
@@ -108,6 +115,7 @@ export function trackFileLinks(options: LinkChange): boolean {
 	const paths = options.paths.map((path) => posix.normalize(path))
 	const followsLink = /^(?:chmod|chown|truncate|utime|fchmodat|fchownat)/.test(call)
 	const complete = paths.every((path) => {
+		// trust direct paths or verify their recorded link targets
 		if (!hasLinkedParent(path, links) && !(followsLink && links.has(path))) {
 			return true
 		}

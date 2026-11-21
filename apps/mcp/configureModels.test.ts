@@ -4,6 +4,7 @@ import { configureModels } from "./configureModels.ts"
 import { setupAccount } from "./setupAccount.ts"
 
 test("only the host model handles send the environment key", async () => {
+	// intercept model calls and inspect the credentials at the request boundary
 	const environment = { RUNTA_TOKEN: "synthetic-sandbox-token", ANTHROPIC_API_KEY: "synthetic-model-key" }
 	const hits: string[] = []
 	const models = configureModels(environment, async (url, init) => {
@@ -21,10 +22,12 @@ test("only the host model handles send the environment key", async () => {
 			usage: { input_tokens: 1, output_tokens: 1 },
 		})
 	})
+	// exercise both roles that run in the client process
 	for (const role of [models.releaseSummary, models.featureMatch]) {
 		await role.model.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "fixture" }] }] })
 	}
 	assert.deepEqual(hits, ["https://api.anthropic.com/v1/messages", "https://api.anthropic.com/v1/messages"])
+	// capture the secret name registered by setup
 	let registered = ""
 	await setupAccount(environment, {
 		version: "1.2.3",
@@ -35,11 +38,13 @@ test("only the host model handles send the environment key", async () => {
 			},
 		},
 	})
+	// compare both guest routes with the registered secret reference
 	for (const route of [models.repair, models.featureAdoption]) {
 		assert.equal(route.credential.name, registered)
 		assert.equal(route.modelId, "claude-opus-5-5")
 		assert.ok(!JSON.stringify(route).includes(environment.ANTHROPIC_API_KEY))
 	}
+	// require explicit pricing for a custom model route
 	assert.throws(() => configureModels({ ...environment, HEALTH_CODE_REPAIR_MODEL: "custom" }), /bounds/)
 	const custom = configureModels({
 		...environment,

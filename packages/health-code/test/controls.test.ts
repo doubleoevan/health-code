@@ -15,18 +15,22 @@ import { buildTestCommand } from "../src/sandbox/executeTests.ts"
 import { fixtureCommit, fixtureUrl } from "./providerContract.ts"
 
 test("verifies the complete allowlist before any repository-controlled command", async () => {
+	// capture whether the provider executes commands or releases the sandbox
 	const sandboxProvider = createFakeSandboxProvider({ commit: fixtureCommit, commands: [] })
 	let executed = false
 	let released = false
+	// return a policy that fails readback before any repository command
 	sandboxProvider.setNetworkPolicy = async () =>
 		confirmNetworkPolicy(["registry.npmjs.org"], { mode: "denylist", allowedHosts: [], deniedHosts: [] })
 	sandboxProvider.executeCommand = async () => {
 		executed = true
 		throw Error("unexpected repository execution")
 	}
+	// record teardown even when policy verification fails
 	sandboxProvider.destroySandbox = async () => {
 		released = true
 	}
+	// verify release, isolation and registry validation
 	await assert.rejects(inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider }), { code: "policy" })
 	assert.ok(released)
 	assert.equal(executed, false)
@@ -41,6 +45,7 @@ test("guest environment contains inert application values and trusted controls",
 		},
 		undefined,
 	)
+	// check which environment values reach the guest
 	assert.ok(argv.includes("OPTION=placeholder"))
 	assert.ok(argv.includes("-i"))
 	for (const key of ["PATH", "NODE_OPTIONS", "RUNTA_TOKEN", "LD_PRELOAD", "HOME"]) {
@@ -57,6 +62,7 @@ test("pins once when a branch moves after acquisition", async () => {
 			},
 		],
 	}
+	// inspect a fixture that moves the source branch after checkout
 	const sandboxProvider = createFakeSandboxProvider(fixture)
 	const card = await inspectRepository({
 		repositoryUrl: fixtureUrl,
@@ -67,12 +73,14 @@ test("pins once when a branch moves after acquisition", async () => {
 			}
 		},
 	})
+	// verify the report retains the originally acquired commit
 	assert.equal(card.repository.commit, fixtureCommit)
 	assert.deepEqual(card.packageManager, { reason: "Unsupported project" })
 })
 test("unavailable repository releases its sandbox before any repository code executes", async () => {
 	const sandboxProvider = createFakeSandboxProvider({ commit: fixtureCommit, commands: [] })
 	let destroyed = false
+	// fail acquisition and observe sandbox cleanup
 	sandboxProvider.prepareRepository = async () => {
 		throw new InspectionError("repository-unavailable", "Public repository unavailable")
 	}
@@ -108,6 +116,7 @@ test("unexpected DNS questions and ambiguous metadata writes cannot produce a cl
 		[],
 		["/project/linked"],
 	)
+	// check both uncertainty and the unexpected dns destination
 	assert.equal(result.files.complete, false)
 	assert.deepEqual(result.connections.findings, [
 		{ kind: "connection", destination: "example.org", source: "dns", outcome: "unknown" },
@@ -126,6 +135,7 @@ test("only DNS answers preceding a connection can establish its destination", ()
 	].join("\n")
 	const dns =
 		"3 IP 10.0.0.2.123 > 10.0.0.1.53: 10+ A? registry.npmjs.org. (29)\n4 IP 10.0.0.1.53 > 10.0.0.2.123: 10 1/0/0 A 192.0.2.5"
+	// keep an address unresolved when its dns response follows the connection
 	const result = inspectTrace(trace, dns, "0 packets dropped by kernel", ["registry.npmjs.org"])
 	assert.equal(result.connections.complete, false)
 	assert.deepEqual(result.connections.findings, [{ kind: "connection", destination: "192.0.2.5", outcome: "unknown" }])
@@ -138,6 +148,7 @@ test("records descriptor metadata and keeps ambiguous mapping changes incomplete
 	]
 	const read = (lines: string[]): Observation =>
 		inspectTrace(lines.join("\n"), "", "0 packets dropped by kernel", []).files
+	// distinguish a known metadata write from an ambiguous mapped write
 	assert.deepEqual(read(trace), { complete: true, findings: [{ kind: "write", path: "/tmp/metadata" }] })
 	assert.equal(read([...trace, "1 mprotect(0x1234, 4096, PROT_READ|PROT_WRITE) = 0"]).complete, false)
 })
@@ -149,6 +160,7 @@ test("normalizes renamed link ancestors and reads descriptor-only timestamp chan
 		'1 utime("/project/moved/link", NULL) = 0',
 		"1 utimensat(3</tmp/outside>, NULL, NULL, 0) = 0",
 	].join("\n")
+	// retain descriptor writes when a renamed link obscures path coverage
 	const result = inspectTrace(trace, "", "0 packets dropped by kernel", [], ["/project/dir/link"])
 	assert.equal(result.files.complete, false)
 	assert.deepEqual(result.files.findings, [{ kind: "write", path: "/tmp/outside" }])
@@ -164,6 +176,7 @@ test("observes pnpm permission changes through project links alongside read-only
 		'2 chmod("/project/acorn/bin/acorn", 0755) = 0',
 		'2 openat(AT_FDCWD</project>, "/tmp/log", O_CREAT|O_WRONLY, 0600) = 4</tmp/log>',
 	].join("\n")
+	// check the read-only mount and the write that escapes the project
 	const args = guestArguments({ argv: ["true"], timeoutMs: 1000 }, undefined)
 	const mount = args.indexOf("/usr")
 	assert.deepEqual(args.slice(mount - 1, mount + 2), ["--ro-bind", "/usr", "/usr"])
@@ -186,6 +199,7 @@ test("keeps coverage incomplete for escaping, cyclic, or replaced link targets",
 		],
 		['1 symlink("pkg", "/project/link") = 0', '1 rename("/project/replacement", "/project/link") = 0'],
 	]) {
+		// apply the metadata change through each ambiguous link
 		const trace = [start, ...links, '1 chmod("/project/link/bin", 0755) = 0'].join("\n")
 		const files = inspectTrace(trace, "", "0 packets dropped by kernel", []).files
 		assert.equal(files.complete, false)
@@ -202,6 +216,7 @@ test("Bun hardlinks anonymous temporary inodes into the project", () => {
 })
 
 test("network observation traces all outbound address-bearing calls and keeps unfinished sends inconclusive", () => {
+	// inspect an unfinished system call under network observation
 	const args = guestArguments({ argv: ["true"], timeoutMs: 1000, observe: "network" }, "/evidence")
 	assert.ok(args.includes("trace=execve,connect,sendto,sendmsg,sendmmsg"))
 	const inspect = (name: string): ReturnType<typeof inspectTrace> =>
@@ -211,6 +226,7 @@ test("network observation traces all outbound address-bearing calls and keeps un
 			"0 packets dropped by kernel",
 			[],
 		)
+	// distinguish inbound calls from outbound sends and writes
 	assert.equal(inspect("recvfrom").connections.complete, true)
 	assert.equal(inspect("recvfrom").files.complete, true)
 	assert.equal(inspect("write").files.complete, false)
@@ -221,10 +237,12 @@ test("only inventory readers receive the completed read-only snapshot", () => {
 	const base = ["node", "/opt/health-code/project.mjs"]
 	const args = (argv: string[], previous?: string): ReturnType<typeof buildTestCommand> =>
 		buildTestCommand({ command: { argv, timeoutMs: 1000 }, id: "fixture", previous })
+	// capture the inventory while tests run
 	const tests = args([...base, "tests", "--inventory"])
 	assert.ok(tests.capture)
 	assert.ok(tests.argv.includes("capture-tests"))
 	assert.equal(tests.argv.includes("/inspection-inventory"), false)
+	// verify that only the integrity reader receives the read-only inventory
 	const read = args([...base, "integrity", "100"], tests.capture).argv
 	assert.deepEqual(read.slice(read.indexOf("/inspection-inventory") - 2, read.indexOf("/inspection-inventory") + 1), [
 		"--ro-bind",
@@ -258,15 +276,18 @@ test("pinned runner setup and test-only helpers stay protected outside test fold
 		"src/app.ts": 'import "./widget"',
 		"src/widget.test.ts": 'import "./widget"; import "@support/fixtureHelper"',
 	}
+	// find test support through runner configuration and import aliases
 	const blocked = protectedTestFiles(
 		Object.keys(files),
 		["src/widget.test.ts", "pkg/main.test.ts"],
 		(file) => files[file] ?? "",
 	)
+	// require the runner's setup dependencies to remain protected
 	assert.ok(blocked.has("src/bootstrap.ts"))
 	assert.ok(blocked.has("src/environment.ts"))
 	assert.ok(blocked.has("src/jestSetup.ts"))
 	assert.ok(blocked.has("configuration.json"))
+	// distinguish test-only imports from shared production dependencies
 	assert.ok(blocked.has("pkg/two.ts"))
 	assert.ok(blocked.has("src/alternative.ts"))
 	assert.equal(blocked.has("pkg/one.ts"), false)
@@ -282,6 +303,7 @@ test("test inventory pages retain all cases and mark the end of a full page", as
 	const { tmpdir } = await import("node:os")
 	const root = mkdtempSync(join(tmpdir(), "test-inventory-"))
 	const directory = join(root, "inventory")
+	// create exactly two full inventory pages
 	const cases = Array.from({ length: 200 }, (_, index) => ({
 		file: "sample.test.ts",
 		name: String(index),
@@ -294,8 +316,10 @@ test("test inventory pages retain all cases and mark the end of a full page", as
 			counts: { passed: 200, failed: 0, skipped: 0, todo: 0 },
 			testFileErrors: [],
 		})
+		// check the contents of each page and the empty terminal page
 		const page = (offset: number): { cases: [string, string, string][]; discoveredFiles?: string[] } =>
 			JSON.parse(readFileSync(join(directory, offset + ".json"), "utf8"))
+		// verify discovery, case offsets and the end marker
 		assert.deepEqual(page(0).discoveredFiles, ["sample.test.ts"])
 		assert.equal(page(100).cases[0]?.[1], "100")
 		assert.deepEqual(page(200).cases, [])

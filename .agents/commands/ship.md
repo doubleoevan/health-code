@@ -170,6 +170,8 @@ apply the fixes yourself.
 
 1. **Comments: clarity and relevance.** Every comment justifies itself or gets
    deleted. Sweep `//`, `/** */`, `{/* */}`, and `#` alike.
+   For TSX, review each logical markup section against jsx-conventions. The
+   preflight heuristic skips TSX.
    - Keep: a short sentence explaining why a non-obvious choice was made.
    - Delete: restatements of the code, decision history, "NOT X" notes,
      migration narrative, trailing justifications after "since" or "because",

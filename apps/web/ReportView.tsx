@@ -2,6 +2,7 @@ import { type ReactElement, type ReactNode, useState } from "react"
 import { type Citation, type PublishedCard, toSummary, type UpgradeCard } from "./report.ts"
 
 export function Link({ href, children }: { href?: string; children: ReactNode }): ReactElement {
+	// allow secure external links and root-relative paths
 	const external = href?.startsWith("https://")
 	if (!href || (!external && !/^\/(?!\/)/.test(href))) {
 		return <span>{children}</span>
@@ -13,6 +14,7 @@ export function Link({ href, children }: { href?: string; children: ReactNode })
 	)
 }
 function Citations({ links }: { links: Citation[] }): ReactElement {
+	// deduplicate citations by label and destination
 	const unique = new Map(links.map((link) => [JSON.stringify([link.label, link.url]), link]))
 	return (
 		<>
@@ -30,13 +32,16 @@ function Copy({ text, label, share = false }: { text: string; label: string; sha
 	const [status, setStatus] = useState("")
 	async function handleClick(): Promise<void> {
 		try {
+			// prefer the native share dialog for report links
 			if (share && navigator.share) {
 				await navigator.share({ url: text })
 				return
 			}
+			// copy the supplied link or patch instructions
 			await navigator.clipboard.writeText(text)
 			setStatus("Copied")
 		} catch (error) {
+			// offer selectable text when copying fails
 			if (!(error instanceof DOMException && error.name === "AbortError")) {
 				setStatus("Copy unavailable. Select the text below.")
 			}
@@ -47,6 +52,7 @@ function Copy({ text, label, share = false }: { text: string; label: string; sha
 			<button type="button" className="secondary" onClick={handleClick}>
 				{label}
 			</button>{" "}
+			{/* copy status and manual fallback */}
 			<small role="status">{status}</small>
 			{status.startsWith("Copy unavailable") && <textarea readOnly value={text} aria-label={label} />}
 		</span>
@@ -61,6 +67,7 @@ function TestFileErrors({ errors }: { errors?: UpgradeCard["testFileErrors"] }):
 	}
 	return (
 		<>
+			{/* test files that could not run */}
 			<dt>Test file errors</dt>
 			<dd>
 				{errors.length ? (
@@ -87,6 +94,7 @@ function FeatureMatches({ matches }: { matches: UpgradeCard["matches"] }): React
 		<ul>
 			{matches.map((match) => (
 				<li key={JSON.stringify([match.label, match.url, match.source, match.adoptionOutcome])}>
+					{/* release feature and supporting quotation */}
 					<Link href={match.url}>{match.label}</Link>
 					{match.replacement && <p>{match.replacement === "direct" ? "Direct replacement" : "Inferred replacement"}</p>}
 					{match.quotation && (
@@ -94,6 +102,7 @@ function FeatureMatches({ matches }: { matches: UpgradeCard["matches"] }): React
 							{match.quotation} <Link href={match.source}>Release notes</Link>
 						</blockquote>
 					)}
+					{/* source location and affected call sites */}
 					{match.location && (
 						<p>
 							Source location · <Citations links={[match.location]} />
@@ -104,6 +113,7 @@ function FeatureMatches({ matches }: { matches: UpgradeCard["matches"] }): React
 							Affected call sites · <Citations links={match.callSites} />
 						</p>
 					)}
+					{/* feature adoption outcome */}
 					{match.adoptionOutcome && <p>Adoption outcome · {match.adoptionOutcome}</p>}
 				</li>
 			))}
@@ -116,6 +126,7 @@ function PatchDetails({ patch }: { patch: UpgradeCard["patches"][number] }): Rea
 		<section>
 			<h4>{patch.role === "upgrade" ? "Upgrade patch" : "Feature patch"}</h4>
 			<dl>
+				{/* patch base and tested commit */}
 				<dt>Applies to commit</dt>
 				<dd>
 					<code>{patch.base}</code>
@@ -128,6 +139,7 @@ function PatchDetails({ patch }: { patch: UpgradeCard["patches"][number] }): Rea
 						</dd>
 					</>
 				)}
+				{/* prerequisite patch */}
 				{patch.prerequisite && (
 					<>
 						<dt>Required upgrade patch</dt>
@@ -136,6 +148,7 @@ function PatchDetails({ patch }: { patch: UpgradeCard["patches"][number] }): Rea
 						</dd>
 					</>
 				)}
+				{/* verification results */}
 				{patch.checks && (
 					<>
 						<dt>Patch verification</dt>
@@ -145,6 +158,7 @@ function PatchDetails({ patch }: { patch: UpgradeCard["patches"][number] }): Rea
 					</>
 				)}
 			</dl>
+			{/* verified patch download */}
 			<Link href={toPatchPath(patch.digest)}>Download patch</Link>
 		</section>
 	)
@@ -155,6 +169,7 @@ const dollars = new Intl.NumberFormat("en-US", { style: "currency", currency: "U
 function UsageDetails({ usage }: { usage: UpgradeCard["usage"] }): ReactElement {
 	return (
 		<>
+			{/* recorded charges and reserved cost */}
 			{usage?.modelCost !== undefined && (
 				<>
 					<dt>Model cost</dt>
@@ -167,6 +182,7 @@ function UsageDetails({ usage }: { usage: UpgradeCard["usage"] }): ReactElement 
 					<dd>{dollars.format(usage.reserved)}</dd>
 				</>
 			)}
+			{/* reported output tokens */}
 			{usage?.outputTokens !== undefined && (
 				<>
 					<dt>Output tokens</dt>
@@ -191,6 +207,7 @@ function Upgrade({ card, origin, commit }: { card: UpgradeCard; origin: string; 
 		.join("\n\n")
 	return (
 		<article>
+			{/* upgrade verdict and version change */}
 			<header>
 				<h3>{card.dependency}</h3>
 				<strong
@@ -205,6 +222,7 @@ function Upgrade({ card, origin, commit }: { card: UpgradeCard; origin: string; 
 					.join(", ")}{" "}
 				→ {card.to}
 			</p>
+			{/* repair outcome and test changes */}
 			{card.reason && (
 				<p>
 					<strong>Why repair stopped</strong> · {card.reason}
@@ -213,12 +231,14 @@ function Upgrade({ card, origin, commit }: { card: UpgradeCard; origin: string; 
 			{card.testChanges?.map((change) => (
 				<p key={change}>Test change · {change}</p>
 			))}
+			{/* release summary and feature matches */}
 			<p>{card.summary ?? "Release summary unavailable."}</p>
 			<dl>
 				<dt>Feature matches</dt>
 				<dd>
 					<FeatureMatches matches={card.matches} />
 				</dd>
+				{/* observed installation activity */}
 				<dt>Installation findings</dt>
 				<dd>
 					{card.observation.findings
@@ -235,6 +255,7 @@ function Upgrade({ card, origin, commit }: { card: UpgradeCard; origin: string; 
 						</p>
 					)}
 				</dd>
+				{/* install, typecheck and test results */}
 				<dt>Install check</dt>
 				<dd>{card.checks.install}</dd>
 				<dt>Typecheck and tests</dt>
@@ -242,10 +263,12 @@ function Upgrade({ card, origin, commit }: { card: UpgradeCard; origin: string; 
 					{card.checks.typecheck} · {card.checks.tests}
 				</dd>
 				<TestFileErrors errors={card.testFileErrors} />
+				{/* diagnostic source locations */}
 				<dt>Source locations</dt>
 				<dd>
 					<Citations links={card.diagnostics} />
 				</dd>
+				{/* installed size and added dependencies */}
 				<dt>Installed size change</dt>
 				<dd>
 					{card.sizeBytes === undefined ? "Unmeasured" : `${card.sizeBytes > 0 ? "+" : ""}${card.sizeBytes} bytes`}
@@ -267,8 +290,10 @@ function Upgrade({ card, origin, commit }: { card: UpgradeCard; origin: string; 
 						</dd>
 					</>
 				)}
+				{/* model usage for this upgrade */}
 				<UsageDetails usage={card.usage} />
 			</dl>
+			{/* tested patches and application instructions */}
 			{patches.map((patch) => (
 				<PatchDetails key={patch.digest} patch={patch} />
 			))}
@@ -284,11 +309,13 @@ function Upgrade({ card, origin, commit }: { card: UpgradeCard; origin: string; 
 export function ReportView({ card, url }: { card: PublishedCard; url: string }): ReactElement {
 	return (
 		<>
+			{/* inspection summary and sharing controls */}
 			<h1>{toSummary(card)}</h1>
 			<div className="buttons">
 				<Copy label="Copy link" text={url} />
 				<Copy label="Share" text={url} share />
 			</div>
+			{/* inspected revision and project type */}
 			<p>
 				<Link href={`${card.repository.url}/tree/${card.repository.commit}`}>
 					{card.repository.url.slice(19)} · {card.repository.commit.slice(0, 8)}
@@ -299,6 +326,7 @@ export function ReportView({ card, url }: { card: PublishedCard; url: string }):
 					Health Code inspects JavaScript and TypeScript projects. Project detection · {card.detection}
 				</p>
 			)}
+			{/* baseline checks */}
 			<details>
 				<summary>Checks before the upgrade</summary>
 				<dl>
@@ -311,6 +339,7 @@ export function ReportView({ card, url }: { card: PublishedCard; url: string }):
 					<TestFileErrors errors={card.baselineTestFileErrors} />
 				</dl>
 			</details>
+			{/* agent turn limits */}
 			{card.turnLimits && (
 				<details>
 					<summary>Turn limit</summary>
@@ -322,7 +351,9 @@ export function ReportView({ card, url }: { card: PublishedCard; url: string }):
 					</dl>
 				</details>
 			)}
+			{/* publication scope */}
 			{!card.license && <p>Findings only. GitHub could not confirm an OSI-approved license at the inspected commit.</p>}
+			{/* per-dependency results */}
 			<section>
 				<h2>Dependency upgrades</h2>
 				{card.upgrades.length ? (
@@ -338,6 +369,7 @@ export function ReportView({ card, url }: { card: PublishedCard; url: string }):
 					<p>No upgrades inspected.</p>
 				)}
 			</section>
+			{/* local inspection setup */}
 			<section>
 				<h2>Continue in Claude Code or Codex</h2>
 				<p>

@@ -49,6 +49,7 @@ export function protect(environment: NodeJS.ProcessEnv): (text: string) => void 
 	const secrets = [environment.ANTHROPIC_API_KEY, environment.RUNTA_TOKEN, environment.GITHUB_TOKEN].filter(
 		(key): key is string => Boolean(key),
 	)
+	// screen both raw credentials and their serialized forms
 	return (text) => {
 		if (secrets.some((key) => text.includes(key) || text.includes(JSON.stringify(key).slice(1, -1)))) {
 			throw new UserError("Evidence withheld because it contains a configured credential.")
@@ -75,16 +76,19 @@ export class InspectionStore {
 		}
 	}
 	private async read(path: string): Promise<unknown> {
+		// limit reads to regular files within the storage size limit
 		await this.checkPath(path)
 		const stat = await lstat(path)
 		if (!stat.isFile() || stat.size > 64 * 1024 * 1024) {
 			throw new UserError("Inspection record has an unsupported size or type.")
 		}
+		// check stored text for configured credentials before parsing
 		const text = await readFile(path, "utf8")
 		this.guard(text)
 		return JSON.parse(text)
 	}
 	async save(input: SavedCard): Promise<void> {
+		// validate the entire report before creating its directory
 		const card = cardSchema.parse(input)
 		const target = this.folder(card.inspectionId)
 		const text = JSON.stringify(card)
@@ -92,6 +96,7 @@ export class InspectionStore {
 		if (Buffer.byteLength(text) > 64 * 1024 * 1024) {
 			throw new UserError("Report Card exceeds local storage limit.")
 		}
+		// stage the card and its result directory with private permissions
 		await mkdir(this.root, { recursive: true, mode: 0o700 })
 		const temp = await mkdtemp(join(this.root, ".pending-"))
 		try {
@@ -99,12 +104,14 @@ export class InspectionStore {
 			await mkdir(join(temp, "results"), { mode: 0o700 })
 			await rename(temp, target)
 		} finally {
+			// remove the staging directory if publication fails
 			await rm(temp, { recursive: true, force: true })
 		}
 	}
 	async load(id: string): Promise<SavedCard> {
 		return (await this.snapshot(id)).card
 	}
+	// read the card together with the exact text used for paging
 	async snapshot(id: string): Promise<Snapshot> {
 		try {
 			const path = join(this.folder(id), "card.json")
@@ -118,16 +125,19 @@ export class InspectionStore {
 			if (this.lastSnapshot?.identity === identity) {
 				return this.lastSnapshot.snapshot
 			}
+			// validate a changed file before replacing the cached snapshot
 			const text = await readFile(path, "utf8")
 			this.guard(text)
 			const card = cardSchema.parse(JSON.parse(text))
 			if (card.inspectionId !== id || card.timeline.some((event) => event.inspectionId !== id)) {
 				throw new Error()
 			}
+			// cache the original text beside the validated card
 			const snapshot = { card, text }
 			this.lastSnapshot = { identity, snapshot }
 			return snapshot
 		} catch (error) {
+			// distinguish a missing inspection from unreadable saved evidence
 			if (error instanceof Error && "code" in error && error.code === "ENOENT") {
 				throw new UserError("Inspection not found. Active inspections belong to their server process.")
 			}
@@ -135,10 +145,12 @@ export class InspectionStore {
 		}
 	}
 	async record(outcome: Outcome): Promise<void> {
+		// validate the application result before opening storage
 		const text = JSON.stringify(outcomeSchema.parse(outcome))
 		this.guard(text)
 		const folder = this.folder(outcome.inspectionId)
 		await this.checkPath(folder)
+		// prepare a private results directory beneath the inspection root
 		const directory = join(folder, "results")
 		await mkdir(directory, { recursive: true, mode: 0o700 })
 		await this.checkPath(directory)
@@ -148,6 +160,7 @@ export class InspectionStore {
 			// Publish a complete immutable record, even when two clients retry together.
 			await link(temp, join(directory, `${toHash(text)}.json`))
 		} catch (error) {
+			// treat concurrent publication of identical results as a successful retry
 			if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) {
 				throw error
 			}
@@ -156,23 +169,27 @@ export class InspectionStore {
 		}
 	}
 	async outcomes(id: string): Promise<Outcome[]> {
+		// enumerate results in a stable order by digest
 		const directory = join(this.folder(id), "results")
 		let names: string[]
 		try {
 			await this.checkPath(directory)
 			names = (await readdir(directory)).filter((name) => /^[a-f0-9]{64}\.json$/.test(name)).sort()
 		} catch (error) {
+			// return an empty history when result storage is absent
 			if (error instanceof Error && "code" in error && error.code === "ENOENT") {
 				return []
 			}
 			throw error
 		}
 		const results: Outcome[] = []
+		// verify each record against its inspection id and content-addressed filename
 		for (const name of names) {
 			const record = outcomeSchema.parse(await this.read(join(directory, name)))
 			if (record.inspectionId !== id || name !== `${toHash(JSON.stringify(record))}.json`) {
 				throw new UserError("Saved Patch result is unreadable.")
 			}
+			// retain only results whose identity checks succeeded
 			results.push(record)
 		}
 		return results

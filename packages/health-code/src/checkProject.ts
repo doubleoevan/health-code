@@ -37,6 +37,7 @@ export function pending(reason: string): Baseline {
 	const result = untested(reason)
 	return { install: result, typecheck: result, tests: result }
 }
+// supply incomplete evidence for upgrades skipped before installation
 const unobserved: Observation = { complete: false, findings: [], reason: "Installation has not been observed" }
 export function skippedUpgrade(upgrade: Upgrade, reason: string): UpgradeReport {
 	return { ...upgrade, ...pending(reason), result: untested(reason), observation: unobserved }
@@ -55,6 +56,7 @@ export class NodeAdapter implements EcosystemAdapter {
 			this.context.options.sandboxProvider.resetProject(this.sandbox, options),
 		)
 	}
+	// collect guest metadata within its stage timeout
 	async data(args: string[]): Promise<unknown> {
 		const stage = args[0] === "detect" || args[0] === "registry" ? "detect" : "setup"
 		return this.context.step(stage, args[0] ?? "Read project", async (options) => {
@@ -62,6 +64,7 @@ export class NodeAdapter implements EcosystemAdapter {
 			if (result.exitCode || result.stdoutTruncated) {
 				throw new ProjectEvidenceError(redact(result.stderr).slice(-512) || "Incomplete project metadata")
 			}
+			// reject malformed metadata before using it as project evidence
 			try {
 				return JSON.parse(result.stdout)
 			} catch {
@@ -69,6 +72,7 @@ export class NodeAdapter implements EcosystemAdapter {
 			}
 		})
 	}
+	// validate the detected project against the adapter schema
 	async detectProject(): Promise<Project> {
 		const result = projectSchema.safeParse(await this.data(["detect"]))
 		if (!result.success) {
@@ -77,23 +81,27 @@ export class NodeAdapter implements EcosystemAdapter {
 		this.project = result.data
 		return result.data
 	}
+	// return the full skipped list for an empty selection
 	async listUpgrades(project: Project, limit: number): Promise<ReturnType<typeof selectUpgrades>> {
 		if (limit === 0) {
 			return { eligible: [], selected: [], omitted: [], skipped: [...project.skipped] }
 		}
 		const target = this.context.options.upgrade
 		if (target) {
+			// require the pinned source version in every declaring workspace
 			const versions = Object.values(project.sources[target.dependency] ?? {})
 			if (!versions.length || versions.some((locked) => locked !== target.from)) {
 				throw new ProjectEvidenceError("Pinned dependency source version differs")
 			}
 			const selection = selectUpgrades(project, { [target.dependency]: [target.to] }, limit)
+			// reject a pinned target that fails upgrade selection
 			if (!selection.selected.length) {
 				throw new InspectionError("invalid-upgrade", "The pinned target must be a newer stable minor or major version")
 			}
 			return selection
 		}
 		try {
+			// discover eligible versions from registry evidence
 			return selectUpgrades(project, await this.registry(), limit)
 		} catch (error) {
 			if (!(error instanceof ProjectEvidenceError)) {
@@ -102,6 +110,7 @@ export class NodeAdapter implements EcosystemAdapter {
 			return selectUpgrades(project, {}, limit)
 		}
 	}
+	// fetch versions only for the requested package names
 	async registry(lookup?: string[]): Promise<Record<string, string[]>> {
 		const names = lookup ?? Object.keys(this.project?.sources ?? {})
 		if (!names.length) {
@@ -110,12 +119,14 @@ export class NodeAdapter implements EcosystemAdapter {
 		const result = z
 			.record(z.string(), z.array(z.string()))
 			.safeParse(await this.data([lookup ? "lookup" : "registry", ...names]))
+		// reject registry records outside the expected schema
 		if (!result.success) {
 			throw new ProjectEvidenceError("Invalid registry metadata")
 		}
 		return result.data
 	}
 	private async call(args: string[], options: Operation, observe: boolean | "network" = false): Promise<CommandResult> {
+		// enforce cancellation before dispatching a guest command
 		checkOperation(options.signal)
 		return this.context.options.sandboxProvider.executeCommand(this.sandbox, {
 			...options,
@@ -127,12 +138,14 @@ export class NodeAdapter implements EcosystemAdapter {
 	async install(): Promise<CheckResult> {
 		return (await this.check(["install"], this.watchChecks)).check
 	}
+	// observe lockfile resolution separately from installation
 	async resolveLock(): Promise<{ check: CheckResult; observation: Observation }> {
 		return this.check(["install", "--resolve-lock"], true)
 	}
 	async refreshInstallation(): Promise<{ check: CheckResult; observation: Observation }> {
 		return this.check(["install", "--update-lock"], true)
 	}
+	// observe installation of the requested upgrade
 	async bumpDependency(upgrade: Upgrade): Promise<{ check: CheckResult; observation: Observation }> {
 		return this.check(["install", upgrade.dependency, upgrade.to], true)
 	}
@@ -147,11 +160,13 @@ export class NodeAdapter implements EcosystemAdapter {
 			async (options, stepId) => {
 				const raw = await this.call(args, options, observe)
 				checkOperation(options.signal)
+				// attach redacted output and optional installation observations
 				const evidence = await this.recordOutput(raw, stepId, options.signal)
 				const observation = observe
 					? await this.observe(raw.observationId, options.signal, observe === "network")
 					: unobserved
 				this.lastObservation = observation
+				// derive an initial check status from command completion
 				let check: CheckResult =
 					raw.exitCode === 0
 						? { status: "passed", evidence: [evidence] }
@@ -159,6 +174,7 @@ export class NodeAdapter implements EcosystemAdapter {
 				if (raw.timedOut) {
 					check = untested("command-timeout", [evidence])
 				} else if (stage === "tests") {
+					// reconcile test failures with the runner's structured report
 					check = await this.testResult(check, options)
 					if (args.includes("--inventory")) {
 						check = withInventory(check, raw, evidence)
@@ -192,12 +208,14 @@ export class NodeAdapter implements EcosystemAdapter {
 		}
 		return evidence
 	}
+	// retain incomplete test evidence when the reporter failed
 	private async testResult(result: CheckResult, options: Operation): Promise<CheckResult> {
 		const raw = await this.call(["report"], options)
 		if (raw.exitCode || raw.stdoutTruncated) {
 			return untested("incomplete-test-report", result.evidence)
 		}
 		try {
+			// validate the runner's reported coverage
 			const report = testReport.parse(JSON.parse(raw.stdout))
 			if (!report.complete) {
 				return untested("incomplete-test-report", result.evidence)
@@ -205,6 +223,7 @@ export class NodeAdapter implements EcosystemAdapter {
 			if (this.context.options.includeTestInventory && report.granularity === "exit") {
 				result.inventoryUnavailable = "Test command reports only an exit status"
 			}
+			// retain named failures and flag unexplained failing exits
 			if (report.failures.length) {
 				return { status: "failed", evidence: result.evidence, failingTests: report.failures }
 			}
@@ -213,6 +232,7 @@ export class NodeAdapter implements EcosystemAdapter {
 			}
 			return result
 		} catch {
+			// classify malformed reports as untested
 			return untested("invalid-test-report", result.evidence)
 		}
 	}
@@ -220,12 +240,14 @@ export class NodeAdapter implements EcosystemAdapter {
 		if (!id) {
 			return unobserved
 		}
+		// combine network and filesystem observations
 		const provider = this.context.options.sandboxProvider
 		const [network, files] = await Promise.all([
 			provider.readAttemptedConnections(this.sandbox, id),
 			networkOnly ? { complete: true, findings: [], reason: undefined } : provider.readFileChanges(this.sandbox, id),
 		])
 		checkOperation(signal)
+		// emit a sandbox event for each blocked connection
 		const findings = [...network.findings, ...files.findings]
 		for (const finding of findings) {
 			checkOperation(signal)
@@ -238,6 +260,7 @@ export class NodeAdapter implements EcosystemAdapter {
 				})
 			}
 		}
+		// report coverage across the requested observation channels
 		return {
 			complete: network.complete && files.complete,
 			findings,
@@ -245,11 +268,13 @@ export class NodeAdapter implements EcosystemAdapter {
 			...(network.destinations ? { destinations: network.destinations } : {}),
 		}
 	}
+	// select the typecheck mode detected in the project
 	async typecheck(): Promise<CheckResult> {
 		return this.project?.typecheck === "none"
 			? untested("no-tsconfig")
 			: (await this.check(["typecheck", this.project?.typecheck ?? "check"])).check
 	}
+	// run the declared test script with the selected inventory policy
 	async test(): Promise<CheckResult> {
 		return this.project?.testScript
 			? (
@@ -270,6 +295,7 @@ function parseInventory(text: string): unknown {
 		return undefined
 	}
 }
+// merge inventory failures only when a complete summary is available
 function withInventory(check: CheckResult, raw: CommandResult, evidence: Evidence): CheckResult {
 	if (check.inventoryUnavailable) {
 		return check
@@ -278,6 +304,7 @@ function withInventory(check: CheckResult, raw: CommandResult, evidence: Evidenc
 	if (!summary?.success) {
 		return untested("incomplete-test-report", [evidence])
 	}
+	// represent file loading errors as additional test failures
 	const failures = summary.data.testFileErrors.map(({ file }) => ({ workspace: ".", file }))
 	if (failures.length) {
 		check = {

@@ -19,10 +19,12 @@ export function createReplaySource(
 			return "MPL-2.0"
 		},
 		async inspect(_url: string, emit: (event: SiteEvent) => void): Promise<{ report: ReportCardV2 }> {
+			// align the recording's first event with the start of this replay
 			const report: ReportCardV2 = await Bun.file(recording).json()
 			const first = Date.parse(report.timeline[0]?.timestamp ?? "")
 			let previous = first
 			const start = Date.now()
+			// preserve the intervals between recorded events
 			for (const event of report.timeline) {
 				const time = Date.parse(event.timestamp)
 				await sleep(Math.max(0, time - previous))

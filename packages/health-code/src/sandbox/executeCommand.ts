@@ -8,6 +8,7 @@ export type Instance = {
 	locked: boolean
 	updating: boolean
 	commands: number
+	// retain capture handles and policy state for repository commands
 	testCapture?: string
 	hosts: string[]
 	observations: Map<string, { connections: Observation; files: Observation }>
@@ -20,6 +21,7 @@ async function replaceTestCapture(
 	remaining: () => Operation,
 ): Promise<void> {
 	if (capture || (command.argv[1] === "/opt/health-code/project.mjs" && command.argv[2] === "tests")) {
+		// replace the previous reporter capture when a test run starts
 		const previous = instance.testCapture
 		instance.testCapture = capture
 		if (previous) {
@@ -27,18 +29,21 @@ async function replaceTestCapture(
 		}
 	}
 }
+// serialize commands on each sandbox
 export async function executeCommand(instance: Instance, command: Command): Promise<CommandResult> {
 	if (instance.commands) {
 		throw new InspectionError("sandbox-busy", "Repository command is active")
 	}
 	instance.commands++
 	try {
+		// share the command deadline with capture preparation
 		const remaining = remainingOperation(command)
 		const id = randomUUID()
 		const dir = command.observe ? `/var/lib/health-code/evidence-${id}` : undefined
 		const { argv, capture } = buildTestCommand({ command, dir, id, previous: instance.testCapture })
 		await replaceTestCapture(instance, command, capture, remaining)
 		const result = await exec(instance.runtime, argv, command)
+		// associate observation evidence with this command id
 		if (dir) {
 			const missing: Observation = { complete: false, reason: "Installation observer unavailable", findings: [] }
 			let evidence = { connections: missing, files: missing }
@@ -56,6 +61,7 @@ export async function executeCommand(instance: Instance, command: Command): Prom
 			instance.observations.set(id, evidence)
 			result.observationId = id
 		}
+		// release the command slot after recording its result
 		return result
 	} finally {
 		instance.commands--

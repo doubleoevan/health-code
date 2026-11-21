@@ -40,6 +40,7 @@ function scripts(baseline: string[], upgraded: string[], repeated: string[]): Fi
 	const transcript = JSON.parse(
 		readFileSync(new URL("./fixtures/recorded/pnpm/transcript.json", import.meta.url), "utf8"),
 	)
+	// replay baseline and upgrade checks in execution order
 	const steps = [
 		command(["detect"], JSON.stringify(transcript.project)),
 		command(["registry", "widget"], JSON.stringify(transcript.registry)),
@@ -52,6 +53,7 @@ function scripts(baseline: string[], upgraded: string[], repeated: string[]): Fi
 		command(["tests"], "", Number(!!upgraded.length)),
 		report(upgraded),
 	]
+	// append a confirmation run only for newly failing cases
 	if (upgraded.some((name) => !baseline.includes(name))) {
 		steps.push(
 			command(["install", "widget", "1.3.0"]),
@@ -66,6 +68,7 @@ function provider(commands: FixtureCommand[]): SandboxProvider {
 	return createFakeSandboxProvider({ commit: fixtureCommit, commands })
 }
 test("shares one provider contract with the credentialed suite", async () => {
+	// exercise the shared provider contract with recorded observations
 	await providerContract(
 		provider([
 			{
@@ -88,6 +91,7 @@ test("shares one provider contract with the credentialed suite", async () => {
 	)
 })
 test("records existing, flaky and confirmed tests with exact callback replay", async () => {
+	// collect callback events as the fixture repeats the failing tests
 	const timeline: InspectionEvent[] = []
 	const card = await inspectRepository({
 		repositoryUrl: fixtureUrl,
@@ -97,11 +101,13 @@ test("records existing, flaky and confirmed tests with exact callback replay", a
 			timeline.push(e)
 		},
 	})
+	// compare the saved timeline and selection with the delivered evidence
 	assert.deepEqual(JSON.parse(JSON.stringify(card.timeline)), timeline)
 	assert.deepEqual(
 		card.selection.omitted.map((u) => u.to),
 		["2.0.0"],
 	)
+	// attribute only the reproducible new failure to the upgrade
 	const outcome = card.upgrades[0]?.result
 	assert.equal(outcome?.status, "failed")
 	assert.deepEqual(
@@ -111,6 +117,7 @@ test("records existing, flaky and confirmed tests with exact callback replay", a
 	assert.equal(card.timeline.at(-1)?.type, "inspection.finished")
 })
 test("a transient outside write stops the trial on a successful install", async () => {
+	// inject a transient write into the successful install
 	const entries = scripts([], [], []).slice(0, 7)
 	const install = entries.at(-1)
 	assert.ok(install)
@@ -120,10 +127,12 @@ test("a transient outside write stops the trial on a successful install", async 
 		sandboxProvider: provider(entries),
 		limits: { maxUpgrades: 1 },
 	})
+	// verify that the finding survives the skipped check
 	assert.equal(card.upgrades[0]?.result.status, "untested")
 	assert.equal(card.upgrades[0]?.observation.findings.length, 1)
 })
 test("incomplete observation cannot pass; only confirmed denials become sandbox events", async () => {
+	// mark the network trace incomplete and vary the connection outcomes
 	const entries = scripts([], [], []).slice(0, 7)
 	const install = entries.at(-1)
 	assert.ok(install)
@@ -139,10 +148,12 @@ test("incomplete observation cannot pass; only confirmed denials become sandbox 
 		sandboxProvider: provider(entries),
 		limits: { maxUpgrades: 1 },
 	})
+	// check that only the confirmed denial produces a sandbox event
 	assert.equal(card.upgrades[0]?.result.status, "untested")
 	assert.equal(card.timeline.filter((e) => e.type === "sandbox.event" && e.action === "connection-blocked").length, 1)
 })
 test("broken Baseline prevents all trials", async () => {
+	// fail the baseline install before either upgrade trial
 	const entries = scripts([], [], []).slice(0, 3)
 	entries[2] = command(["install"], "broken", 1)
 	const card = await inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider: provider(entries) })
@@ -150,21 +161,25 @@ test("broken Baseline prevents all trials", async () => {
 	assert.ok(card.upgrades.every((u) => u.result.status === "untested"))
 })
 test("expired token and invalid sources fail before allocation", async () => {
+	// simulate expired credentials in the provider availability check
 	const sandboxProvider = createSandboxProvider({
 		token: "fixture",
 		fetch: async () => new Response(null, { status: 401 }),
 	})
+	// distinguish credential failure from repository url validation
 	await assert.rejects(inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider }), SandboxUnavailableError)
 	await assert.rejects(inspectRepository({ repositoryUrl: "https://github.com:443/ai/nanoid", sandboxProvider }), {
 		code: "invalid-repository",
 	})
 })
 test("preserves terminal evidence on callback failure and reconciles an ambiguous allocation", async () => {
+	// observe teardown when the event consumer throws
 	const sandboxProvider = provider([])
 	let deleted = false
 	sandboxProvider.destroySandbox = async () => {
 		deleted = true
 	}
+	// check that the thrown inspection error retains terminal evidence
 	await assert.rejects(
 		inspectRepository({
 			repositoryUrl: fixtureUrl,
@@ -178,6 +193,7 @@ test("preserves terminal evidence on callback failure and reconciles an ambiguou
 		(error: unknown) => error instanceof InspectionError && error.timeline.at(-1)?.type === "inspection.failed",
 	)
 	assert.ok(deleted)
+	// simulate a lost allocation and verify teardown again
 	deleted = false
 	sandboxProvider.createSandbox = async () => {
 		throw new SandboxUnavailableError("unavailable")
@@ -187,15 +203,18 @@ test("preserves terminal evidence on callback failure and reconciles an ambiguou
 })
 
 test("a confirmation deadline preserves the first result and the clean install evidence", async () => {
+	// replay a new failure that needs a confirmation install
 	const sandboxProvider = provider(scripts([], ["new failure"], []))
 	const reset = sandboxProvider.resetProject
 	let resets = 0
+	// interrupt the reset that starts confirmation
 	sandboxProvider.resetProject = async (...args) => {
 		if (++resets === 3) {
 			throw new InspectionError("deadline", "Confirmation interrupted")
 		}
 		await reset(...args)
 	}
+	// check that the original install and unconfirmed failure survive the deadline
 	const card = await inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider, limits: { maxUpgrades: 1 } })
 	const check = card.upgrades[0]
 	assert.equal(check?.install.status, "passed")
@@ -206,6 +225,7 @@ test("a confirmation deadline preserves the first result and the clean install e
 })
 
 test("a dirty confirmation install stops the check and redacts the finding in the saved card", async () => {
+	// add a sensitive path to the confirmation install findings
 	const entries = scripts([], [], []).slice(0, 8)
 	entries[7] = command(["typecheck", "build"], "error TS999", 1)
 	const retry = command(["install", "widget", "1.3.0"], "confirmation install")
@@ -216,6 +236,7 @@ test("a dirty confirmation install stops the check and redacts the finding in th
 		sandboxProvider: provider(entries),
 		limits: { maxUpgrades: 1 },
 	})
+	// verify that the saved evidence includes only the redacted path
 	const check = card.upgrades[0]
 	assert.equal(check?.tests.status, "untested")
 	assert.equal(check.tests.reason, "installation-finding")
@@ -227,12 +248,14 @@ test("a dirty confirmation install stops the check and redacts the finding in th
 test("malformed registry data leaves the baseline runnable", async () => {
 	const entries = scripts([], [], []).slice(0, 6)
 	entries[1] = command(["registry", "widget"], '{"widget":null}')
+	// check that malformed registry data permits the baseline and skips selection
 	const card = await inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider: provider(entries) })
 	assert.equal(card.baseline.install.status, "passed")
 	assert.equal(card.upgrades.length, 0)
 	assert.match(card.selection.skipped.join(" "), /registry/)
 })
 test("exit 124 retains identified test failures when the provider reports no timeout", async () => {
+	// replay a failed baseline test with a known case and exit code
 	const entries = scripts(["known"], [], []).slice(0, 6)
 	entries[4] = command(["tests"], "", 124)
 	entries.splice(1, 1)
@@ -241,10 +264,12 @@ test("exit 124 retains identified test failures when the provider reports no tim
 		sandboxProvider: provider(entries),
 		limits: { maxUpgrades: 0 },
 	})
+	// verify the provider still attributes the failure to the named case
 	assert.equal(card.baseline.tests.status, "failed")
 	assert.equal(card.baseline.tests.failingTests[0]?.name, "known")
 })
 test("a failed confirmation install prevents tests on the incomplete checkout", async () => {
+	// fail the confirmation install after the initial typecheck failure
 	const entries = scripts([], [], []).slice(0, 8)
 	entries[7] = command(["typecheck", "build"], "type error", 1)
 	entries.push(command(["install", "widget", "1.3.0"], "install error", 1))
@@ -253,6 +278,7 @@ test("a failed confirmation install prevents tests on the incomplete checkout", 
 		sandboxProvider: provider(entries),
 		limits: { maxUpgrades: 1 },
 	})
+	// check that the incomplete install prevents a test verdict
 	const result = card.upgrades[0]?.tests
 	assert.equal(result?.status, "untested")
 	assert.equal(result.reason, "confirmation-install-unavailable")

@@ -16,12 +16,14 @@ export type FixtureCommand = {
 	connections?: Observation
 	files?: Observation
 }
+// pin replay commands and model replies to a repository revision
 export type SandboxFixture = {
 	commit: string
 	commands: readonly FixtureCommand[]
 	agentReplies?: readonly ModelReply[]
 	verifiedStub?: boolean
 	patches?: readonly { request: PatchOperation; response: string | null }[]
+	// seed files readable through the fake provider
 	files?: Readonly<Record<string, string>>
 }
 
@@ -38,12 +40,14 @@ export function createFakeSandboxProvider(
 			index: number
 			turn: number
 			patch: number
+			// track isolated policy and evidence state for each fixture session
 			bound: boolean
 			locked: boolean
 			files: Map<string, string>
 			observations: Map<string, FixtureCommand>
 		}
 	>()
+	// require a live fixture sandbox before reading its state
 	function session(sandbox: Sandbox): NonNullable<ReturnType<typeof sessions.get>> {
 		const state = sessions.get(sandbox.id)
 		if (!state) {
@@ -51,6 +55,7 @@ export function createFakeSandboxProvider(
 		}
 		return state
 	}
+	// resolve installation observations by their capture id
 	function observed(sandbox: Sandbox, id: string): FixtureCommand {
 		const entry = session(sandbox).observations.get(id)
 		if (!entry) {
@@ -60,12 +65,14 @@ export function createFakeSandboxProvider(
 	}
 	return {
 		credentialEvents,
+		// bind a fake credential only during the locked registry phase
 		async openCredentialSession(sandbox, route): Promise<CredentialSession> {
 			const state = session(sandbox)
 			if (!state.locked || state.bound) {
 				throw new InspectionError("credential-binding", "Registry phase required")
 			}
 			const record = (action: string): void => {
+				// record credential lifecycle events for test assertions
 				credentialEvents.push({ sandboxId: sandbox.id, host: new URL(route.baseUrl).hostname, action })
 			}
 			state.bound = true
@@ -74,6 +81,7 @@ export function createFakeSandboxProvider(
 			record("attach")
 			record("readback")
 			return {
+				// require a successful probe before generating replies
 				async verify(): Promise<ModelReply> {
 					if (closed || !fixture.verifiedStub) {
 						throw new InspectionError("credential-binding", "Credential probe failed")
@@ -86,6 +94,7 @@ export function createFakeSandboxProvider(
 					if (closed || !verified) {
 						throw new InspectionError("credential-binding", "Verified stub required")
 					}
+					// consume the next recorded model reply
 					const reply = fixture.agentReplies?.[state.turn++]
 					if (!reply) {
 						throw new InspectionError("fixture-command", "Missing model reply")
@@ -108,6 +117,7 @@ export function createFakeSandboxProvider(
 			if (!state.locked || state.bound) {
 				throw new InspectionError("policy", "Registry phase required")
 			}
+			// match protected patch requests in fixture order
 			const patch = fixture.patches?.[state.patch++]
 			if (!patch || JSON.stringify(patch.request) !== JSON.stringify(request)) {
 				throw new InspectionError("fixture-command", "Unexpected patch operation")
@@ -150,6 +160,7 @@ export function createFakeSandboxProvider(
 			if (!state.locked || state.bound) {
 				throw new InspectionError("policy", "Registry policy required")
 			}
+			// match the next command against the recorded arguments
 			const entry = fixture.commands[state.index++]
 			if (!entry || JSON.stringify(command.argv) !== JSON.stringify(entry.argv)) {
 				throw new InspectionError("fixture-command", `Unexpected fixture command ${JSON.stringify(command.argv)}`)

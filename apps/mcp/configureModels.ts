@@ -22,6 +22,7 @@ export function configureModels(
 	environment: NodeJS.ProcessEnv,
 	request: typeof globalThis.fetch = globalThis.fetch,
 ): InspectionModels {
+	// bind the host client to the configured model origin
 	const { key } = credentials(environment)
 	const origin = modelOrigin(environment)
 	const baseUrl = `${origin}/v1`
@@ -30,6 +31,7 @@ export function configureModels(
 		apiKey: key,
 		fetch: (url, init) => request(url, { ...init, redirect: "error" }),
 	})
+	// apply built-in pricing only to the default model and origin
 	function pricing(modelId: string): Pricing {
 		const known = modelId === defaultModel && origin === defaultOrigin
 		return {
@@ -38,10 +40,12 @@ export function configureModels(
 			maxInputTokens: 65536,
 		}
 	}
+	// build authenticated handles for the two host roles
 	function host(role: "releaseSummary" | "featureMatch"): InspectionModels["releaseSummary"] {
 		const modelId = environment[roleVariables[role]] || defaultModel
 		return { model: provider(modelId), pricing: pricing(modelId) }
 	}
+	// give guest roles a reference to the registered secret
 	function guest(role: "repair" | "featureAdoption"): InspectionModels["repair"] {
 		const modelId = environment[roleVariables[role]] || defaultModel
 		return {

@@ -36,6 +36,7 @@ function offline(
 }
 test("independent inspections share a provider without sharing event delivery", async () => {
 	const sandboxProvider = offline()
+	// capture a separate callback history for each inspection
 	const inspect = async (): Promise<string> => {
 		const events: InspectionEvent[] = []
 		const card = await inspectRepository({
@@ -46,6 +47,7 @@ test("independent inspections share a provider without sharing event delivery", 
 			},
 			models: { future: "unused" },
 		})
+		// compare the saved timeline with the ordered callback events
 		assert.deepEqual(card.timeline, events)
 		assert.deepEqual(
 			events.map((e) => e.sequence),
@@ -55,6 +57,7 @@ test("independent inspections share a provider without sharing event delivery", 
 		assert.equal(card.baseline.tests.status, "untested")
 		return card.inspectionId
 	}
+	// start both inspections concurrently and check their identities
 	const [a, b] = await Promise.all([inspect(), inspect()])
 	assert.notEqual(a, b)
 })
@@ -62,6 +65,7 @@ test("budget admission, abort and cleanup failures retain ownership", async () =
 	const sandboxProvider = offline()
 	sandboxProvider.estimateMaxCost = () => 2
 	let allocated = false
+	// observe whether the over-budget request allocates a sandbox
 	sandboxProvider.createSandbox = async () => {
 		allocated = true
 		return { id: "unexpected" }
@@ -70,14 +74,17 @@ test("budget admission, abort and cleanup failures retain ownership", async () =
 		code: "deadline",
 	})
 	assert.equal(allocated, false)
+	// reject a cancellation supplied before the inspection starts
 	await assert.rejects(
 		inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider: offline(), signal: AbortSignal.abort() }),
 		{ code: "cancelled" },
 	)
+	// simulate a lost response during sandbox deletion
 	const failing = offline()
 	failing.destroySandbox = async () => {
 		throw Error("lost reply")
 	}
+	// verify that the failed inspection retains its cleanup identifier
 	await assert.rejects(inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider: failing }), (error: unknown) => {
 		assert.ok(error instanceof InspectionError)
 		assert.ok(error.cleanupId)
@@ -100,6 +107,7 @@ for (const [status, reason] of [
 				return new Response(null, { status })
 			},
 		})
+		// check the mapped reason and the number of availability calls
 		await assert.rejects(provider.checkAvailability(), { code: "sandbox-unavailable", reason })
 		assert.equal(calls, 1)
 	})
@@ -118,6 +126,7 @@ test("version one report can be replayed by a reader that ignores new fields", a
 	const golden = JSON.parse(readFileSync(new URL("./fixtures/recorded/npm/report-card.json", import.meta.url), "utf8"))
 	const sandboxProvider = offline("", "a".repeat(40))
 	const card = await inspectRepository({ repositoryUrl: "https://github.com/example/project", sandboxProvider })
+	// normalize volatile fields before comparing the recorded report
 	const stable: Record<string, string | number> = {
 		durationMs: 0,
 		timestamp: "2026-01-01T00:00:00.000Z",
@@ -125,6 +134,7 @@ test("version one report can be replayed by a reader that ignores new fields", a
 		sandboxId: "sandbox",
 	}
 	assert.deepEqual(JSON.parse(JSON.stringify(card, (key, value) => stable[key] ?? value)), golden)
+	// read the same versioned fields when the report contains extra data
 	const reader = ({ version, timeline }: typeof card): unknown => ({ version, timeline })
 	assert.deepEqual(reader(Object.assign({}, golden, { additional: "new" })), reader(golden))
 })
@@ -136,6 +146,7 @@ test("caller cancellation during a callback reaches the caller as cancellation",
 			repositoryUrl: fixtureUrl,
 			sandboxProvider: offline(),
 			signal: controller.signal,
+			// abort during a step callback that never settles
 			onEvent: async (event) => {
 				if (event.type === "step.started") {
 					controller.abort()
@@ -151,6 +162,7 @@ test("cleanup still starts when the host resumes past the admitted deadline", as
 	const sandboxProvider = offline()
 	const destroy = sandboxProvider.destroySandbox
 	let deleted = false
+	// record teardown after the inspection exceeds its deadline
 	sandboxProvider.destroySandbox = async (...args) => {
 		await destroy(...args)
 		deleted = true
@@ -160,6 +172,7 @@ test("cleanup still starts when the host resumes past the admitted deadline", as
 			repositoryUrl: fixtureUrl,
 			sandboxProvider,
 			limits: { maxDurationMs: 120 },
+			// suspend the host past the deadline immediately after allocation
 			onEvent(event) {
 				if (event.type === "sandbox.event" && event.action === "created") {
 					Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150)
@@ -179,6 +192,7 @@ test("structured credential values are scrubbed from detail events and the repor
 			events.push(event)
 		},
 	})
+	// verify redaction in both the callback stream and stored evidence
 	assert.doesNotMatch(JSON.stringify(events), /sample value/)
 	assert.doesNotMatch(JSON.stringify(card), /sample value/)
 	assert.ok(card.baseline.install.evidence[0]?.stdout.includes("[redacted]"))
@@ -189,12 +203,14 @@ test("throwing callbacks leave exactly one finish for each recorded step start",
 			inspectRepository({
 				repositoryUrl: fixtureUrl,
 				sandboxProvider: offline(),
+				// interrupt delivery at each boundary of the recorded step
 				onEvent(event) {
 					if (event.type === type) {
 						throw Error("callback")
 					}
 				},
 			}),
+			// check that a failed callback still leaves a balanced timeline
 			(error: unknown) => {
 				assert.ok(error instanceof InspectionError)
 				assert.equal(error.timeline.filter((e) => e.type === "step.started").length, 1)
@@ -215,6 +231,7 @@ test("a timed-out final check settles before its caller can publish", async () =
 	context.setupComplete = true
 	let published = false
 	let settled = false
+	// attempt publication only after the bounded final check settles
 	await assert.rejects(
 		async () => {
 			await context.group("setup", "Final patch check", async () => {
@@ -234,6 +251,7 @@ test("a timed-out final check settles before its caller can publish", async () =
 		},
 		{ code: "deadline" },
 	)
+	// confirm teardown settled before publication could proceed
 	assert.ok(settled)
 	assert.equal(published, false)
 })
@@ -242,6 +260,7 @@ test("a failed event listener leaves internal cleanup and terminal events sequen
 	const { InspectionContext } = await import("../src/collectEvents.ts")
 	const internal: InspectionEvent[] = []
 	let deliveries = 0
+	// record internal events while failing external delivery
 	const context = new InspectionContext({ repositoryUrl: fixtureUrl, sandboxProvider: offline() }, (event) => {
 		internal.push(event)
 		return async () => {
@@ -249,6 +268,7 @@ test("a failed event listener leaves internal cleanup and terminal events sequen
 			throw Error("Listener unavailable")
 		}
 	})
+	// reject subsequent work after the first delivery error
 	await assert.rejects(context.emit({ type: "inspection.started", repositoryUrl: fixtureUrl }), {
 		code: "event-delivery",
 	})
@@ -256,6 +276,7 @@ test("a failed event listener leaves internal cleanup and terminal events sequen
 		context.step("setup", "Next model", async () => assert.fail("Model should not start")),
 		{ code: "event-delivery" },
 	)
+	// finish the internal timeline during cleanup
 	context.cleaningUp = true
 	await context.emit({ type: "sandbox.event", sandboxId: "fixture", action: "deleted" })
 	await context.emit({ type: "inspection.failed", code: "event-delivery", message: "Delivery failed" })

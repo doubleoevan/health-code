@@ -38,10 +38,12 @@ export const patchOutput = z.object({
 type Fetch = { sha256: string; offset: number; checkout?: z.infer<typeof checkoutSchema> }
 const verifiedBytes = new WeakMap<object, { mailbox: string; digest: string }>()
 function verified(raw: object, patch: z.infer<typeof artifact>): boolean {
+	// reuse verification only while the mailbox and digest still match
 	const previous = verifiedBytes.get(raw)
 	if (previous?.mailbox === patch.mailbox && previous.digest === patch.digest) {
 		return true
 	}
+	// verify the complete mailbox before caching its digest
 	if (toHash(patch.mailbox) !== patch.digest) {
 		return false
 	}
@@ -57,12 +59,14 @@ function findPatch(
 		if (card.version !== 2 || !Array.isArray(upgrade.patches)) {
 			continue
 		}
+		// locate the requested patch within this upgrade
 		const raw = upgrade.patches.find((candidate) => candidate?.digest === hash)
 		if (raw) {
 			const parsed = artifact.safeParse(raw)
 			if (!parsed.success || !verified(raw, parsed.data)) {
 				throw new UserError("Patch is unreadable or its SHA-256 digest differs from the saved bytes.")
 			}
+			// require a library verdict before returning the patch
 			if (typeof upgrade.verdict !== "string") {
 				throw new UserError("Patch has no recorded Verdict.")
 			}
@@ -77,6 +81,7 @@ export function fetchPatch(card: SavedCard, input: Fetch): z.infer<typeof patchO
 	const page = textPage(patch.mailbox, input.offset)
 	const checkout = input.checkout ?? { relationship: "unknown", dirty: undefined }
 
+	// resolve the prerequisite within the same upgrade
 	const raw =
 		patch.prerequisite &&
 		siblings.find(
@@ -84,17 +89,20 @@ export function fetchPatch(card: SavedCard, input: Fetch): z.infer<typeof patchO
 				typeof candidate === "object" && candidate !== null && "id" in candidate && candidate.id === patch.prerequisite,
 		)
 	const prerequisite = raw ? artifact.safeParse(raw).data : undefined
+	// verify that the feature patch follows its tested upgrade
 	if (
 		patch.prerequisite &&
 		(prerequisite?.role !== "upgrade" ||
 			patch.role !== "feature" ||
 			prerequisite.prerequisite ||
+			// require the feature base to match the verified prerequisite tip
 			prerequisite.testedTip !== patch.base ||
 			!raw ||
 			!verified(raw, prerequisite))
 	) {
 		throw new UserError("Invalid Patch prerequisite order or digest.")
 	}
+	// stop the handoff if either patch changes tests
 	const blocked = [...patch.commits, ...(prerequisite?.commits ?? [])].some((commit) => commit.flag === "test")
 
 	return {
@@ -115,10 +123,12 @@ export function fetchPatch(card: SavedCard, input: Fetch): z.infer<typeof patchO
 	}
 }
 export function validateOutcome(card: SavedCard, outcome: Outcome): void {
+	// bind application results to a tested patch in this card
 	findPatch(card, outcome.sha256)
 	if (outcome.application === "adapted" && !outcome.adaptation) {
 		throw new UserError("Describe what changed in the adapted Patch.")
 	}
+	// restrict pull request links to the inspected repository
 	if (outcome.pullRequest) {
 		const prefix = `${card.repository.url.toLowerCase()}/pull/`
 		const url = outcome.pullRequest.toLowerCase()

@@ -7,6 +7,7 @@ const testFileErrors = z.array(z.object({ file: z.string(), reason: z.string() }
 /** Reads current and earlier test measurements into the public Report Card shape. */
 export const testInventorySummarySchema = z.union([
 	z.object({ counts, testFileErrors }),
+	// translate older exclusion records to the current test file errors
 	z
 		.object({ counts, exclusions: testFileErrors, testFileErrors: z.undefined().optional() })
 		.transform(({ counts, exclusions }) => ({ counts, testFileErrors: exclusions })),

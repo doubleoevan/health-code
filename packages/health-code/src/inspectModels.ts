@@ -31,6 +31,7 @@ import { evaluatePatch } from "./verifyPatch.ts"
 const summarySchema = z.object({ text: z.string().max(8000), sources: z.array(z.string()) })
 type Candidate = { report: UpgradeReportV2; evidence: PatchEvidence }
 export class ModelInspection {
+	// accumulate the version two timeline, reports and adoption candidates
 	readonly timeline: InspectionEventV2[] = []
 	readonly upgrades: UpgradeReportV2[] = []
 	readonly candidates: Candidate[] = []
@@ -38,12 +39,14 @@ export class ModelInspection {
 	readonly ledger: Ledger
 	readonly matchLimit: number
 	attempt?: { attemptId: string; role: AgentRole }
+	// keep pinned usage separate from observations after each installation
 	private readonly installedEvidence = new Map<string, { changelog: string; bytes?: number }>()
 	private readonly pinnedUsage = new Map<string, UsageEvidence>()
 	baseSize?: number
 	baseInstall?: Observation
 	baseTests?: Observation
 	baseIntegrity?: PatchEvidence["baselineIntegrity"]
+	// clamp inspection limits before constructing the model budget
 	constructor(readonly options: InspectionOptionsV2) {
 		this.limits = {
 			...options.limits,
@@ -55,6 +58,7 @@ export class ModelInspection {
 		if (!Number.isSafeInteger(this.matchLimit) || this.matchLimit < 0) {
 			throw new InspectionError("invalid-limits", "Invalid feature match limit")
 		}
+		// validate both guest routes before allocating sandbox time
 		for (const role of ["repair", "featureAdoption"] as const) {
 			if (!options.models[role]?.credential) {
 				throw new InspectionError("invalid-model-route", "Missing guest model route")
@@ -62,6 +66,7 @@ export class ModelInspection {
 			credentialTarget(options.models[role])
 			agentLimits(role, options.limits)
 		}
+		// reserve the sandbox cost before permitting model requests
 		validateModels(options.models)
 		const reserve = options.sandboxProvider.estimateMaxCost(this.limits.maxDurationMs)
 		if (!Number.isFinite(reserve) || reserve < 0) {
@@ -73,12 +78,14 @@ export class ModelInspection {
 			usage: [],
 		}
 	}
+	// forward version two events using the shared sequence
 	forward(event: InspectionEvent): () => Promise<void> {
 		const next = { ...event, version: 2 as const, sequence: this.timeline.length + 1, ...this.attempt }
 		this.timeline.push(next)
 		return async () => this.options.onEvent?.(structuredClone(next))
 	}
 	async emitAgentStarted(context: InspectionContext, sandbox: Sandbox): Promise<void> {
+		// require an active attempt before announcing agent startup
 		if (!this.attempt) {
 			throw new Error("Missing attempt identity")
 		}
@@ -102,6 +109,7 @@ export class ModelInspection {
 		context: InspectionContext,
 	): Promise<unknown> {
 		const { model, pricing } = this.options.models[role]
+		// build a bounded prompt for the selected host role
 		const prompt = await buildPrompt(role, evidence)
 		const text = await context.step("setup", role, (operation) =>
 			paidRequest({
@@ -133,16 +141,19 @@ export class ModelInspection {
 		)
 		return parseAnswer(text)
 	}
+	// capture pinned usage before dependency installation changes the tree
 	async captureUsage(adapter: NodeAdapter, selected: UpgradeReport["dependency"][]): Promise<void> {
 		for (const dependency of new Set(selected)) {
 			const usage = await adapter
 				.data(["usage", dependency])
 				.then((value) => usageEvidence.parse(value))
 				.catch(() => ({ usage: [], unresolved: ["Source inventory unavailable"], changelog: "" }))
+			// cache missing evidence as an explicit usage limitation
 			this.pinnedUsage.set(dependency, usage)
 		}
 	}
 	async captureInstallation(adapter: NodeAdapter, upgrade: UpgradeReport): Promise<void> {
+		// read the changelog and installed size from the upgraded tree
 		const changelog = await adapter
 			.data(["changelog", upgrade.dependency])
 			.then((value) => z.string().parse(value))
@@ -157,6 +168,7 @@ export class ModelInspection {
 		card: ReportCard,
 		upgrade: UpgradeReport,
 	): Promise<void> {
+		// attribute subsequent model requests to this upgrade
 		const offset = this.ledger.usage.length
 		const report = toUpgradeReport(upgrade)
 		this.upgrades.push(report)
@@ -166,6 +178,7 @@ export class ModelInspection {
 		const after = measured?.bytes
 		report.usageLimitations = usage.unresolved
 
+		// compare sizes only when both installations were measured
 		if (this.baseSize !== undefined && after !== undefined) {
 			report.installSize = {
 				before: this.baseSize,
@@ -174,6 +187,7 @@ export class ModelInspection {
 				method: "Installed regular-file bytes, deduplicated by device and inode",
 			}
 		}
+		// gather release evidence before requesting feature matches
 		const evidence = await context.step("setup", "Read release notes", (op) =>
 			readReleases({ upgrade, githubToken: this.options.githubToken, changelog, signal: op.signal }),
 		)
@@ -191,6 +205,7 @@ export class ModelInspection {
 			baseInstall: this.baseInstall,
 			baseTests: this.baseTests,
 		}
+		// verify diagnostic locations against the pinned source
 		await locateDiagnostics({
 			repository: card.repository,
 			locators: report.locators,
@@ -199,6 +214,7 @@ export class ModelInspection {
 		try {
 			await evaluatePatch(this, patchEvidence)
 		} finally {
+			// keep the model usage even when patch evaluation fails
 			report.modelUsage = this.ledger.usage.slice(offset)
 		}
 		this.candidates.push({ report, evidence: patchEvidence })
@@ -216,16 +232,19 @@ export class ModelInspection {
 		evidence: Awaited<ReturnType<typeof readReleases>>
 		repository: ReportCard["repository"]
 	}): Promise<void> {
+		// require a release source before asking for a summary
 		const sources = evidence.notes.map((note) => note.source)
 		if (!sources.length) {
 			return
 		}
 		try {
+			// accept only sources present in the collected evidence
 			const summary = summarySchema.parse(await this.requestHostModel("releaseSummary", evidence, context))
 			if (summary.sources.length && summary.sources.every((source) => sources.includes(source))) {
 				report.releaseSummary = summary
 			}
 			if (usage.usage.length) {
+				// request feature matches against observed source usage
 				const matches = matchSchema.parse(
 					await this.requestHostModel(
 						"featureMatch",
@@ -234,6 +253,7 @@ export class ModelInspection {
 					),
 				)
 				for (const match of matches) {
+					// retain matches that cite verified source locations
 					const verified = verifyMatch({ match, usage, notes: evidence.notes, repository })
 					if (verified) {
 						report.featureMatches.push(verified)
@@ -241,11 +261,13 @@ export class ModelInspection {
 				}
 			}
 		} catch (error) {
+			// preserve cancellation and delivery failures from model calls
 			rethrowInspectionFailure(error, context)
 			report.releaseSummary.text += " (model evidence incomplete)"
 		}
 	}
 	async adopt(): Promise<void> {
+		// evaluate the highest-ranked eligible match for each upgrade
 		for (const { candidate, match } of selectFeatureMatches(this.candidates, this.matchLimit)) {
 			const offset = this.ledger.usage.length
 			candidate.evidence.context.upgradeId = `${candidate.report.dependency}@${candidate.report.to}`
@@ -253,6 +275,7 @@ export class ModelInspection {
 			candidate.report.modelUsage.push(...this.ledger.usage.slice(offset))
 		}
 	}
+	// assemble the version two report from the measured upgrades
 	card(card: ReportCard): ReportCardV2 {
 		const reports = new Map(this.upgrades.map((upgrade) => [upgradeKey(upgrade), upgrade]))
 		return {
@@ -274,6 +297,7 @@ export class ModelInspection {
 	}
 }
 function validateModels(models: InspectionOptionsV2["models"]): void {
+	// validate price bounds for each required model role
 	for (const role of ["releaseSummary", "featureMatch", "repair", "featureAdoption"] as const) {
 		const model = models[role]
 		if (
@@ -286,6 +310,7 @@ function validateModels(models: InspectionOptionsV2["models"]): void {
 		) {
 			throw new InspectionError("pricing", "Four model roles require explicit price bounds")
 		}
+		// verify that host roles supply a configured model handle
 		if (
 			(role === "releaseSummary" || role === "featureMatch") &&
 			(!("model" in model) ||
@@ -293,6 +318,7 @@ function validateModels(models: InspectionOptionsV2["models"]): void {
 				typeof model.model !== "object" ||
 				typeof model.model.doGenerate !== "function")
 		) {
+			// reject an unusable host model before starting work
 			throw new InspectionError("invalid-model", "Expected a configured host model")
 		}
 	}
@@ -300,6 +326,7 @@ function validateModels(models: InspectionOptionsV2["models"]): void {
 export function hasModels(
 	options: InspectionOptions | InspectionOptionsV2 | PreviousInspectionOptions,
 ): options is InspectionOptionsV2 | PreviousInspectionOptions {
+	// distinguish configured model roles from legacy model ids
 	const models = options.models
 	if (models === undefined) {
 		return false
@@ -307,11 +334,13 @@ export function hasModels(
 	if (models === null || typeof models !== "object" || Array.isArray(models)) {
 		throw new InspectionError("invalid-model", "Expected a dictionary of model roles")
 	}
+	// select model-backed inspection for structured role settings
 	return Object.values(models).some((value) => typeof value !== "string")
 }
 export function toModelOptions(options: InspectionOptionsV2 | PreviousInspectionOptions): InspectionOptionsV2 {
 	const { models, limits } = options
 	const agent: NonNullable<PreviousInspectionOptions["limits"]>["agent"] = limits?.agent
+	// map older model and limit names to current roles
 	return {
 		...options,
 		models: {
@@ -342,6 +371,7 @@ function toTurnLimits(current: PreviousLimits, previous: PreviousLimits): Curren
 		maxCostUsd: lowestLimit(current?.maxCostUsd, previous?.maxCostUsd),
 	}
 }
+// apply the lowest supplied limit across compatible option names
 function lowestLimit(...values: (number | undefined)[]): number | undefined {
 	const specified = values.filter((value) => value !== undefined)
 	return specified.length ? Math.min(...specified) : undefined
@@ -349,6 +379,7 @@ function lowestLimit(...values: (number | undefined)[]): number | undefined {
 function upgradeKey(upgrade: Pick<UpgradeReport, "dependency" | "to">): string {
 	return `${upgrade.dependency}@${upgrade.to}`
 }
+// initialize unmeasured upgrade evidence with an explicit verdict
 function toUpgradeReport(upgrade: UpgradeReport): UpgradeReportV2 {
 	return {
 		...upgrade,

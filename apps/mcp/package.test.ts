@@ -29,10 +29,12 @@ test("the stderr check detects a model key split across chunks", () => {
 })
 
 test("packed Node MCP tools support offline inspection and durable results", { timeout: 30000 }, async () => {
+	// create a temporary home for the installed release
 	const scratch = await mkdtemp(join(tmpdir(), "health-code-mcp-package-"))
 	const home = join(scratch, "home")
 	const installed = join(home, "node_modules", "health-code")
 	const id = randomUUID()
+	// bind the fixture mailbox to its expected digest
 	const mailbox = "Subject: [PATCH] adopt feature\n\nverified fixture\n"
 	const sha256 = toHash(mailbox)
 	const repositoryUrl = "https://github.com/example/project"
@@ -56,6 +58,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			env: settings,
 			stderr: "pipe",
 		})
+		// inspect server diagnostics throughout the client session
 		transport.stderr?.on("data", checkStderr(modelKey))
 		const client = new Client({ name: "package-test", version: "1" })
 		await client.connect(transport)
@@ -72,11 +75,13 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		assert.equal(archives.length, 1)
 		const [archive] = archives
 		assert.ok(archive)
+		// unpack the tarball under its public package name
 		await mkdir(installed, { recursive: true })
 		execFileSync("tar", ["-xf", join(scratch, archive), "-C", installed, "--strip-components=1"])
 		const packed = JSON.parse(await readFile(join(installed, "package.json"), "utf8"))
 		assert.equal(packed.name, "health-code")
 		assert.equal(packed.bin["health-code"], "dist/mcp/cli.js")
+		// compare the release manifest with the private app's runtime pins
 		const workspace = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"))
 		const { [packed.name]: selfReference, ...runtime } = workspace.dependencies
 		assert.equal(selfReference, "workspace:*")
@@ -87,6 +92,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			join(home, "package.json"),
 			JSON.stringify({ private: true, dependencies: { "health-code": packed.version } }),
 		)
+		// link declared dependencies for an offline installation
 		for (const name of Object.keys(packed.dependencies)) {
 			const path = join(installed, "node_modules", name)
 			await mkdir(join(path, ".."), { recursive: true })
@@ -104,6 +110,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
    assert.equal(url.origin,"https://api.runta.com")
    assert.equal(new Headers(options.headers).get("Authorization"),"Bearer "+process.env.RUNTA_TOKEN)
    if(url.pathname==="/v2/runtimes"){return Response.json({data:[]})}
+   // verify registration against the account's named secret endpoint
    assert.match(url.pathname,/^\\/v2\\/secrets\\/health-code-model-/)
    assert.equal(options.method,"PUT")
    assert.equal(JSON.parse(options.body).value,process.env.ANTHROPIC_API_KEY)
@@ -112,6 +119,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
  }
  `,
 		)
+		// exercise failed and successful setup through the installed command
 		let entry: { command: string; args: string[] } | undefined
 		for (const denied of ["yes", "no"]) {
 			const setup = spawnSync("npx", ["health-code", "mcp", "setup"], {
@@ -128,6 +136,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 				entry = JSON.parse(`{${setup.stdout.split("\n")[2]}}`)["health-code"]
 				assert.ok(entry?.args.join(" ").includes(`health-code@${packed.version} mcp`))
 			}
+			// inspect both output streams for either credential
 			assert.ok(!(setup.stdout + setup.stderr).includes(modelKey))
 			assert.ok(!(setup.stdout + setup.stderr).includes(settings.RUNTA_TOKEN))
 			assert.equal(setup.stdout.includes("mcp_servers.health-code"), denied === "no")
@@ -146,6 +155,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			prompt: "Verify SHA-256, branch, apply and test.",
 			commits: [],
 		}
+		// put the feature patch on top of the tested upgrade tip
 		const featureMail = "Subject: [PATCH] use the feature\n\nfeature fixture\n"
 		const featureDigest = toHash(featureMail)
 		const feature = {
@@ -174,6 +184,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		await writeFile(join(checkout, "package.json"), '{"name":"example","private":true}')
 		const client = await connect({ ...entry, cwd: checkout })
 		try {
+			// verify discovery and read evidence written by another session
 			assert.equal(client.getServerVersion()?.version, packed.version)
 			assert.equal((await client.listTools()).tools.length, 4)
 			const reportCard = await client.callTool({ name: "read_inspection", arguments: { inspectionId: id } })
@@ -182,6 +193,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 				name: "get_tested_patch",
 				arguments: { inspectionId: id, sha256: featureDigest, checkout: { relationship: "ahead", dirty: false } },
 			})
+			// verify the selected patch digest and its prerequisite
 			const selectedPatch = selected.structuredContent as { prerequisiteSha256: string; text: string; sha256: string }
 			assert.equal(selectedPatch.prerequisiteSha256, sha256)
 			assert.equal(toHash(selectedPatch.text), selectedPatch.sha256)
@@ -196,6 +208,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 				tests: "passed",
 				pullRequest: `${repositoryUrl}/pull/2`,
 			}
+			// record an application result and reject a credential-bearing retry
 			const report = await client.callTool({ name: "report_patch_result", arguments: outcome })
 			assert.ok(!report.isError)
 			const refused = await client.callTool({
@@ -232,10 +245,12 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			cwd: installed,
 		})
 		try {
+			// reopen the recorded result in the new server process
 			const recovered = await replay.callTool({ name: "read_inspection", arguments: { inspectionId: id } })
 			assert.deepEqual((recovered.structuredContent as { results: unknown[] }).results.length, 1)
 			const response = await replay.callTool({ name: "start_inspection", arguments: { repositoryUrl } })
 			assert.ok(!response.isError)
+			// poll the accepted id until the report is complete
 			const accepted = response.structuredContent as { inspectionId: string }
 			let cursor = 0
 			let status = ""
@@ -247,11 +262,13 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 				})
 				assert.ok(!read.isError)
 				assert.ok(!JSON.stringify(read).includes(modelKey))
+				// advance the event cursor only after checking the tool result
 				const details = read.structuredContent as { status: string; nextSequence: number }
 				status = details.status
 				cursor = details.nextSequence
 			}
 			assert.equal(status, "complete")
+			// inspect the persisted report for leaked credentials
 			assert.ok(
 				!(
 					await readFile(join(home, ".health-code", "inspections", accepted.inspectionId, "card.json"), "utf8")
@@ -262,6 +279,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		}
 		console.log("Packed MCP server passed Node stdio discovery, fake inspection, Patch handoff and restart checks.")
 	} finally {
+		// remove the installed package and all recorded evidence
 		await rm(scratch, { recursive: true, force: true })
 	}
 })

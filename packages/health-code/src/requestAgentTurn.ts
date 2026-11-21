@@ -21,12 +21,14 @@ export async function requestAgentTurn({
 	started: boolean
 	budget: ReturnType<typeof attemptBudget>
 }): Promise<string> {
+	// require the provider's scoped credential capability
 	const { context, sandbox } = evidence
 	const provider = context.options.sandboxProvider
 	if (!provider.openCredentialSession) {
 		throw new InspectionError("credential-binding", "Provider lacks a verified credential capability")
 	}
 	const route = engine.options.models[role]
+	// cap verification and generation by the attempt and inspection deadlines
 	const operation = {
 		timeoutMs: Math.max(1, Math.min(120000, budget.end - Date.now(), engine.ledger.end - Date.now())),
 		signal: context.options.signal,
@@ -36,6 +38,7 @@ export async function requestAgentTurn({
 	const session = await bounded((signal) => open(sandbox, route, { ...operation, signal }), operation)
 
 	try {
+		// reserve a single-token credential probe before announcing startup
 		await paidRequest({
 			ledger: engine.ledger,
 			role,
@@ -52,6 +55,7 @@ export async function requestAgentTurn({
 		if (!started) {
 			await engine.emitAgentStarted(context, sandbox)
 		}
+		// charge the full model turn against the same attempt budget
 		return await context.step("setup", agentRoleLabels[role], (step) =>
 			paidRequest({
 				ledger: engine.ledger,

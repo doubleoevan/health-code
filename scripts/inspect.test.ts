@@ -14,6 +14,7 @@ test("the active terminal line survives detail output and clears on failure", ()
 	const writes: string[] = []
 	const log = createInspectionLog({ isTTY: true, columns: 30, write: (text) => writes.push(text) })
 	const meta = { version: 1, inspectionId: "test", timestamp: "", sequence: 1, stepId: "install" } as const
+	// replay a step interrupted by output and cancellation
 	log({ ...meta, type: "step.started", label: "Install" })
 	log({ ...meta, type: "detail", stream: "stdout", text: "\x1b[31mevidence\x1b[0m", truncated: false })
 	log({ ...meta, type: "inspection.failed", code: "cancelled", message: "cancelled" })
@@ -23,15 +24,18 @@ test("the active terminal line survives detail output and clears on failure", ()
 test("fake inspection writes plain progress and a complete report card", () => {
 	const cwd = mkdtempSync(join(tmpdir(), "health-code-cli-"))
 	try {
+		// run the recorded inspection without a terminal
 		const child = spawnSync(process.execPath, [entry, repositoryUrl, "--fake"], { cwd, encoding: "utf8" })
 		expect(child.status).toBe(0)
 		expect(child.stdout).toContain("Fixture mode")
 		expect(child.stdout).toContain("◆ deleted")
 		expect(child.stdout).not.toContain("\x1b[")
+		// locate the single saved report card
 		const [filename, ...extra] = readdirSync(join(cwd, "logs"))
 		expect(extra).toHaveLength(0)
 		const card: ReportCard = JSON.parse(readFileSync(join(cwd, "logs", filename ?? ""), "utf8"))
 		expect(filename).toBe(`${card.inspectionId}.fake.json`)
+		// verify the reported repository, result and final event
 		expect(card.repository.url).toBe(repositoryUrl)
 		expect(card.upgrades[0]?.result.status).toBe("passed")
 		expect(card.timeline.at(-1)?.type).toBe("inspection.finished")

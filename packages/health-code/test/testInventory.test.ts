@@ -15,12 +15,15 @@ test("final discovery preserves every comparable case and loaded suite", () => {
 	}
 	const [passes, fails] = initial.cases
 	assert.ok(passes && fails)
+	// compare case inventories against the discovered baseline
 	const changed = (cases: Integrity["cases"]): void => verifyCases(initial, { ...initial, cases })
 	assert.doesNotThrow(() => changed([passes, fails, ["custom/check.ts", "additional", "passed"]]))
+	// reject ambiguous, omitted and weakened cases
 	assert.throws(() => changed([passes, passes]), /ambiguous/)
 	assert.throws(() => changed([passes]), /omitted/)
 	assert.throws(() => changed([passes, ["custom/check.ts", "fails", "skipped"]]), /weakened/)
 	assert.throws(() => changed([passes, fails, ["custom/check.ts", "new failure", "failed"]]), /New failures/)
+	// require the empty suite to remain discoverable
 	assert.throws(() => verifyCases(initial, { ...initial, discoveredFiles: ["custom/check.ts"] }), /disappeared/)
 })
 
@@ -28,10 +31,12 @@ test("repeated Baseline titles retain every passing invocation", () => {
 	const repeated = ["advisories.test.ts", "invalid audit output fails closed", "passed"] as const
 	const cases: Integrity["cases"] = Array.from({ length: 4 }, () => [...repeated])
 	const initial: Integrity = { cases, files: [], hooks: [], testFileErrors: [] }
+	// compare invocation counts before accepting repeated titles
 	const compare = (current: Integrity["cases"]): void => verifyCases(initial, { ...initial, cases: current })
 	assert.doesNotThrow(() => compare(cases))
 	assert.throws(() => compare(cases.slice(1)), /ambiguous|omitted/)
 	assert.throws(() => compare([...cases, [...repeated]]), /ambiguous/)
+	// reject mixed outcomes for indistinguishable invocations in either inventory
 	for (const state of ["failed", "skipped", "todo"] as const) {
 		const mixed: Integrity["cases"] = [...cases.slice(1), [repeated[0], repeated[1], state]]
 		assert.throws(() => compare(mixed), /ambiguous/)
@@ -44,6 +49,7 @@ test("runner suite and case titles retain their boundaries", async () => {
 	const left = jsonCaseName({ ancestorTitles: ["outer", "inner"], title: "example" })
 	const right = jsonCaseName({ ancestorTitles: ["outer"], title: "inner > example" })
 	assert.notEqual(left, right)
+	// distinguish a literal title match from a structured suite path
 	assert.equal(caseMatchesTitle(jsonCaseName({ title: "", ancestorTitles: [] }), ""), true)
 	assert.equal(caseMatchesTitle(left, left), false)
 	assert.equal(caseMatchesTitle(jsonCaseName({ fullName: left }), left), true)

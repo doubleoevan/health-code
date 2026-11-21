@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# create a disposable consumer for the packed library
 root=$(pwd)
 consumer=$(mktemp -d)
 trap 'rm -rf "$consumer"' EXIT
+# pack the release and reject development-only directories
 npm_config_cache="$consumer/npm-cache" npm pack ./packages/health-code --silent --pack-destination "$consumer" >/dev/null
 cd "$consumer"
 archive=$(basename ./*.tgz)
@@ -10,6 +12,7 @@ tar -tf "$archive" | awk '/^package\/(test|src|fixtures|guest|scripts|\.tsbuild)
 # Give the tarball exactly the dependency graph installed by the frozen workspace.
 mkdir -p node_modules/health-code
 tar -xf "$archive" -C node_modules/health-code --strip-components=1
+# link the dependencies declared by the installed tarball
 node --input-type=module - "$root" <<'JS'
 import {mkdirSync,readFileSync,realpathSync,symlinkSync} from "node:fs"
 import {dirname,join} from "node:path"
@@ -21,6 +24,7 @@ for (const name of Object.keys(manifest.dependencies)) {
   symlinkSync(realpathSync(join(process.argv[2], "packages/health-code/node_modules", name)), target, "dir")
 }
 JS
+# exercise the public library from an independent consumer
 echo '{"private":true,"type":"module"}' > package.json
 cat > consumer.mjs <<'JS'
 import assert from "node:assert/strict"
@@ -71,9 +75,11 @@ mkdir -p standalone/project
 cp node_modules/health-code/dist/{guest,observe}.mjs standalone/
 cp "$root/packages/health-code/test/fixtures/recorded/npm/"{package.json,package-lock.json} standalone/project/
 (cd standalone/project && node ../guest.mjs detect | node -e 'const data=JSON.parse(require("node:fs").readFileSync(0));if(data.manager!=="npm"||data.sources.widget["."]!=="1.2.0")process.exit(1)')
+# replay the same inspection under node and bun
 cp "$root/scripts/fixtures/recorded/inspection.json" fixture.json
 node consumer.mjs
 bun consumer.mjs
+# typecheck both report card versions against the packed declarations
 cat > consumer.ts <<'TS'
 import { inspectRepository, type InspectionOptions, type ReportCard } from "health-code"
 import type {InspectionOptionsV2, ReportCardV2} from "health-code"

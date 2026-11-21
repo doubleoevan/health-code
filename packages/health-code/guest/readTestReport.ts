@@ -10,6 +10,7 @@ export function reporterArguments(script: string, path = reportPath): string[] {
 	if (!/^(?:bun test|vitest(?: run)?|jest)(?:\s+[\w./=-]+)*$/.test(script)) {
 		return []
 	}
+	// choose the runner's supported machine-readable reporter
 	if (script.startsWith("bun test")) {
 		return ["--reporter=junit", `--reporter-outfile=${path}`]
 	}
@@ -31,12 +32,14 @@ type XmlCase = { name?: string; classname?: string; file?: string; failure?: unk
 function fileName(path: string): string {
 	return isAbsolute(path) ? relative(process.cwd(), path) : path
 }
+// use structured identities when matching protected test cases
 function reportedXmlName(item: XmlCase, structured: boolean): string {
 	return structured && item.name
 		? xmlCaseName(item.name, item.classname)
 		: [item.classname, item.name].filter(Boolean).join(" ")
 }
 function xmlFailures(suites: XmlSuite[], structured: boolean): TestFailure[] {
+	// collect failures recursively from nested xml suites
 	const failures: TestFailure[] = []
 	for (const suite of suites) {
 		failures.push(...xmlFailures(suite.testsuite ?? [], structured))
@@ -44,6 +47,7 @@ function xmlFailures(suites: XmlSuite[], structured: boolean): TestFailure[] {
 		if (!cases.length && Number(suite.errors) > 0) {
 			failures.push({ workspace: ".", file: fileName(suite.file ?? suite.name ?? "unknown") })
 		}
+		// retain the reported file for each failing case
 		for (const item of cases) {
 			if (item.failure !== undefined || item.error !== undefined) {
 				failures.push({
@@ -64,6 +68,7 @@ export function readTestReport(
 	granularity: "case" | "exit"
 	failures: TestFailure[]
 } {
+	// use exit status for scripts without structured reporters
 	if (!reporterArguments(script).length) {
 		return { complete: true, granularity: "exit", failures: [] }
 	}
@@ -71,6 +76,7 @@ export function readTestReport(
 	if (!existsSync(path) || statSync(path).size > 16 * 1024 * 1024) {
 		return { complete: false, granularity: "case", failures: [] }
 	}
+	// parse the bounded report using its detected format
 	const text = protectedReport ? readFileSync(path, "utf8") : readText(path)
 	if (text.trimStart().startsWith("<")) {
 		if (/<!DOCTYPE/i.test(text)) {
@@ -82,6 +88,7 @@ export function readTestReport(
 			processEntities: false,
 			isArray: (name) => name === "testsuite" || name === "testcase",
 		}).parse(text)
+		// require a suite list before accepting xml results
 		const suites = xml.testsuites?.testsuite ?? xml.testsuite
 		if (!Array.isArray(suites)) {
 			throw new Error("Invalid test report")
@@ -90,6 +97,7 @@ export function readTestReport(
 	}
 	return { complete: true, granularity: "case", failures: scopeFailures(jsonFailures(text, protectedReport)) }
 }
+// extract case and suite failures from the json reporter
 function jsonFailures(text: string, structured: boolean): TestFailure[] {
 	const json = JSON.parse(text)
 	if (!Array.isArray(json.testResults)) {
@@ -97,11 +105,13 @@ function jsonFailures(text: string, structured: boolean): TestFailure[] {
 	}
 	const failures: TestFailure[] = []
 	for (const suite of json.testResults as Suite[]) {
+		// group failing assertions by their originating file
 		const file = fileName(suite.name ?? "unknown")
 		const failed = (suite.assertionResults ?? []).filter((test) => test.status === "failed")
 		for (const test of failed) {
 			failures.push({ workspace: ".", file, name: structured ? jsonCaseName(test) : test.fullName })
 		}
+		// retain suite-level failures without individual case results
 		if (!failed.length && suite.status === "failed") {
 			failures.push({ workspace: ".", file })
 		}
@@ -113,6 +123,7 @@ function scopeFailures(failures: TestFailure[]): TestFailure[] {
 	if (!failures.length) {
 		return failures
 	}
+	// attribute each failed file to its owning workspace
 	const workspaces = workspaceDirectories()
 	return failures.map((failure) => {
 		const workspace = workspaces.find((dir) => failure.file.startsWith(`${dir}/`))

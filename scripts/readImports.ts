@@ -4,12 +4,14 @@ type SourceImport = { path: string; line: number; typeOnly: boolean }
 
 /** Reads literal module specifiers, including types erased by the transpiler. */
 export function readImports(filePath: string, text: string): SourceImport[] {
+	// reject incomplete syntax trees before checking module boundaries
 	const source = parseSync(filePath, text, { sourceType: "unambiguous" })
 	const [error] = source.errors
 	if (error) {
 		throw new Error(`${filePath}: ${error.message}`)
 	}
 
+	// track source positions across successive imports
 	const imports: SourceImport[] = []
 	const lineBreaks = text.matchAll(/\r\n|[\r\n\u2028\u2029]/g)
 	let nextBreak = lineBreaks.next()
@@ -32,6 +34,7 @@ export function readImports(filePath: string, text: string): SourceImport[] {
 		imports.push({ path, line, typeOnly })
 	}
 
+	// classify type-only imports and re-exports
 	const visitor = new Visitor({
 		ImportDeclaration(node) {
 			const namedTypesOnly =
@@ -55,6 +58,7 @@ export function readImports(filePath: string, text: string): SourceImport[] {
 		TSImportType(node) {
 			record(node.source, true)
 		},
+		// include dynamic imports and literal require calls
 		ImportExpression(node) {
 			record(node.source)
 		},

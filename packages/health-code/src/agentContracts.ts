@@ -13,12 +13,14 @@ import type {
 export type AgentRole = "repair" | "featureAdoption"
 export const agentRoleLabels = { repair: "Repair", featureAdoption: "Feature adoption" } as const
 export type ModelRole = AgentRole | "releaseSummary" | "featureMatch"
+// price each request against the caller's token ceiling
 export type Pricing = {
 	inputUsdPerMillion: number
 	outputUsdPerMillion: number
 	fixedUsd?: number
 	maxInputTokens: number
 }
+// describe a guest model route and its scoped credential
 export type ModelRoute = {
 	protocol: "anthropic" | "openai-compatible"
 	effort?: "low" | "medium" | "high"
@@ -26,6 +28,7 @@ export type ModelRoute = {
 	modelId: string
 	credential: { name: string; header: string; valueTemplate: string }
 }
+// distinguish caller-owned models from sandbox routes
 type HostModel = { model: Exclude<LanguageModel, string>; pricing: Pricing }
 export type InspectionModels = {
 	releaseSummary: HostModel
@@ -33,6 +36,7 @@ export type InspectionModels = {
 	repair: ModelRoute & { pricing: Pricing }
 	featureAdoption: ModelRoute & { pricing: Pricing }
 }
+// bound each role by turns, duration and cost
 type AttemptLimits = { maxTurns: number; maxDurationMs: number; maxCostUsd: number }
 export type InspectionOptionsV2 = Omit<InspectionOptions, "models" | "onEvent" | "limits"> & {
 	models: InspectionModels
@@ -41,9 +45,11 @@ export type InspectionOptionsV2 = Omit<InspectionOptions, "models" | "onEvent" |
 		maxFeatureMatches?: number
 		agent?: Partial<Record<AgentRole, Partial<AttemptLimits>>>
 	}
+	// deliver events using the version two envelope
 	onEvent?: (event: InspectionEventV2) => void | Promise<void>
 }
 type CompatibleAgentLimits = Partial<AttemptLimits> & { maxIterations?: number }
+// accept earlier role and limit names at the package boundary
 export type PreviousInspectionOptions = Omit<InspectionOptionsV2, "models" | "limits"> & {
 	models: Pick<InspectionModels, "releaseSummary" | "featureMatch"> &
 		(Pick<InspectionModels, "repair"> | { fix: InspectionModels["repair"] }) &
@@ -56,6 +62,7 @@ export type PreviousInspectionOptions = Omit<InspectionOptionsV2, "models" | "li
 type VersionTwo<T> = T extends unknown
 	? Omit<T, "version"> & { version: 2; attemptId?: string; role?: ModelRole }
 	: never
+// extend inspection events with verified agent startup
 export type InspectionEventV2 =
 	| VersionTwo<InspectionEvent>
 	| (Omit<Extract<InspectionEvent, { type: "sandbox.event" }>, "version" | "action"> & {
@@ -64,6 +71,7 @@ export type InspectionEventV2 =
 			role: AgentRole
 			attemptId: string
 	  })
+// record usage and cost for each model role
 export type ModelUsage = {
 	role: ModelRole
 	step: string
@@ -71,10 +79,12 @@ export type ModelUsage = {
 	durationMs: number
 	inputTokens?: number
 	outputTokens?: number
+	// distinguish recorded charges from outstanding reservations
 	costUsd?: number
 	reservedUsd?: number
 	requestId?: string
 }
+// capture model output and provider usage identifiers
 export type ModelReply = {
 	text: string
 	modelId: string
@@ -82,6 +92,7 @@ export type ModelReply = {
 	outputTokens?: number
 	requestId?: string
 }
+// define verification, generation and revocation for a scoped session
 export type CredentialSession = {
 	verify(operation: Operation): Promise<ModelReply>
 	generate(prompt: string, operation: Operation): Promise<ModelReply>
@@ -93,6 +104,7 @@ export type AgentCapability = (
 	operation: Operation & { cleanupDeadline?: number },
 ) => Promise<CredentialSession>
 export type Locator = { file: string; line?: number; url?: string; reason?: string }
+// tie a suggested replacement to its evidence
 export type FeatureMatch = {
 	rank?: number
 	replacement?: "direct" | "inferred"
@@ -100,6 +112,7 @@ export type FeatureMatch = {
 	callSites?: Locator[]
 	feature: string
 	source: string
+	// classify the replacement and record its measured benefit
 	location: Locator
 	kind: "workaround" | "dependency" | "deprecated" | "option"
 	benefit?: {
@@ -108,6 +121,7 @@ export type FeatureMatch = {
 		after: number
 		name?: string
 	}
+	// track whether the proposed match produced a patch
 	disposition: string
 	patchId?: string
 }
@@ -116,6 +130,7 @@ export type PatchVerification = Baseline & {
 	testNetwork: Observation
 	addedCases: { file: string; name: string }[]
 }
+// bind tested changes to their base and verified tip
 export type Patch = {
 	verification?: PatchVerification
 	id: string
@@ -123,6 +138,7 @@ export type Patch = {
 	base: string
 	testedTip: string
 	prerequisite?: string
+	// carry replayable mailbox bytes and their digest
 	filename: string
 	mailbox: string
 	digest: string
@@ -130,6 +146,7 @@ export type Patch = {
 	commits: { subject: string; sha: string; reason?: string; flag?: "dependency" | "test" }[]
 }
 export type Verdict = "Passes as is" | "Fixed" | "Fixed with test changes" | "Can't fix" | "Untested"
+// summarize upgrade evidence and the resulting verdict
 export type UpgradeReportV2 = UpgradeReport & {
 	usageLimitations?: string[]
 	releaseSummary: { text: string; sources: string[]; gaps?: string[] }
@@ -137,12 +154,14 @@ export type UpgradeReportV2 = UpgradeReport & {
 	locators: Locator[]
 	installSize: { before?: number; after?: number; delta?: number; reason?: string; method?: string }
 	verdict: Verdict
+	// record the commits and model usage behind each outcome
 	newDependencies: { name: string; version: string; reason: string; commit: string }[]
 	patches: Patch[]
 	diagnosis?: { breakingChange: string; actions: string[]; stopReason: string }
 	attemptDurationMs?: Partial<Record<AgentRole, number>>
 	modelUsage: ModelUsage[]
 }
+// preserve the pinned report envelope with version two results
 export type ReportCardV2 = Omit<ReportCard, "version" | "timeline" | "upgrades"> & {
 	version: 2
 	limits?: { maxDurationMs: number; maxCostUsd: number; agent: Record<AgentRole, AttemptLimits> }

@@ -11,20 +11,24 @@ for (const protocol of ["anthropic", "openai-compatible"] as const) {
 			modelId: "fixture",
 			credential: { name: "stored", header: "x-fixture", valueTemplate: `Bearer \${credential}` },
 		}
+		// route both wire protocols through the caller's proxy
 		const url = credentialTarget(route).href
 		const result = await infer(
 			{ route, url, stub: "inert", editTool: true, prompt: "hi", maxOutputTokens: 4 },
 			(destination, headers, body): Response => {
+				// verify the exact destination and caller-selected credential header
 				assert.equal(destination, url)
 				assert.equal(headers.get("x-fixture"), "Bearer inert")
 				assert.equal(headers.has("authorization"), false)
 				assert.equal(headers.has("x-api-key"), false)
 				assert.equal(JSON.parse(String(body)).model, "fixture")
+				// construct the same edit proposal for both response formats
 				const action = {
 					reason: "Update one call",
 					edits: [{ file: "index.ts", search: "old()", replacement: "updated()" }],
 				}
 				assert.equal(JSON.parse(String(body)).tools.length, 1)
+				// encode the tool call and usage in the selected protocol
 				const response =
 					protocol === "anthropic"
 						? {
@@ -66,6 +70,7 @@ for (const protocol of ["anthropic", "openai-compatible"] as const) {
 				return Response.json(response)
 			},
 		)
+		// verify the normalized edit and token counts
 		assert.equal(JSON.parse(result.text ?? "{}").edits[0].file, "index.ts")
 		assert.equal(result.inputTokens, 12)
 		assert.equal(result.outputTokens, 1)

@@ -6,15 +6,18 @@ export function streamInspection(options: {
 	after: number
 	signal: AbortSignal
 }): Response {
+	// resume from the client's last delivered event
 	const { inspections, id, signal } = options
 	let cursor = options.after
 	let wake: (() => void) | undefined
 	let closed = false
 	const notify = (): void => wake?.()
+	// wake idle subscribers periodically to send keepalives
 	const encoder = new TextEncoder()
 	const pageSize = 32
 	const heartbeat = setInterval(notify, 15000)
 	const close = (): void => {
+		// release the heartbeat and wake any outstanding read on disconnect
 		closed = true
 		clearInterval(heartbeat)
 		inspections.changes.off(id, notify)
@@ -29,11 +32,13 @@ export function streamInspection(options: {
 	}
 	const body = new ReadableStream<Uint8Array>({
 		async pull(controller) {
+			// finish a pending pull when the client has already disconnected
 			if (closed) {
 				controller.close()
 				return
 			}
 			try {
+				// arm the wakeup before reading the next persisted page
 				const change = Promise.withResolvers<void>()
 				wake = change.resolve
 				const events = inspections.store.publicEvents(id, cursor, pageSize)
@@ -50,10 +55,12 @@ export function streamInspection(options: {
 					close()
 					return
 				}
+				// send available events immediately so a full backlog drains in pages
 				if (frames.length) {
 					controller.enqueue(encoder.encode(frames.join("")))
 					return
 				}
+				// wait for a change or heartbeat after an empty read
 				controller.enqueue(encoder.encode(": heartbeat\n\n"))
 				await change.promise
 			} catch (error) {

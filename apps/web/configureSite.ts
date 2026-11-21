@@ -29,6 +29,7 @@ export function createLiveSource(
 	environment: NodeJS.ProcessEnv,
 	inspect: (options: InspectionOptionsV2) => Promise<ReportCardV2> = inspectRepository,
 ): InspectionSource {
+	// require live credentials and a deployment namespace before accepting work
 	const token = environment.RUNTA_TOKEN
 	const key = environment.ANTHROPIC_API_KEY
 	const name = environment.HEALTH_CODE_STORED_CREDENTIAL
@@ -38,11 +39,13 @@ export function createLiveSource(
 			"Configure HEALTH_CODE_DEPLOYMENT, RUNTA_TOKEN, ANTHROPIC_API_KEY and HEALTH_CODE_STORED_CREDENTIAL before starting the live site",
 		)
 	}
+	// restrict the hosted service to its budgeted model
 	const hostedModel = "claude-opus-5-5"
 	const modelId = environment.HEALTH_CODE_MODEL ?? hostedModel
 	if (modelId !== hostedModel) {
 		throw new Error("The hosted inspection requires Claude Opus 5.5")
 	}
+	// bind host requests to the fixed endpoint and reject redirects
 	const baseUrl = "https://api.anthropic.com/v1"
 	const provider = createAnthropic({
 		baseURL: baseUrl,
@@ -53,6 +56,7 @@ export function createLiveSource(
 			{ preconnect: fetch.preconnect },
 		),
 	})
+	// share price bounds between host handles and credential-bound guest routes
 	const pricing = { inputUsdPerMillion: 4, outputUsdPerMillion: 20, maxInputTokens: 65536 }
 	const host = { model: provider(modelId), pricing }
 	const guest = {
@@ -62,6 +66,7 @@ export function createLiveSource(
 		credential: { name, header: "x-api-key", valueTemplate: `\${credential}` },
 		pricing,
 	}
+	// configure per-inspection spend, duration and upgrade limits
 	const sandboxProvider = createSandboxProvider({ deployment, token })
 	const limits = {
 		maxUpgrades: toInspectionLimit(environment.HEALTH_CODE_MAX_UPGRADES, 6),
@@ -71,6 +76,7 @@ export function createLiveSource(
 	if (!Number.isSafeInteger(limits.maxUpgrades)) {
 		throw new Error("Expected a whole-number upgrade limit")
 	}
+	// bind github lookup and sandbox recovery to the hosted deployment
 	const githubToken = environment.GITHUB_TOKEN
 	return {
 		...createRepositoryLookup(githubToken),

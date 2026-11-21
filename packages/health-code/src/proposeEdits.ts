@@ -9,6 +9,7 @@ const dependency = z.object({
 })
 
 export function readDecision(input: unknown): z.infer<typeof decision> {
+	// translate incomplete model responses into retry instructions
 	if (input && typeof input === "object" && "retry" in input) {
 		throw new Error(
 			input.retry === "output-limit"
@@ -20,6 +21,7 @@ export function readDecision(input: unknown): z.infer<typeof decision> {
 }
 
 export const decision = z.object({
+	// bound the proposed edits and their supporting evidence
 	reason: z.string().min(1).max(4000),
 	edits: z
 		.array(

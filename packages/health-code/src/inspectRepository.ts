@@ -25,6 +25,7 @@ export function inspectRepository(options: InspectionOptions): Promise<ReportCar
 export async function inspectRepository(
 	input: InspectionOptions | InspectionOptionsV2 | PreviousInspectionOptions,
 ): Promise<ReportCard | ReportCardV2> {
+	// select the model-backed inspection contract and validate the repository
 	const engine = hasModels(input) ? new ModelInspection(toModelOptions(input)) : undefined
 	const options = toCheckOptions(input, engine)
 	const repositoryUrl = toRepositoryUrl(options.repositoryUrl)
@@ -32,21 +33,25 @@ export async function inspectRepository(
 	if (engine) {
 		engine.ledger.end = context.end - context.cleanupMs
 	}
+	// retain the allocation identity for cleanup on all exit paths
 	const provider = options.sandboxProvider
 	let allocation: Sandbox | undefined
 	let card: ReportCard | undefined
 	let failure: InspectionError | undefined
 	try {
+		// announce the inspection before contacting the provider
 		await context.emit({ type: "inspection.started", repositoryUrl })
 		await context.step("setup", "Check sandbox availability", (config) =>
 			provider.checkAvailability({ ...config, timeoutMs: Math.min(10000, config.timeoutMs) }),
 		)
 		const sandbox = await context.step("setup", "Create sandbox", async (config) => {
+			// reserve the sandbox identity before awaiting allocation
 			allocation = { id: `health-code-${context.id}` }
 			const created = await provider.createSandbox(allocation.id, config)
 			allocation = created
 			return created
 		})
+		// publish the sandbox lifecycle events before checkout
 		for (const action of ["created", "credentials-withheld"] as const) {
 			await context.emit({ type: "sandbox.event", sandboxId: sandbox.id, action })
 		}
@@ -60,12 +65,14 @@ export async function inspectRepository(
 			provider.setNetworkPolicy(sandbox, registryHosts, { ...config, timeoutMs: Math.min(10000, config.timeoutMs) }),
 		)
 		await context.emit({ type: "sandbox.event", sandboxId: sandbox.id, action: "network-locked" })
+		// inspect the pinned project under the registry policy
 		context.setupComplete = true
 		card = await inspectProject(context, sandbox, { url: repositoryUrl, commit }, engine)
 	} catch (error) {
 		failure = asFailure(error)
 	} finally {
 		context.cleaningUp = true
+		// release allocated resources even if setup failed
 		if (allocation) {
 			failure = await release(context, allocation, failure)
 		}
@@ -73,6 +80,7 @@ export async function inspectRepository(
 	if (failure || !card) {
 		return failInspection(context, failure, engine)
 	}
+	// emit completion after teardown succeeds
 	try {
 		await context.emit({
 			type: "inspection.finished",
@@ -80,6 +88,7 @@ export async function inspectRepository(
 			durationMs: Date.now() - context.started,
 		})
 	} catch (error) {
+		// preserve delivery failure evidence on the inspection error
 		const failed = asFailure(error)
 		failed.timeline = engine?.timeline ?? context.timeline
 		throw failed
@@ -91,6 +100,7 @@ async function failInspection(
 	failure?: InspectionError,
 	engine?: ModelInspection,
 ): Promise<never> {
+	// publish the terminal failure with redacted diagnostic details
 	const error = failure ?? new InspectionError("inspection-failed", "Inspection did not return a report")
 	try {
 		await context.emit({
@@ -130,12 +140,14 @@ async function release(
 	const provider = context.options.sandboxProvider
 	try {
 		// Give cleanup its reserved window if the host resumed after the inspection deadline.
+		// give teardown its reserved timeout window
 		const timeoutMs = context.cleanupWindow()
 		await bounded((signal) => provider.destroySandbox(allocation, { timeoutMs, signal }), { timeoutMs })
 	} catch {
 		failure ??= new InspectionError("cleanup-failed", "Sandbox deletion could not be confirmed")
 		failure.cleanupId = allocation.id
 	}
+	// emit deletion only when teardown has succeeded
 	if (!failure?.cleanupId) {
 		try {
 			await context.emit({ type: "sandbox.event", sandboxId: allocation.id, action: "deleted" })
@@ -170,6 +182,7 @@ async function inspectProject(
 		timeline: context.timeline,
 	}
 	try {
+		// restore the pinned tree before detecting the project
 		await adapter.resetProject()
 		const project = await adapter.detectProject()
 		card.packageManager = { name: project.manager, version: project.version }
@@ -179,6 +192,7 @@ async function inspectProject(
 			card.selection.selected.map((upgrade) => upgrade.dependency),
 		)
 		card.baseline.install = await adapter.install()
+		// capture installation evidence for baseline comparisons
 		if (engine) {
 			engine.baseInstall = adapter.lastObservation
 			engine.baseSize = await sizeBytes(adapter).catch(() => undefined)
@@ -186,15 +200,18 @@ async function inspectProject(
 		if (card.baseline.install.status === "passed") {
 			card.baseline.typecheck = await adapter.typecheck()
 			card.baseline.tests = await adapter.test()
+			// retain baseline test coverage for independent patch checks
 			if (engine) {
 				engine.baseTests = adapter.lastObservation
 				engine.baseIntegrity = await readIntegrity(adapter).catch(() => undefined)
 			}
 		}
+		// check the selected upgrades before ranking feature adoption
 		await inspectSelected(context, adapter, card, sandbox, engine)
 		await engine?.adopt()
 	} catch (error) {
 		let reason: string
+		// distinguish missing project evidence from fatal inspection failures
 		if (error instanceof ProjectEvidenceError) {
 			reason = error.message
 		} else if (error instanceof InspectionError && error.code === "deadline") {
@@ -202,12 +219,14 @@ async function inspectProject(
 		} else {
 			throw error
 		}
+		// preserve the reason that detection or inspection stopped
 		if ("reason" in card.packageManager) {
 			card.packageManager = { reason }
 		}
 		card.selection.skipped.push(reason)
 		card.upgrades.push(...card.selection.selected.slice(card.upgrades.length).map((u) => skippedUpgrade(u, reason)))
 	} finally {
+		// clear the upgrade identity before returning the partial card
 		context.upgradeId = undefined
 	}
 	return card
@@ -221,11 +240,13 @@ async function inspectSelected(
 ): Promise<void> {
 	for (const upgrade of card.selection.selected) {
 		context.upgradeId = `${upgrade.dependency}@${upgrade.to}`
+		// identify upgrades blocked by an unavailable baseline or deadline
 		const blocked =
 			card.baseline.install.status !== "passed" ||
 			(adapter.project?.typecheck !== "none" && card.baseline.typecheck.status !== "passed")
 		const report = skippedUpgrade(upgrade, blocked ? "baseline-unavailable" : "inspection-deadline")
 		card.upgrades.push(report)
+		// run checks only for upgrades with a usable baseline
 		if (!blocked) {
 			await inspectUpgrade({
 				adapter,
@@ -256,24 +277,28 @@ async function inspectUpgrade({
 	baseline: Baseline
 	afterInstall?: () => Promise<void>
 }): Promise<void> {
+	// start each installation check from the pinned project
 	await adapter.resetProject()
 	const first = await adapter.bumpDependency(report)
 	report.install = first.check
 	report.observation = first.observation
 	if (!installationReason(report.observation)) {
 		report.install = await confirm(first.check, baseline.install, async () => {
+			// recreate the upgrade to confirm a failing install
 			await adapter.resetProject()
 			const second = await adapter.bumpDependency(report)
 			report.observation = second.observation
 			return second.check
 		})
 	}
+	// stop further checks when installation evidence is incomplete
 	const reason = installationReason(report.observation)
 	if (reason || report.install.status !== "passed") {
 		report.result = reason ? untested(reason, report.install.evidence) : report.install
 		report.tests = report.typecheck = untested(reason ?? "install-failed")
 		return
 	}
+	// capture installed evidence before comparing test and typecheck results
 	await afterInstall?.()
 	if (!(await checkStages(adapter, report, baseline))) {
 		return
@@ -292,18 +317,21 @@ async function inspectUpgrade({
 
 async function checkStages(adapter: EcosystemAdapter, report: UpgradeReport, baseline: Baseline): Promise<boolean> {
 	for (const stage of ["typecheck", "tests"] as const) {
+		// run and confirm each applicable check against the baseline
 		const firstCheck = stage === "tests" ? await adapter.test() : await adapter.typecheck()
 		report[stage] = await confirm(firstCheck, baseline[stage], () => repeatCheck(adapter, report, stage))
 		const checked = report[stage]
 		const interrupted =
 			checked.status === "untested" &&
 			["inspection-deadline", "confirmation-install-unavailable"].includes(checked.reason)
+		// retain the observation or deadline reason that stopped the stage
 		const reason = installationReason(report.observation) ?? (interrupted ? checked.reason : undefined)
 		if (reason) {
 			report.result = untested(reason, checked.evidence)
 			if (stage === "typecheck") {
 				report.tests = untested(reason)
 			}
+			// stop before running another stage after a blocking finding
 			return false
 		}
 	}
@@ -315,6 +343,7 @@ async function repeatCheck(
 	report: UpgradeReport,
 	stage: "typecheck" | "tests",
 ): Promise<CheckResult> {
+	// reinstall the upgrade on a freshly restored project
 	await adapter.resetProject()
 	const install = await adapter.bumpDependency(report)
 	report.observation = install.observation
@@ -322,11 +351,13 @@ async function repeatCheck(
 	if (install.check.status !== "passed" || installationReason(install.observation)) {
 		return untested("confirmation-install-unavailable", install.check.evidence)
 	}
+	// rerun the failed stage with its build prerequisites
 	if (stage === "typecheck") {
 		return adapter.typecheck()
 	}
 	if (adapter.project?.typecheck !== "none") {
 		const typecheck = await adapter.typecheck()
+		// preserve a missing confirmation build as untested
 		if (typecheck.status !== "passed") {
 			return untested("confirmation-build-unavailable", typecheck.evidence)
 		}

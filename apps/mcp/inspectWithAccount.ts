@@ -7,6 +7,7 @@ export function inspectWithAccount(
 	options: Parameters<Inspect>[0] & { sandboxProvider?: SandboxProvider },
 	environment: NodeJS.ProcessEnv,
 ): Promise<ReportCardV2> {
+	// resolve the developer's model roles and sandbox account for this inspection
 	const models = configureModels(environment)
 	return inspectRepository({
 		...options,

@@ -20,11 +20,13 @@ export async function reconcileSandboxes(options: {
 	liveInspectionIds: ReadonlySet<string>
 	fetch?: typeof globalThis.fetch
 }): Promise<void> {
+	// restrict runtime inventory to the selected deployment
 	const prefix = toSandboxPrefix(options.deployment)
 	const origin = "https://api.runta.com/v2/runtimes"
 	const request = options.fetch ?? fetch
 	const headers = { Authorization: `Bearer ${options.token}` }
 	const url = new URL(origin)
+	// request bounded pages and retain ids for deferred deletion
 	url.searchParams.set("limit", "100")
 	const cursors = new Set<string>()
 	const orphanIds = new Set<string>()
@@ -36,6 +38,7 @@ export async function reconcileSandboxes(options: {
 			await response.body?.cancel()
 			throw new InspectionError("cleanup-inventory", "Unable to list deployment sandboxes")
 		}
+		// separate abandoned deployment runtimes from live inspections
 		const page = runtimePage.parse(await response.json())
 		for (const id of orphanedRuntimeIds(page.data, prefix, options.liveInspectionIds)) {
 			orphanIds.add(id)
@@ -43,6 +46,7 @@ export async function reconcileSandboxes(options: {
 		if (!page.pagination.has_more) {
 			break
 		}
+		// require a fresh cursor before requesting the next inventory page
 		const cursor = page.pagination.next_cursor
 		if (!cursor || cursors.has(cursor)) {
 			throw new InspectionError("cleanup-inventory", "Invalid inventory cursor")
@@ -65,6 +69,7 @@ async function deleteOrphans({
 	headers: { Authorization: string }
 	origin: string
 }): Promise<void> {
+	// attempt every orphan deletion before reporting incomplete cleanup
 	let incomplete = false
 	for (const id of orphanIds) {
 		try {
@@ -75,6 +80,7 @@ async function deleteOrphans({
 				signal: AbortSignal.timeout(15000),
 			})
 			await response.body?.cancel()
+			// accept a missing runtime as already reclaimed
 			if (!response.ok && response.status !== 404) {
 				incomplete = true
 			}
@@ -82,6 +88,7 @@ async function deleteOrphans({
 			incomplete = true
 		}
 	}
+	// report any remaining cleanup failure after processing the inventory
 	if (incomplete) {
 		throw new InspectionError("cleanup-failed", "Unable to delete every deployment sandbox")
 	}
@@ -94,11 +101,13 @@ function* orphanedRuntimeIds(
 ): Generator<string> {
 	for (const runtime of runtimes) {
 		const suffix = runtime.display_name.slice(prefix.length)
+		// match the exact deployment prefix and an inactive inspection uuid
 		if (
 			runtime.display_name.startsWith(prefix) &&
 			z.uuid().safeParse(suffix).success &&
 			!liveInspectionIds.has(suffix)
 		) {
+			// yield the provider runtime id for deletion
 			yield runtime.id
 		}
 	}

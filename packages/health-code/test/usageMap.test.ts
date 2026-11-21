@@ -24,6 +24,7 @@ test("pinned usage distinguishes aliases, shadowed names, generated source and d
 			),
 		)
 	try {
+		// build a workspace with aliased, shadowed and dynamic usage
 		mkdirSync(join(root, "apps/a"), { recursive: true })
 		writeFileSync(join(root, "package.json"), '{"workspaces":["apps/*"]}')
 		writeFileSync(join(root, "apps/a/package.json"), '{"name":"fixture"}')
@@ -33,6 +34,7 @@ test("pinned usage distinguishes aliases, shadowed names, generated source and d
 		)
 		writeFileSync(join(root, "apps/a/unknown.ts"), "import(variableName)")
 		writeFileSync(join(root, "gen.ts"), '// @generated\nimport "widget"')
+		// check the verified call sites against the pinned source
 		const data = measure('readUsage("widget")') as {
 			usage: { symbol: string; workspace: string; line: number }[]
 			unresolved: string[]
@@ -46,6 +48,7 @@ test("pinned usage distinguishes aliases, shadowed names, generated source and d
 			],
 		)
 		assert.deepEqual(data.unresolved, ["apps/a/unknown.ts"])
+		// measure shared installed files once across workspace links
 		assert.equal(measure("installedBytes()"), null)
 		mkdirSync(join(root, "node_modules"))
 		mkdirSync(join(root, "apps/a/node_modules"))
@@ -53,6 +56,7 @@ test("pinned usage distinguishes aliases, shadowed names, generated source and d
 		linkSync(join(root, "node_modules/a"), join(root, "apps/a/node_modules/a"))
 		symlinkSync(join(root, "apps/a"), join(root, "node_modules/workspace"))
 		assert.equal(measure("installedBytes()"), 5)
+		// resolve diagnostic links only for lines present in the pinned source
 		const locators: Locator[] = [
 			{ file: "my file.ts", line: 2 },
 			{ file: "missing.ts", line: 3 },
@@ -82,6 +86,7 @@ test("feature ranking uses the cited symbol and distinct verified call sites", (
 		unresolved: [],
 		changelog: "",
 	}
+	// propose a release-backed match with one unverified call site
 	const source = "notes"
 	const quote = "Replace old with current."
 	const entry = {
@@ -100,6 +105,7 @@ test("feature ranking uses the cited symbol and distinct verified call sites", (
 		repository: { url: "https://github.com/test/fixture", commit: "a".repeat(40) },
 		notes: [{ source, text: quote, workspaces: ["."] }],
 	}
+	// compare replacement direction and negation in the cited text
 	for (const [text, expected] of [
 		["current replaces old", "direct"],
 		["old replaces current", "inferred"],
@@ -114,10 +120,12 @@ test("feature ranking uses the cited symbol and distinct verified call sites", (
 			expected,
 		)
 	}
+	// retain the supporting quote across multiple release notes
 	const verified = verifyMatch({
 		...input,
 		notes: [{ source, text: "Earlier release", workspaces: ["."] }, ...input.notes],
 	})
+	// treat an unrelated mention of both symbols as inferred
 	const unrelated = "The old behavior is unchanged in current."
 	assert.equal(
 		verifyMatch({
@@ -127,6 +135,7 @@ test("feature ranking uses the cited symbol and distinct verified call sites", (
 		})?.replacement,
 		"inferred",
 	)
+	// verify only call sites supported by pinned usage
 	assert.equal(verified?.replacement, "direct")
 	assert.deepEqual(
 		verified?.callSites?.map((loc) => loc.line),

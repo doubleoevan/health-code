@@ -7,6 +7,7 @@ import type { ModelRoute } from "../src/agentContracts.ts"
 import { decision } from "../src/proposeEdits.ts"
 
 type Input = {
+	// describe the model route and request payload
 	route: ModelRoute
 	url: string
 	prompt: string
@@ -15,6 +16,7 @@ type Input = {
 	editTool?: boolean
 	denyOnly?: boolean
 }
+// report the gateway status and billed model usage
 type Receipt = {
 	status: number
 	errorCode?: string
@@ -22,12 +24,14 @@ type Receipt = {
 	modelId?: string
 	inputTokens?: number
 	outputTokens?: number
+	// retain the provider request id for reconciliation
 	requestId?: string
 }
 export async function infer(
 	{ route, url, prompt, maxOutputTokens, stub, denyOnly, editTool }: Input,
 	send = requestModel,
 ): Promise<Receipt> {
+	// probe the gateway before sending the full prompt
 	if (denyOnly) {
 		return probeGateway({ route, url, stub }, send)
 	}
@@ -43,16 +47,19 @@ export async function infer(
 		if (destination !== url || init?.method?.toUpperCase() !== "POST") {
 			throw new Error("Unexpected model route")
 		}
+		// replace sdk credentials with the scoped gateway stub
 		const headers = new Headers(init?.headers)
 		headers.delete("authorization")
 		headers.delete("x-api-key")
 		headers.set(route.credential.header, route.credential.valueTemplate.replace(`\${credential}`, stub))
 		errorCode = "transport"
+		// record the status before handing the response back to the sdk
 		const response = send(url, headers, init.body)
 		status = response.status
 		errorCode = "model-response"
 		return response
 	}
+	// select the sdk matching the configured wire protocol
 	const settings = { baseURL: route.baseUrl, apiKey: "placeholder", fetch: transport }
 	const provider =
 		route.protocol === "anthropic" ? createAnthropic(settings) : createOpenAICompatible({ ...settings, name: "caller" })
@@ -74,6 +81,7 @@ export async function infer(
 			providerOptions:
 				route.protocol === "anthropic" && route.effort ? { anthropic: { effort: route.effort } } : undefined,
 		})
+		// extract the bounded edit proposal and its usage
 		const action = reply.toolCalls.find((call) => call.toolName === "proposeEdits")
 		return {
 			status,
@@ -84,11 +92,13 @@ export async function infer(
 			requestId: reply.response.id,
 		}
 	} catch (error) {
+		// expose only a short transport code on failure
 		const cause = error instanceof Error ? error.cause : undefined
 		const code = cause && typeof cause === "object" && "code" in cause ? String(cause.code) : ""
 		return { status, errorCode: /^[A-Z_]{3,50}$/.test(code) ? code : errorCode }
 	}
 }
+// translate incomplete tool replies into retry decisions
 function encodeDecision(input: unknown, finish: string): string {
 	if (finish === "length") {
 		return JSON.stringify({ retry: "output-limit" })
@@ -96,15 +106,18 @@ function encodeDecision(input: unknown, finish: string): string {
 	if (input === undefined) {
 		return JSON.stringify({ retry: "missing-tool" })
 	}
+	// preserve an already serialized tool argument
 	return typeof input === "string" ? input : JSON.stringify(input)
 }
 function probeGateway({ route, url, stub }: Pick<Input, "route" | "url" | "stub">, send: typeof requestModel): Receipt {
+	// prepare a minimal authenticated gateway probe
 	const headers = new Headers({ "content-type": "application/json" })
 	if (route.protocol === "anthropic") {
 		headers.set("anthropic-version", "2023-06-01")
 	}
 	headers.set(route.credential.header, route.credential.valueTemplate.replace(`\${credential}`, stub))
 	let status = 0
+	// capture the denial status without interpreting the body
 	try {
 		status = send(url, headers, "{}").status
 	} catch {
@@ -116,6 +129,7 @@ function requestModel(url: string, headers: Headers, body: unknown): Response {
 	if (typeof body !== "string") {
 		throw new Error("Expected JSON model request")
 	}
+	// bound the guest transport's duration and response size
 	const args = [
 		"-q",
 		"--silent",
@@ -133,6 +147,7 @@ function requestModel(url: string, headers: Headers, body: unknown): Response {
 		"--data-binary",
 		"@-",
 	]
+	// forward the validated model request headers
 	for (const [name, value] of headers) {
 		args.push("--header", `${name}: ${value}`)
 	}
@@ -145,10 +160,12 @@ function requestModel(url: string, headers: Headers, body: unknown): Response {
 	if (curl.status !== 0) {
 		throw new Error("Model transport unavailable")
 	}
+	// split curl's trailing status from the response body
 	const boundary = curl.stdout.lastIndexOf("\n")
 	const status = Number(curl.stdout.slice(boundary + 1))
 	return new Response(curl.stdout.slice(0, boundary), { status, headers: { "content-type": "application/json" } })
 }
+// serve a single model request from standard input
 if (process.argv[1] === "/opt/health-code/agent.mjs") {
 	try {
 		console.log(JSON.stringify(await infer(JSON.parse(readFileSync(0, "utf8")))))

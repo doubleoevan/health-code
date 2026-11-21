@@ -69,12 +69,14 @@ export function guestArguments(command: Command, observation: string | undefined
 		"--chdir",
 		"/project",
 	]
+	// mount the protected test report with the requested access
 	if (testMount) {
 		args.push(testMount.writable ? "--bind" : "--ro-bind", testMount.path, `/inspection-${testMount.kind}`)
 	}
 	if (observation) {
 		args.push("--bind", observation, "/evidence")
 	}
+	// wrap observed commands with the syscall tracer
 	args.push("--")
 	if (observation) {
 		args.push(
@@ -94,6 +96,7 @@ export function guestArguments(command: Command, observation: string | undefined
 			"--",
 		)
 	}
+	// drop privileges and capabilities before launching repository code
 	args.push(
 		"setpriv",
 		"--reuid=65534",
@@ -115,26 +118,32 @@ export function guestArguments(command: Command, observation: string | undefined
 		"npm_config_cache=/project/.health-code/npm",
 		"PNPM_HOME=/project/.health-code/pnpm",
 	)
+	// pass placeholders only for permitted application variables
 	for (const name of command.environment ?? []) {
 		if (/^[A-Z_][A-Z0-9_]{0,127}$/i.test(name) && !reserved.test(name)) {
 			args.push(`${name}=placeholder`)
 		}
 	}
+	// launch the command through the trusted syscall filter
 	args.push("/usr/bin/python3", "-I", "/opt/health-code/execute.py", ...command.argv)
 	return args
 }
 
 /** Keeps DNS capture and trace files outside the repository user's reach. */
-export const observe = `set -eu
+export const observe = [
+	`set -eu
 dir="$1"; shift
 mkdir -m 700 "$dir"
-(ulimit -f 65536; cd /var/lib/health-code/work && find . -type l -print0) > "$dir/links"
-(ulimit -f 65536; exec ip netns exec health-code tcpdump --immediate-mode -U -nn -l -tt -i any 'port 53') > "$dir/dns" 2>"$dir/status" &
+(ulimit -f 65536; cd /var/lib/health-code/work && find . -type l -print0) > "$dir/links"`,
+	// capture dns traffic inside the network namespace
+	`(ulimit -f 65536; exec ip netns exec health-code tcpdump --immediate-mode -U -nn -l -tt -i any 'port 53') > "$dir/dns" 2>"$dir/status" &
 capture=$!
-trap 'kill -INT "$capture" 2>/dev/null || true; wait "$capture" || true' EXIT
-i=0
+trap 'kill -INT "$capture" 2>/dev/null || true; wait "$capture" || true' EXIT`,
+	// wait for packet capture before starting the command
+	`i=0
 until grep -q 'listening on' "$dir/status"; do
   kill -0 "$capture" && test "$i" -lt 40 || exit 125
   sleep .05; i=$((i+1))
 done
-"$@"`
+"$@"`,
+].join("\n")

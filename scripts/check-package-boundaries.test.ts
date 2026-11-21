@@ -18,6 +18,7 @@ function check(): { status: number; output: string } {
 }
 
 beforeEach(() => {
+	// build an isolated set of workspace manifests
 	root = mkdtempSync(join(tmpdir(), "health-code-boundaries-"))
 	for (const [folder, name] of Object.entries({
 		"packages/health-code": "health-code",
@@ -34,6 +35,7 @@ beforeEach(() => {
 				devDependencies: { "test-tool": "1.0.0" },
 			}),
 		)
+		// map a private-file alias alongside the public reference
 		write(
 			`${folder}/tsconfig.json`,
 			JSON.stringify({
@@ -45,6 +47,7 @@ beforeEach(() => {
 			}),
 		)
 	}
+	// link the public package as the resolver would find it in a workspace
 	mkdirSync(join(root, "node_modules"))
 	symlinkSync("../packages/health-code", join(root, "node_modules/health-code"))
 	write("packages/health-code/public.ts", 'export { value } from "./private.ts"')
@@ -76,6 +79,7 @@ test.each([
 	["apps/web", 'import "third-party"', "declare third-party"],
 	["apps/mcp", 'import "test-tool"', "runtime imports"],
 ])("%s flags %s with its source location", (workspace, statement, message) => {
+	// include the offending import and its source line in the diagnostic
 	write(`${workspace}/index.ts`, `\n${statement}`)
 	const result = check()
 	expect(result.status).toBe(1)
@@ -136,6 +140,7 @@ test("inherited JSONC paths resolve relative to the declaring config", () => {
 		"references": [{ "path": "../../packages/health-code" },],
 	}`,
 	)
+	// resolve the inherited alias from its declaring directory
 	write("apps/web/index.ts", 'import "#library/private.js"')
 	const result = check()
 	expect(result.status).toBe(1)
@@ -170,6 +175,7 @@ test("mixed imports count as runtime dependencies and type-only forms stay erase
 			'import { type Config, create } from "test-tool"',
 		].join("\r\n"),
 	)
+	// flag only the import that survives transpilation
 	const result = check()
 	expect(result.status).toBe(1)
 	expect(result.output.trim()).toBe("apps/web/index.ts:5 imports test-tool: declare runtime imports in dependencies")

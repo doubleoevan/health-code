@@ -13,12 +13,14 @@ test("the paid entry point routes each credential and closes the guest binding o
 		ANTHROPIC_API_KEY: "synthetic-model-key",
 		GITHUB_TOKEN: "synthetic-github-token",
 	}
+	// load recorded commands for the inspected project
 	const repositoryUrl = "https://github.com/example/project"
 	const fixture: SandboxFixture = JSON.parse(
 		await readFile(new URL("../../scripts/fixtures/recorded/inspection.json", import.meta.url), "utf8"),
 	)
 	const [detect, registry, install, , report, bump] = fixture.commands
 	assert.ok(detect && registry && install && report && bump)
+	// prepare matching source and release evidence for the fixture
 	const source = "index.ts"
 	const summarySource = "https://github.com/example/widget/releases/tag/v1.3.0"
 	const evidence = { complete: true, findings: [], destinations: [] }
@@ -30,6 +32,7 @@ test("the paid entry point routes each credential and closes the guest binding o
 			connections: evidence,
 		}
 	}
+	// replay a passing test inventory before and after the bump
 	const size = command(["installed-size"], 100)
 	const tests = command(["tests", "--inventory"], {
 		counts: { passed: 1, failed: 0, skipped: 0, todo: 0 },
@@ -46,6 +49,7 @@ test("the paid entry point routes each credential and closes the guest binding o
 		changelog: "",
 		unresolved: [],
 	})
+	// order guest responses to match the inspection phases
 	const commands = [
 		detect,
 		registry,
@@ -70,6 +74,7 @@ test("the paid entry point routes each credential and closes the guest binding o
 		...fixture,
 		commands: commands.map((entry) => ({ ...entry, connections: evidence })),
 	})
+	// emulate the patch workspace at its inspected and upgraded revisions
 	const mailbox = "From abc fixture\nSubject: [PATCH] upgrade widget\n"
 	provider.patchWorkspace = async (_sandbox, request) => {
 		switch (request.kind) {
@@ -77,12 +82,14 @@ test("the paid entry point routes each credential and closes the guest binding o
 				return "b".repeat(40)
 			case "export":
 				return mailbox
+			// return revision-specific manifest and source contents
 			case "read":
 				if (request.file === "package.json") {
 					return JSON.stringify({ dependencies: { widget: request.revision === fixture.commit ? "1.2.0" : "1.3.0" } })
 				}
 				assert.equal(request.file, source)
 				return "widget()"
+			// acknowledge verification and restoration of the fixture
 			case "verify":
 				return request.tip
 			case "restore":
@@ -91,12 +98,14 @@ test("the paid entry point routes each credential and closes the guest binding o
 				throw new Error("Unexpected workspace operation")
 		}
 	}
+	// record the lifetime of the host-bound credential session
 	const phases: string[] = []
 	provider.openCredentialSession = async (_sandbox, route) => {
 		assert.equal(route.credential.name, secretName("https://api.anthropic.com"))
 		assert.equal(route.baseUrl, "https://api.anthropic.com/v1")
 		assert.ok(!JSON.stringify(route).includes(environment.ANTHROPIC_API_KEY))
 		phases.push("open")
+		// supply model replies with measured token usage
 		const reply = { modelId: route.modelId, inputTokens: 1, outputTokens: 1 }
 		return {
 			async verify(): Promise<typeof reply & { text: string }> {
@@ -113,15 +122,18 @@ test("the paid entry point routes each credential and closes the guest binding o
 			},
 		}
 	}
+	// intercept requests and check credentials at each destination
 	const requested: string[] = []
 	const request = mock.method(globalThis, "fetch", async (input: string | URL, init?: RequestInit) => {
 		const url = new URL(input)
 		const headers = new Headers(init?.headers)
+		// keep registry lookups anonymous
 		if (url.hostname === "registry.npmjs.org") {
 			assert.equal(headers.get("authorization"), null)
 			requested.push("registry")
 			return Response.json({ repository: "https://github.com/example/widget" })
 		}
+		// require the github token for release metadata
 		if (url.hostname === "api.github.com") {
 			assert.equal(headers.get("authorization"), `Bearer ${environment.GITHUB_TOKEN}`)
 			assert.equal(url.pathname, "/graphql")
@@ -138,9 +150,11 @@ test("the paid entry point routes each credential and closes the guest binding o
 				},
 			})
 		}
+		// check that host inference receives only the model key
 		assert.equal(url.href, "https://api.anthropic.com/v1/messages")
 		assert.equal(headers.get("x-api-key"), environment.ANTHROPIC_API_KEY)
 		assert.equal(headers.get("authorization"), null)
+		// replay the summary and match responses in order
 		const first = !requested.includes("summary")
 		requested.push(first ? "summary" : "match")
 		const value = first
@@ -164,17 +178,20 @@ test("the paid entry point routes each credential and closes the guest binding o
 			signal: new AbortController().signal,
 			onEvent(): void {},
 		}
+		// reject missing credentials before any request
 		assert.throws(
 			() => inspectWithAccount(options, { ...environment, ANTHROPIC_API_KEY: undefined }),
 			/ANTHROPIC_API_KEY/,
 		)
 		assert.deepEqual(requested, [])
+		// check the versioned evidence and the complete credential session
 		const card = await inspectWithAccount(options, environment)
 		assert.equal(card.version, 2)
 		assert.deepEqual(requested, ["registry", "releases", "summary", "match"])
 		assert.deepEqual(phases, ["open", "verify", "generate", "close"])
 		assert.ok(card.timeline.some((event) => event.type === "sandbox.event" && event.action === "agent-started"))
 		assert.ok(!Object.values(environment).some((value) => JSON.stringify(card).includes(value)))
+		// recover the exact mailbox and library prompt by digest
 		const patch = fetchPatch(cardSchema.parse(card), { sha256: toHash(mailbox), offset: 0 })
 		assert.equal(patch.text, mailbox)
 		assert.equal(patch.agentPrompt, card.upgrades[0]?.patches[0]?.prompt)

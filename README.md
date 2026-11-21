@@ -73,11 +73,12 @@ Completed Report Cards live under `~/.health-code/inspections/<inspection-id>/ca
 
 ## Development
 
-Use the Bun version in `.bun-version`. From the repository root, run `bun install --frozen-lockfile`, then `bash scripts/preflight.sh`. The test suite covers repository checks and the inspection engine using recorded fixtures.
+Use the Bun version in `.bun-version`. From the repository root, run `bun install --frozen-lockfile`, then `bash scripts/preflight.sh`. The test suite covers repository checks and the inspection engine using recorded fixtures. Claude Code runs the same comment check after file edits and writes. Hook mode uses `jq` to read the edited path. For `.tsx`, follow the JSX section-comment rules and review them during `/ship`.
 
 | Command | What it checks |
 | --- | --- |
 | `bun run check` | Runs preflight, the same command used by CI and /ship. Stops at the first failure. |
+| `bash scripts/check-comment-groups.sh --tracked` | Flags runs over eight uncommented statement lines in tracked `.ts`, `.mts`, `.js`, `.mjs` and `.sh` files. |
 | `bun run check:style` | Checks formatting, lint rules, and import order with Biome. |
 | `bun run check:structure` | Checks the placement of package manifests. |
 | `bun run check:boundaries` | Checks imports, dependency declarations, and TypeScript references across the workspaces. |

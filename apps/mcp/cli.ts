@@ -9,6 +9,7 @@ import { InspectionStore } from "./storeInspection.ts"
 import { Inspections } from "./trackInspections.ts"
 
 async function main(args: string[]): Promise<void> {
+	// reject unsupported subcommands before loading account settings
 	if (args[0] !== "mcp" || args.length > 2 || (args.length === 2 && args[1] !== "setup")) {
 		throw new UserError("Usage: health-code mcp [setup]")
 	}
@@ -19,12 +20,14 @@ async function main(args: string[]): Promise<void> {
 		return
 	}
 
+	// bind inspection jobs to the stdio session
 	const inspections = new Inspections(new InspectionStore(), (options) => inspectWithAccount(options, process.env))
 	const server = createServer(inspections, version)
 	const transport = new StdioServerTransport()
 	server.server.onclose = () => {
 		void inspections.close()
 	}
+	// finish active jobs before closing the server on a signal
 	for (const signal of ["SIGTERM", "SIGINT"] as const) {
 		process.once(signal, async () => {
 			await inspections.close()
@@ -33,6 +36,7 @@ async function main(args: string[]): Promise<void> {
 	}
 	await server.connect(transport)
 }
+// expose setup guidance and keep internal errors out of stderr
 main(process.argv.slice(2)).catch((error: unknown) => {
 	console.error(error instanceof UserError ? error.message : "Health Code MCP could not start.")
 	process.exitCode = 1

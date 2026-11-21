@@ -12,6 +12,7 @@ const backend = Bun.serve({
 	port: 0,
 	idleTimeout: 60,
 	async fetch(request): Promise<Response> {
+		// reload the routes for each development request
 		const routes = (await vite.ssrLoadModule("/createSite.tsx")) as { createSite: typeof createSite }
 		const app = routes.createSite({ ...options, assets: { script: "/client.tsx", styles: ["/style.css"] } })
 		const response = await app.fetch(request)
@@ -24,6 +25,7 @@ const backend = Bun.serve({
 	},
 })
 
+// forward backend routes while serving frontend modules through vite
 vite = await createServer({
 	appType: "custom",
 	ssr: { external: ["health-code"] },

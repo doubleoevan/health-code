@@ -11,6 +11,7 @@ export interface InspectionSource<Output extends InspectionOutput = InspectionOu
 	license(repository: { url: string; commit: string }): Promise<string | null>
 	recover(): Promise<void>
 }
+// coordinate queued inspections and notify subscribers when their state changes
 export class Inspections {
 	readonly changes = new EventEmitter()
 	private active = 0
@@ -29,20 +30,24 @@ export class Inspections {
 		// Interrupt stale inspections before reclaiming their sandboxes.
 		this.store.interrupt()
 		let delay = 1000
+		// retry deployment cleanup before accepting queued work
 		for (;;) {
 			try {
 				await this.source.recover()
 				break
 			} catch {
+				// back off between recovery attempts for up to one minute
 				console.error("Deployment sandbox cleanup failed. Retrying before starting inspections.")
 				await sleep(delay)
 				delay = Math.min(60000, delay * 2)
 			}
 		}
+		// start claiming work after sandbox recovery succeeds
 		this.ready = true
 		this.drain()
 	}
 	submit(input: string): string {
+		// validate the repository and queue capacity before persisting a submission
 		const url = toRepositoryUrl(input)
 		if (this.store.queueFull()) {
 			throw new InspectionError("queue-full", "The inspection queue is full. Try again after an inspection starts.")
@@ -53,12 +58,14 @@ export class Inspections {
 		return id
 	}
 	private drain(): void {
+		// claim queued work only while a worker slot is free
 		while (this.ready && this.active < this.concurrency) {
 			const row = this.store.claim()
 			if (!row) {
 				return
 			}
 			this.active++
+			// notify subscribers and refill the slot when execution settles
 			this.changes.emit(row.id)
 			void this.execute(row).finally(() => {
 				this.active--
@@ -67,22 +74,26 @@ export class Inspections {
 		}
 	}
 	private async execute(row: { id: string; repositoryUrl: string }): Promise<void> {
+		// persist each event before waking its subscribers
 		const emit = (event: SiteEvent): void => {
 			this.store.append(row.id, event)
 			this.changes.emit(row.id)
 		}
 		try {
+			// confirm repository visibility before starting an inspection
 			await this.source.verify(row.repositoryUrl)
 			const output = await this.source.inspect(row.repositoryUrl, emit)
 			// Keep findings available if GitHub cannot identify the license at the pinned commit.
 			const license = await this.source.license(output.report.repository).catch(() => null)
 			this.store.finish(row.id, publishReport(output, license))
 		} catch (error) {
+			// preserve the library timeline on a failed inspection
 			if (error instanceof InspectionError) {
 				for (const event of error.timeline) {
 					emit(event)
 				}
 			}
+			// store only the error intended for public display
 			this.store.fail(
 				row.id,
 				error instanceof SiteError
