@@ -12,7 +12,7 @@ import { identifyVisitor, verifyAdmin, verifyChallenge } from "./verifyVisitor.t
 
 test("atomic admission shares pending work and enforces separate network and browser quotas", () => {
 	const store = new InspectionStore(":memory:")
-	const limits = toLaunchLimits({ HEALTH_CODE_DAILY_COST_USD: "100", HEALTH_CODE_VISITOR_RUNS: "1" })
+	const limits = toLaunchLimits({ HEALTH_CODE_DAILY_COST_USD: "100", HEALTH_CODE_DAILY_DEMO_LIMIT: "1" })
 	const now = Date.now()
 	const day = new Date(now).toISOString().slice(0, 10)
 
@@ -182,7 +182,7 @@ test("launch settings retain the last valid snapshot and pause after three minut
 	const original = Date.now
 	Date.now = () => now
 	const values = {
-		HEALTH_CODE_VISITOR_RUNS: "3",
+		HEALTH_CODE_DAILY_DEMO_LIMIT: "7",
 		HEALTH_CODE_CONCURRENCY: "2",
 		HEALTH_CODE_DAILY_COST_USD: "10",
 		HEALTH_CODE_MAX_REPO_MIB: "100",
@@ -196,7 +196,9 @@ test("launch settings retain the last valid snapshot and pause after three minut
 	try {
 		// Apply a complete replacement during the next refresh.
 		assert.equal(settings.available, false)
+		assert.equal(settings.current.dailyVisitorInspections, 5)
 		await settings.refresh()
+		assert.equal(settings.current.dailyVisitorInspections, 7)
 		const snapshot = settings.current
 		await settings.refresh()
 		assert.equal(snapshot, settings.current)

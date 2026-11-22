@@ -26,7 +26,7 @@ export function toLaunchLimits(environment: Record<string, string | undefined>):
 
 	// Validate the complete replacement before exposing it to admission.
 	const limits = {
-		dailyVisitorInspections: number("VISITOR_RUNS", 3),
+		dailyVisitorInspections: number("DAILY_DEMO_LIMIT", 5),
 		concurrency: number("CONCURRENCY", 2),
 		dailyMicros: Math.floor(number("DAILY_COST_USD", 10) * 1e6),
 		maxSizeKiB: number("MAX_REPO_MIB", 100) * 1024,
@@ -80,7 +80,7 @@ export class LaunchSettings {
 
 		// Require the entire limits snapshot before replacing the last accepted configuration.
 		const required = [
-			"VISITOR_RUNS",
+			"DAILY_DEMO_LIMIT",
 			"CONCURRENCY",
 			"DAILY_COST_USD",
 			"MAX_REPO_MIB",

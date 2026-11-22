@@ -140,7 +140,7 @@ The site SHALL enforce the approved challenge, daily visitor allowance, concurre
 #### Scenario: Launch admission defaults
 
 - **WHEN** the site uses its launch settings
-- **THEN** each visitor can start three new Inspections per UTC day, at most two Inspections execute concurrently, and each eligible repository is at most 100 MiB with up to two upgrades
+- **THEN** each visitor can start five new Inspections per UTC day, at most two Inspections execute concurrently, and each eligible repository is at most 100 MiB with up to two upgrades
 
 #### Scenario: Attempt and Inspection ceilings
 

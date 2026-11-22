@@ -15,7 +15,7 @@ test("first-party cohorts exclude repeat and self views, count timely starts onc
 	const store = new InspectionStore(":memory:")
 	const now = Date.now(),
 		day = new Date(now).toISOString().slice(0, 10)
-	const limits = toLaunchLimits({ HEALTH_CODE_DAILY_COST_USD: "100", HEALTH_CODE_VISITOR_RUNS: "10" })
+	const limits = toLaunchLimits({ HEALTH_CODE_DAILY_COST_USD: "100", HEALTH_CODE_DAILY_DEMO_LIMIT: "10" })
 
 	// Link the report owner and each newly accepted inspection to a separate public queue row.
 	function start(key: string, visitor: string, time = now): string {
