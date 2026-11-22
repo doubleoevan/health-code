@@ -17,6 +17,8 @@ const integrity = z.object({
 	testFileErrors: z.array(z.string()),
 })
 
+const integrityPage = integrity.extend({ nextMetadataOffset: z.number().int().nonnegative().optional() })
+
 export type Integrity = z.infer<typeof integrity>
 type CaseStatus = Integrity["cases"][number][2]
 
@@ -53,8 +55,26 @@ export type State = {
 }
 
 export async function readIntegrity(adapter: NodeAdapter): Promise<Integrity> {
-	const first = integrity.parse(await adapter.data(["integrity", "0"]))
+	const { nextMetadataOffset, ...first } = integrityPage.parse(await adapter.data(["integrity", "0"]))
 	const result = { ...first, cases: [...first.cases] }
+
+	// Reassemble repository-wide paths separately from the case cursor.
+	let next = nextMetadataOffset
+	while (next !== undefined) {
+		const page = integrityPage.parse(await adapter.data(["integrity", "0", String(next)]))
+		if (next > 250000 || (page.nextMetadataOffset !== undefined && page.nextMetadataOffset <= next)) {
+			throw new Error("Invalid integrity metadata cursor")
+		}
+
+		// Keep the full protected inventory while transporting bounded pages.
+		result.files = result.files.concat(page.files)
+		result.hooks = result.hooks.concat(page.hooks)
+		result.testFileErrors = result.testFileErrors.concat(page.testFileErrors)
+		if (page.discoveredFiles) {
+			result.discoveredFiles = (result.discoveredFiles ?? []).concat(page.discoveredFiles)
+		}
+		next = page.nextMetadataOffset
+	}
 
 	// page through protected test evidence with a fixed case ceiling
 	for (let offset = first.cases.length; offset && offset % 100 === 0; offset += 100) {

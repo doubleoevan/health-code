@@ -1,6 +1,6 @@
 # Production sandbox provider
 
-`createSandboxProvider.ts` owns the production SDK client, authenticated availability probe, runtime allocation, network policy readback, and deletion. The first protected integrity page can return up to 1 MiB of repository paths, test identities and lifecycle evidence. Ordinary command output is limited to 64 KiB. It installs the project, observation, inference and patch bundles from the npm tarball. `requestRuntime.ts` applies operation budgets, captures bounded output, and translates SDK errors.
+`createSandboxProvider.ts` owns the production SDK client, authenticated availability probe, runtime allocation, network policy readback, and deletion. Protected integrity requests return repository paths and lifecycle evidence in bounded pages within the 1 MiB command-output limit. Ordinary command output is limited to 64 KiB. It installs the project, observation, inference and patch bundles from the npm tarball. `requestRuntime.ts` applies operation budgets, captures bounded output, and translates SDK errors.
 
 `provision.ts` prepares the disposable VM, installs tools, and acquires pinned source. It enables Linux memory overcommit so tools can reserve sparse virtual address ranges. `createSandboxProvider.ts` sets the physical memory limit at allocation.
 

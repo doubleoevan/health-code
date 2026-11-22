@@ -1,4 +1,3 @@
-import { readFileSync, rmSync, statSync } from "node:fs"
 import { isIP } from "node:net"
 import { posix } from "node:path"
 import type { InstallationFinding, Observation } from "../src/contracts.ts"
@@ -325,7 +324,7 @@ function recordDnsQueries(dns: string, allowed: string[], connections: Observati
 	}
 }
 export function inspectTrace(
-	syscalls: string,
+	syscalls: string | Iterable<string>,
 	dns: string,
 	status: string,
 	allowed: string[],
@@ -335,14 +334,19 @@ export function inspectTrace(
 	const files: Observation = { complete: true, findings: [] }
 	const hosts = dnsAnswers(dns)
 
-	// Every descendant starts in the project mount. Use that invariant only if the entire trace preserves it.
-	const fixedDirectory = stableProjectDirectory(syscalls) ? "/project" : undefined
+	// Every traced descendant initially inherits the sandbox project directory.
+	const rows = typeof syscalls === "string" ? syscalls.split("\n") : syscalls
+	let fixedDirectory: string | undefined = "/project"
 	const pending = new Map<string, TraceCall>()
 	const state = { links: new Map(initialLinks.map((path) => [path, undefined])), sharedOutsideMapping: false }
 	let started = false
 
 	// reconstruct each syscall before assigning it to the installer
-	for (const row of syscalls.split("\n")) {
+	for (const row of rows) {
+		// Invalidate relative-path attribution as soon as a directory change can take effect.
+		if (fixedDirectory && changesDirectory(row)) {
+			fixedDirectory = undefined
+		}
 		const entry = assembled(row, pending)
 		if (!entry) {
 			continue
@@ -401,45 +405,12 @@ function verifyTraceEnd({
 	}
 }
 
-// verify the shared working directory across all traced descendants
-function stableProjectDirectory(trace: string): boolean {
-	const pending = new Map<string, TraceCall>()
-	for (const row of trace.split("\n")) {
-		const entry = assembled(row, pending)
-		if (!entry || !/^(?:f?chdir|chroot|pivot_root)\(/.test(entry.line) || / = -1 /.test(entry.line)) {
-			continue
-		}
-
-		// disallow directory changes away from the project
-		if (!/^chdir\("\/project"\) = 0$/.test(entry.line) && !/^fchdir\(\d+<\/project>\) = 0$/.test(entry.line)) {
-			return false
-		}
+function changesDirectory(row: string): boolean {
+	const call = /^\d+\s+(?:\d+\.\d+\s+)?((?:f?chdir|chroot|pivot_root)\(.*)$/.exec(row)?.[1]
+	if (!call) {
+		return false
 	}
-	return onlySocketReads(pendingSyscalls(pending))
-}
 
-// accept only the supervisor's per-inspection evidence directory
-const directory = process.argv[2]
-if (directory && /^\/var\/lib\/health-code\/evidence-[a-f0-9-]{36}$/.test(directory)) {
-	const read = (name: string): string => {
-		const path = `${directory}/${name}`
-
-		// bound each capture before loading it into memory
-		if (statSync(path).size >= 32 * 1024 * 1024) {
-			throw new Error("Trace limit reached")
-		}
-		return readFileSync(path, "utf8")
-	}
-	try {
-		// seed link tracking with the pinned project entries
-		const links = read("links")
-			.split("\0")
-			.filter(Boolean)
-			.map((path) => posix.resolve("/project", path))
-		console.log(
-			JSON.stringify(inspectTrace(read("syscalls"), read("dns"), read("status"), process.argv.slice(3), links)),
-		)
-	} finally {
-		rmSync(directory, { recursive: true, force: true })
-	}
+	// Retain the known directory only for a confirmed return to the project mount.
+	return !/^chdir\("\/project"\) = 0$/.test(call) && !/^fchdir\(\d+<\/project>\) = 0$/.test(call)
 }

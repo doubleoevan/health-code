@@ -60,7 +60,8 @@ export async function executeCommand(instance: Instance, command: Command): Prom
 				const raw = await checked(
 					instance.runtime,
 					["/opt/health-code/bin/node", "/opt/health-code/observe.mjs", dir, ...instance.hosts],
-					{ ...budget, timeoutMs: Math.min(5000, budget.timeoutMs) },
+					budget,
+					true,
 				)
 				evidence = JSON.parse(raw)
 			} catch {

@@ -1,13 +1,25 @@
 import assert from "node:assert/strict"
 import { type SpawnSyncReturns, spawnSync } from "node:child_process"
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import {
+	cpSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	truncateSync,
+	writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { inspectTrace } from "../guest/observe.ts"
+import { pageMetadata } from "../guest/readIntegrity.ts"
+import { readTraceLines } from "../guest/readTraceLines.ts"
 import { confirm } from "../src/confirmCheck.ts"
 import type { CheckResult, Project } from "../src/contracts.ts"
+import { traceByteLimit } from "../src/sandbox/traceByteLimit.ts"
 import { selectUpgrades } from "../src/selectUpgrades.ts"
 
 const recorded = fileURLToPath(new URL("./fixtures/recorded/", import.meta.url))
@@ -237,3 +249,37 @@ test("an oversized source file does not hide dependency evidence or a workspace 
 		assert.equal(project.sources.widget["packages/build"], "1.2.0")
 		assert.ok(project.skipped.includes("large.js: environment scan file limit"))
 	}))
+
+test("streamed install evidence preserves split records and rejects truncated captures", () => {
+	const directory = mkdtempSync(join(tmpdir(), "install-trace-"))
+	const path = join(directory, "syscalls")
+	try {
+		const row = "x".repeat(256 * 1024 - 1) + "é"
+		writeFileSync(path, row + "\nnext\n")
+		assert.deepEqual([...readTraceLines(path)], [row, "next"])
+
+		// Require both the final record boundary and the collector's overflow marker.
+		writeFileSync(path, "partial")
+		assert.throws(() => [...readTraceLines(path)], /ended during/)
+		truncateSync(path, traceByteLimit + 1)
+		assert.throws(() => [...readTraceLines(path)], /exceeded/)
+	} finally {
+		rmSync(directory, { recursive: true, force: true })
+	}
+})
+
+test("integrity metadata pages preserve paths, hooks and file errors beyond the transport limit", () => {
+	const files = Array.from({ length: 2400 }, (_, index) => `${"a".repeat(500)}/${index}.ts`)
+	const metadata = { files, hooks: ["postinstall"], discoveredFiles: ["unit.test.ts"], testFileErrors: ["load failed"] }
+	const first = pageMetadata(metadata, { cases: [["unit.test.ts", "passes", "passed"]], offset: 0 })
+	assert.ok(first.nextMetadataOffset)
+
+	// Read the continuation at the same offset the sandbox returned.
+	const second = pageMetadata(metadata, { cases: [], offset: first.nextMetadataOffset })
+	assert.equal(second.nextMetadataOffset, undefined)
+	assert.deepEqual([...first.files, ...second.files], files)
+	assert.deepEqual(second.testFileErrors, metadata.testFileErrors)
+	assert.deepEqual(second.discoveredFiles, metadata.discoveredFiles)
+	assert.deepEqual(second.hooks, metadata.hooks)
+	assert.ok(Buffer.byteLength(JSON.stringify(first)) < 1024 * 1024)
+})

@@ -246,6 +246,19 @@ test("keeps coverage incomplete for escaping, cyclic, or replaced link targets",
 	}
 })
 
+test("attributes relative installs until a traced process can change directory", () => {
+	const start = '1 execve("/usr/bin/env", [], []) = 0'
+	const link = '1 symlink("target", "link") = 0'
+	const change = '2 chdir("/project/pkg") = 0'
+	const read = (rows: string[]): Observation =>
+		inspectTrace([start, ...rows], "", "0 packets dropped by kernel", []).files
+
+	// Keep earlier evidence and treat even an unfinished change as ambiguous for concurrent writes.
+	assert.equal(read([link, change]).complete, true)
+	assert.equal(read([change, link]).complete, false)
+	assert.equal(read(['2 chdir("/project/pkg" <unfinished ...>', link, "2 <... chdir resumed>) = 0"]).complete, false)
+})
+
 test("Bun hardlinks anonymous temporary inodes into the project", () => {
 	const trace = [
 		'2 execve("/usr/bin/env", [], []) = 0',

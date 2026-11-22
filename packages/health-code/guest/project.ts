@@ -101,9 +101,11 @@ async function main(): Promise<void> {
 			break
 
 		// return a page of integrity evidence
-		case "integrity":
-			console.log(JSON.stringify(readIntegrity(Number(args[0]))))
+		case "integrity": {
+			const [offset = Number.NaN, metadataOffset] = args.map(Number)
+			console.log(JSON.stringify(readIntegrity(offset, metadataOffset)))
 			break
+		}
 		case "changelog":
 		case "usage": {
 			// validate the dependency before looking up package evidence

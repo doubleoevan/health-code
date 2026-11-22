@@ -4,34 +4,77 @@ import { join } from "node:path"
 import { filesUnder, readText, workspaceDirectories } from "./inventory.ts"
 
 const inventoryFile = "/inspection-inventory"
-export function readIntegrity(offset: number): {
-	discoveredFiles?: string[]
-	files: string[]
-	hooks: string[]
-	testFileErrors: string[]
-	cases: [string, string, string][]
-} {
-	// require a nonnegative inventory page offset
-	if (!Number.isSafeInteger(offset) || offset < 0) {
+type InventoryMetadata = { files: string[]; hooks: string[]; discoveredFiles: string[]; testFileErrors: string[] }
+type InventoryPage = Partial<Pick<InventoryMetadata, "discoveredFiles">> &
+	Omit<InventoryMetadata, "discoveredFiles"> & {
+		cases: [string, string, string][]
+		nextMetadataOffset?: number
+	}
+
+export function readIntegrity(offset: number, metadataOffset?: number): InventoryPage {
+	if (![offset, metadataOffset ?? 0].every((value) => Number.isSafeInteger(value) && value >= 0)) {
 		throw new Error("Invalid inventory page")
 	}
-	const page: { cases: [string, string, string][]; discoveredFiles?: string[]; testFileErrors?: string[] } = JSON.parse(
-		readFileSync(join(inventoryFile, offset + ".json"), "utf8"),
-	)
-	const { cases } = page
-
-	// leave project-wide evidence on the first page
+	const page: InventoryPage = JSON.parse(readFileSync(join(inventoryFile, offset + ".json"), "utf8"))
 	if (offset) {
-		return { cases, files: [], hooks: [], testFileErrors: [] }
+		return { cases: page.cases, files: [], hooks: [], testFileErrors: [] }
 	}
-	const files = filesUnder(".").filter((name) => !/^\.(?:env|git)/.test(name))
-	return {
-		files,
-		discoveredFiles: page.discoveredFiles,
+
+	// Bound the path and lifecycle metadata independently of the protected test-case pages.
+	const metadata = {
+		files: filesUnder(".").filter((name) => !/^\.(?:env|git)/.test(name)),
 		hooks: readLifecycleHooks(),
-		cases,
+		discoveredFiles: page.discoveredFiles ?? [],
 		testFileErrors: page.testFileErrors ?? [],
 	}
+	const result = pageMetadata(metadata, {
+		cases: metadataOffset === undefined ? page.cases : [],
+		offset: metadataOffset ?? 0,
+	})
+	if (page.discoveredFiles === undefined) {
+		delete result.discoveredFiles
+	}
+	return result
+}
+
+export function pageMetadata(
+	metadata: InventoryMetadata,
+	{ cases, offset }: { cases: InventoryPage["cases"]; offset: number },
+): InventoryPage {
+	const result: InventoryMetadata & Pick<InventoryPage, "cases"> = {
+		files: [],
+		hooks: [],
+		discoveredFiles: [],
+		testFileErrors: [],
+		cases,
+	}
+	let position = 0
+	let size = Buffer.byteLength(JSON.stringify(cases))
+
+	// Allow room for the enclosing object and escaping within the one-MiB transport limit.
+	for (const field of ["files", "hooks", "discoveredFiles", "testFileErrors"] as const) {
+		for (const entry of metadata[field]) {
+			if (position++ < offset) {
+				continue
+			}
+
+			// Count escaped UTF-8 bytes as they appear in the serialized response.
+			const bytes = Buffer.byteLength(JSON.stringify(entry)) + 1
+			if (bytes > 512 * 1024) {
+				throw new Error("Integrity entry exceeds the metadata page limit")
+			}
+
+			// Resume from the first entry excluded from this page.
+			if (size + bytes > 768 * 1024) {
+				return { ...result, nextMetadataOffset: position - 1 }
+			}
+
+			// Keep the entry in its original metadata field.
+			size += bytes
+			result[field].push(entry)
+		}
+	}
+	return result
 }
 
 export function readLifecycleHooks(): string[] {

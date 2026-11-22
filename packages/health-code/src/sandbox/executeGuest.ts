@@ -1,5 +1,7 @@
 import type { Command } from "../contracts.ts"
 
+import { traceByteLimit } from "./traceByteLimit.ts"
+
 const reserved =
 	/^(?:PATH|HOME|TMP.*|TEMP|PWD|SHELL|USER|LOGNAME|IFS|ENV|BASH_ENV|NODE.*|BUN.*|NPM.*|npm_.*|YARN.*|PNPM.*|GIT.*|LD_.*|DYLD_.*|SSL_.*|.*PROXY|RUNTA_.*|COREPACK.*|XDG_.*|CI|LANG|LC_.*|SHELLOPTS|BASHOPTS)$/i
 type TestMount = { path: string; kind: "report" | "inventory"; writable?: boolean }
@@ -94,7 +96,7 @@ export function guestArguments(
 			"-s",
 			"256",
 			"-o",
-			"|head -c 33554432 > /evidence/syscalls; cat >/dev/null",
+			`|head -c ${traceByteLimit + 1} > /evidence/syscalls; cat >/dev/null`,
 			"-e",
 			command.observe === "network"
 				? "trace=execve,connect,sendto,sendmsg,sendmmsg"

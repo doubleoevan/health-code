@@ -131,6 +131,23 @@ test("incomplete observation cannot pass; only confirmed denials become sandbox 
 		1,
 	)
 })
+test("incomplete installation coverage keeps measured upgraded checks and an untested verdict", async () => {
+	const entries = scripts([], [], [])
+	entries[6]!.files = { complete: false, reason: "Trace incomplete", findings: [] }
+	const inspection = await inspectRepository({
+		repositoryUrl: fixtureUrl,
+		sandboxProvider: provider(entries),
+		limits: { maxUpgrades: 1 },
+	})
+	const upgrade = inspection.upgrades[0]!
+
+	// Preserve the independent checks without certifying the install.
+	assert.equal(upgrade.coverage, "partial")
+	assert.equal(upgrade.typecheck.status, "passed")
+	assert.equal(upgrade.tests.status, "passed")
+	assert.equal(upgrade.result.status, "untested")
+})
+
 test("broken Baseline prevents all trials", async () => {
 	// fail the baseline install before either upgrade trial
 	const entries = scripts([], [], []).slice(0, 3)

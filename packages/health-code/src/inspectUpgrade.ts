@@ -43,11 +43,16 @@ export async function inspectUpgrade({
 		})
 	}
 
-	// stop further checks when installation evidence is incomplete
+	// Stop on an observed finding and keep a missing observation inconclusive.
 	const reason = installationReason(report.observation)
 	if (reason || report.install.status !== "passed") {
 		report.result = reason ? untested(reason, report.install.evidence) : report.install
 		report.tests = report.typecheck = untested(reason ?? "install-failed")
+
+		// Keep independent measurements when the install succeeded without an observed finding.
+		if (reason === "incomplete-observation" && report.install.status === "passed") {
+			await measurePartialUpgrade(adapter, { baseline, report })
+		}
 		return
 	}
 
@@ -66,6 +71,18 @@ export async function inspectUpgrade({
 			status: "passed",
 			evidence: applicable.flatMap((r) => r.evidence),
 		}
+}
+
+async function measurePartialUpgrade(
+	adapter: EcosystemAdapter,
+	{ baseline, report }: { baseline: Baseline; report: UpgradeReport },
+): Promise<void> {
+	// Keep diagnostic results under the locked policy while withholding attribution and patches.
+	report.coverage = "partial"
+	if (baseline.typecheck.status === "passed") {
+		report.typecheck = await adapter.typecheck()
+	}
+	report.tests = await adapter.test()
 }
 
 async function checkStages(adapter: EcosystemAdapter, report: UpgradeReport, baseline: Baseline): Promise<boolean> {

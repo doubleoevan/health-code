@@ -40,3 +40,5 @@ Use `mode: "listUpgrades"` or `mode: "inspectUpgrades"` with the lower-level `in
 `readUpgradeFeatures(upgrade)` returns all feature entries identified in the collected release notes, with sources and affected workspaces. Consumers can paginate the returned `features` array.
 
 A release feature describes what the dependency added. Each `CodeFeatureMatch` in `upgrade.featureMatches` links a release feature to source in the inspected repository. When a result comes from an earlier inspection, `reusedFromInspectionId` identifies that inspection.
+
+If an install succeeds with incomplete observation and no recorded installation finding, Health Code reports the available upgraded typecheck and test results as partial evidence. The upgrade remains Untested and cannot produce a verified patch.

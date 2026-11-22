@@ -13,7 +13,7 @@
 			"entry": [
 				"src/index.ts",
 				"guest/project.ts",
-				"guest/observe.ts",
+				"guest/readTraceLines.ts",
 				"guest/agent.ts",
 				"guest/managePatch.ts",
 				"test/**/*.test.ts"
