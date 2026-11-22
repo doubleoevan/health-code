@@ -6,7 +6,7 @@ import { inspectUpgrade } from "./inspectUpgrade.ts"
 import { preservePartialReport, retainCompletedChecks } from "./preservePartialReport.ts"
 import { sizeBytes } from "./readUpgradeEvidence.ts"
 import { toUpgradeKey } from "./selectUpgrades.ts"
-import { readIntegrity } from "./verifyCandidate.ts"
+import { readPatchVerificationInputs } from "./verifyCandidate.ts"
 
 export async function inspectProject({
 	context,
@@ -79,7 +79,7 @@ export async function inspectProject({
 			// retain baseline test coverage for independent patch checks
 			if (engine) {
 				engine.baseTests = adapter.lastObservation
-				engine.baseIntegrity = await readIntegrity(adapter).catch(() => undefined)
+				engine.baselinePatchVerificationInputs = await readPatchVerificationInputs(adapter).catch(() => undefined)
 			}
 		}
 

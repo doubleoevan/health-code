@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { fetchRegistryVersions, isPackageName } from "./fetchRegistryVersions.ts"
 import { bumpDependency, detectProject, managerName, readManifest } from "./inventory.ts"
 import { measureTests } from "./measureTests.ts"
-import { readIntegrity, readLifecycleHooks } from "./readIntegrity.ts"
+import { readLifecycleHookSignatures, readPatchVerificationInputs } from "./readPatchVerificationInputs.ts"
 import { readTestReport, reporterArguments, reportPath } from "./readTestReport.ts"
 import { installedBytes, readChangelog, readUsage } from "./readUsage.ts"
 
@@ -97,13 +97,25 @@ async function main(): Promise<void> {
 	const [action, ...args] = process.argv.slice(2)
 	switch (action) {
 		case "lifecycle":
-			console.log(JSON.stringify(readLifecycleHooks()))
+			console.log(JSON.stringify(readLifecycleHookSignatures()))
 			break
 
 		// return a page of integrity evidence
 		case "integrity": {
-			const [offset = Number.NaN, metadataOffset] = args.map(Number)
-			console.log(JSON.stringify(readIntegrity(offset, metadataOffset)))
+			const [testCaseOffset = Number.NaN, fileAndHookEntryOffset] = args.map(Number)
+			const page = readPatchVerificationInputs(testCaseOffset, fileAndHookEntryOffset)
+
+			// Preserve the field names used by sandbox providers on the wire.
+			console.log(
+				JSON.stringify({
+					files: page.projectFilePaths,
+					hooks: page.lifecycleHookSignatures,
+					discoveredFiles: page.discoveredTestFiles,
+					cases: page.cases,
+					testFileErrors: page.testFileErrors,
+					nextMetadataOffset: page.nextFileAndHookEntryOffset,
+				}),
+			)
 			break
 		}
 		case "changelog":

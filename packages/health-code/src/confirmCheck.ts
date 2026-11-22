@@ -22,6 +22,17 @@ const reasonDetails: Readonly<Record<string, string>> = {
 export function untested(reason: string, evidence: Evidence[] = []): Extract<CheckResult, { status: "untested" }> {
 	return { status: "untested", reason, detail: reasonDetails[reason] ?? reason, evidence }
 }
+
+/**
+ * Describes the elapsed install time when the sandbox supplied a duration.
+ */
+export function toUpgradeInstallTimeout(durationMs?: number): string {
+	const seconds = Math.round((durationMs ?? 0) / 1000)
+	return seconds > 0
+		? `The upgrade install timed out after ${seconds} ${seconds === 1 ? "second" : "seconds"}.`
+		: "The upgrade install timed out."
+}
+
 function toTestFailureKey(test: TestFailure): string {
 	return JSON.stringify([test.workspace, test.file, test.name ?? null])
 }

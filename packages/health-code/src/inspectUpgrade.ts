@@ -1,7 +1,7 @@
 import { confirm, untested } from "./confirmCheck.ts"
 import type { Baseline, CheckResult, EcosystemAdapter, Observation, UpgradeReport } from "./contracts.ts"
 
-function installationReason(observation: Observation): string | undefined {
+function getInstallVerificationIssue(observation: Observation): string | undefined {
 	if (observation.findings.length) {
 		return "installation-finding"
 	}
@@ -30,28 +30,28 @@ export async function inspectUpgrade({
 
 	// start each installation check from the pinned project
 	await adapter.resetProject()
-	const first = await adapter.bumpDependency(report)
-	report.install = first.check
-	report.observation = first.observation
-	if (!installationReason(report.observation)) {
-		report.install = await confirm(first.check, baseline.install, async () => {
+	const initialInstall = await adapter.bumpDependency(report)
+	report.install = initialInstall.check
+	report.observation = initialInstall.observation
+	if (!getInstallVerificationIssue(report.observation)) {
+		report.install = await confirm(initialInstall.check, baseline.install, async () => {
 			// recreate the upgrade to confirm a failing install
 			await adapter.resetProject()
-			const second = await adapter.bumpDependency(report)
-			report.observation = second.observation
-			return second.check
+			const confirmationInstall = await adapter.bumpDependency(report)
+			report.observation = confirmationInstall.observation
+			return confirmationInstall.check
 		})
 	}
 
 	// Stop on an observed finding and keep a missing observation inconclusive.
-	const reason = installationReason(report.observation)
+	const reason = getInstallVerificationIssue(report.observation)
 	if (reason || report.install.status !== "passed") {
 		report.result = reason ? untested(reason, report.install.evidence) : report.install
 		report.tests = report.typecheck = untested(reason ?? "install-failed")
 
-		// Keep independent measurements when the install succeeded without an observed finding.
+		// Run the available checks when the install succeeded without an observed finding.
 		if (reason === "incomplete-observation" && report.install.status === "passed") {
-			await measurePartialUpgrade(adapter, { baseline, report })
+			await runAvailableUpgradeChecks(adapter, { baseline, report })
 		}
 		return
 	}
@@ -73,7 +73,7 @@ export async function inspectUpgrade({
 		}
 }
 
-async function measurePartialUpgrade(
+async function runAvailableUpgradeChecks(
 	adapter: EcosystemAdapter,
 	{ baseline, report }: { baseline: Baseline; report: UpgradeReport },
 ): Promise<void> {
@@ -81,6 +81,10 @@ async function measurePartialUpgrade(
 	report.coverage = "partial"
 	if (baseline.typecheck.status === "passed") {
 		report.typecheck = await adapter.typecheck()
+	} else {
+		report.typecheck = untested(
+			adapter.project?.typecheck === "none" ? "no-tsconfig" : "baseline-typecheck-unavailable",
+		)
 	}
 	report.tests = await adapter.test()
 }
@@ -102,7 +106,7 @@ async function checkStages(adapter: EcosystemAdapter, report: UpgradeReport, bas
 			["inspection-deadline", "confirmation-install-unavailable"].includes(checked.reason)
 
 		// retain the observation or deadline reason that stopped the stage
-		const reason = installationReason(report.observation) ?? (interrupted ? checked.reason : undefined)
+		const reason = getInstallVerificationIssue(report.observation) ?? (interrupted ? checked.reason : undefined)
 		if (reason) {
 			report.result = untested(reason, checked.evidence)
 			if (stage === "typecheck") {
@@ -132,7 +136,7 @@ async function repeatCheck({
 	const install = await adapter.bumpDependency(report)
 	report.observation = install.observation
 	report.install.evidence = [...report.install.evidence, ...install.check.evidence]
-	if (install.check.status !== "passed" || installationReason(install.observation)) {
+	if (install.check.status !== "passed" || getInstallVerificationIssue(install.observation)) {
 		return untested("confirmation-install-unavailable", install.check.evidence)
 	}
 

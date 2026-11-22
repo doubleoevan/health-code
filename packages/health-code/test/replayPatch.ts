@@ -6,7 +6,7 @@ import type { CheckResult, InspectionReport } from "../src/contracts.ts"
 import { createFakeSandboxProvider } from "../src/createFakeSandboxProvider.ts"
 import { ModelInspection } from "../src/inspectModels.ts"
 import { registryHosts } from "../src/networkPolicy.ts"
-import type { Integrity, PatchEvidence } from "../src/verifyCandidate.ts"
+import type { PatchEvidence, PatchVerificationInputs } from "../src/verifyCandidate.ts"
 import { evaluatePatch } from "../src/verifyPatch.ts"
 
 const base = "a".repeat(40)
@@ -236,10 +236,10 @@ export async function replayPatch(
 		],
 		releaseSummary: { text: "Return value changed.", sources: ["https://example.org/notes"] },
 	}
-	const baseline: Integrity = {
-		files: Object.keys(origin),
+	const baseline: PatchVerificationInputs = {
+		projectFilePaths: Object.keys(origin),
 		cases: [["widget.test.ts", "behavior", "passed"]],
-		hooks: [],
+		lifecycleHookSignatures: [],
 		testFileErrors: [],
 	}
 
@@ -321,11 +321,11 @@ export async function replayPatch(
 		}
 
 		// build the case inventory from the current tree
-		const cases: Integrity["cases"] = [["widget.test.ts", "behavior", passes() ? "passed" : "failed"]]
+		const cases: PatchVerificationInputs["cases"] = [["widget.test.ts", "behavior", passes() ? "passed" : "failed"]]
 		if (tree["added.test.ts"]) {
 			cases.push(["added.test.ts", "new behavior", "passed"])
 		}
-		return { ...baseline, hooks, cases }
+		return { files: baseline.projectFilePaths, hooks, cases, testFileErrors: baseline.testFileErrors }
 	}
 
 	// assemble pinned usage and baseline integrity for patch evaluation
@@ -338,7 +338,7 @@ export async function replayPatch(
 		sandbox,
 		baseInstall: scope,
 		baseTests: scope,
-		baselineIntegrity: baseline,
+		baselinePatchVerificationInputs: baseline,
 		releaseNotes: [
 			{ source: "https://example.org/notes", text: "api now returns new instead of old", workspaces: ["."] },
 		],

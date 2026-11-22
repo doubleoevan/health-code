@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util"
 import { z } from "zod"
 import { checkOperation, type InspectionContext, redact } from "./collectEvents.ts"
-import { untested } from "./confirmCheck.ts"
+import { toUpgradeInstallTimeout, untested } from "./confirmCheck.ts"
 import type {
 	Baseline,
 	CheckResult,
@@ -45,6 +45,12 @@ const unobserved: Observation = { complete: false, findings: [], reason: "Instal
 export function skippedUpgrade(upgrade: Upgrade, reason: string, detail?: string): UpgradeReport {
 	const result = untested(reason)
 	return { ...upgrade, ...pending(reason), result: detail ? { ...result, detail } : result, observation: unobserved }
+}
+
+function toMissingActivity(activity: string, observation: Observation): string | undefined {
+	if (!observation.complete) {
+		return [`Could not verify all ${activity}.`, observation.reason].filter(Boolean).join(" ")
+	}
 }
 
 export class NodeAdapter implements EcosystemAdapter {
@@ -244,7 +250,11 @@ export class NodeAdapter implements EcosystemAdapter {
 
 	// observe installation of the requested upgrade
 	async bumpDependency(upgrade: Upgrade): Promise<{ check: CheckResult; observation: Observation }> {
-		return this.check(["install", upgrade.dependency, upgrade.to], true)
+		const install = await this.check(["install", upgrade.dependency, upgrade.to], true)
+		if (install.check.status === "untested" && install.check.reason === "command-timeout") {
+			install.check.detail = toUpgradeInstallTimeout(install.check.evidence.at(-1)?.durationMs)
+		}
+		return install
 	}
 	private async check(
 		args: string[],
@@ -368,7 +378,10 @@ export class NodeAdapter implements EcosystemAdapter {
 		return {
 			complete: network.complete && files.complete,
 			findings,
-			reason: network.reason ?? files.reason,
+			reason:
+				[toMissingActivity("network connections", network), toMissingActivity("filesystem changes", files)]
+					.filter(Boolean)
+					.join(" ") || undefined,
 			...(network.destinations ? { destinations: network.destinations } : {}),
 		}
 	}

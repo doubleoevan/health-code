@@ -111,14 +111,14 @@ function mutationPaths({
 	line,
 	result,
 	links,
-	fixedDirectory,
+	knownWorkingDirectory,
 }: {
 	// describe the syscall and its directory context
 	call: string
 	line: string
 	result: Observation
 	links: FileLinks
-	fixedDirectory?: string
+	knownWorkingDirectory?: string
 }): string[] {
 	// select the pathname arguments modified by this syscall
 	const paths: string[] = []
@@ -137,7 +137,7 @@ function mutationPaths({
 		}
 
 		// retain attributable targets and flag unresolved relative paths
-		const resolved = mutationTarget({ item, path, fixedDirectory, line, call })
+		const resolved = mutationTarget({ item, path, knownWorkingDirectory, line, call })
 		if (resolved) {
 			paths.push(resolved)
 		} else {
@@ -157,14 +157,14 @@ function mutationPaths({
 function mutationTarget({
 	path,
 	item,
-	fixedDirectory,
+	knownWorkingDirectory,
 	line,
 	call,
 }: {
 	// describe the evidence available for resolving a relative target
 	path: string
 	item: RegExpMatchArray
-	fixedDirectory?: string
+	knownWorkingDirectory?: string
 	line: string
 	call: string
 }): string | undefined {
@@ -173,8 +173,8 @@ function mutationTarget({
 		return path
 	} else if (item[2]?.startsWith("/")) {
 		return posix.resolve(item[2], path)
-	} else if (fixedDirectory && (!/(?:at|at2)$/.test(call) || /AT_FDCWD, $/.test(line.slice(0, item.index)))) {
-		return posix.resolve(fixedDirectory, path)
+	} else if (knownWorkingDirectory && (!/(?:at|at2)$/.test(call) || /AT_FDCWD, $/.test(line.slice(0, item.index)))) {
+		return posix.resolve(knownWorkingDirectory, path)
 	}
 }
 
@@ -213,7 +213,7 @@ function descriptorTargets(line: string, result: Observation): string[] {
 	}
 	return target?.startsWith("/") ? [target] : []
 }
-function filesystem(line: string, result: Observation, state: FileState, fixedDirectory?: string): void {
+function filesystem(line: string, result: Observation, state: FileState, knownWorkingDirectory?: string): void {
 	// inspect only successful filesystem calls
 	if (!/\)\s+= (?:0x[\da-f]+|0|[1-9]\d*)(?:<[^>]*>)?$/.test(line)) {
 		return
@@ -259,7 +259,7 @@ function filesystem(line: string, result: Observation, state: FileState, fixedDi
 		)
 	) {
 		// resolve path-based operations through the link history
-		paths = mutationPaths({ call, line, result, links: state.links, fixedDirectory })
+		paths = mutationPaths({ call, line, result, links: state.links, knownWorkingDirectory })
 	}
 	for (const path of paths) {
 		const normalized = posix.normalize(path)
@@ -270,10 +270,10 @@ function filesystem(line: string, result: Observation, state: FileState, fixedDi
 		}
 	}
 }
-type TraceCall = { line: string; timestamp: number }
+type RecordedSystemCall = { line: string; timestamp: number }
 
 // reconstruct interrupted syscall records per process
-function assembled(row: string, pending: Map<string, TraceCall>): TraceCall | undefined {
+function assembled(row: string, pending: Map<string, RecordedSystemCall>): RecordedSystemCall | undefined {
 	const match = row.match(/^(\d+)\s+(?:(\d+\.\d+)\s+)?(.*)$/)
 	if (!match) {
 		return
@@ -323,7 +323,7 @@ function recordDnsQueries(dns: string, allowed: string[], connections: Observati
 		}
 	}
 }
-export function inspectTrace(
+export function inspectSandboxActivity(
 	syscalls: string | Iterable<string>,
 	dns: string,
 	status: string,
@@ -336,16 +336,16 @@ export function inspectTrace(
 
 	// Every traced descendant initially inherits the sandbox project directory.
 	const rows = typeof syscalls === "string" ? syscalls.split("\n") : syscalls
-	let fixedDirectory: string | undefined = "/project"
-	const pending = new Map<string, TraceCall>()
+	let knownWorkingDirectory: string | undefined = "/project"
+	const pending = new Map<string, RecordedSystemCall>()
 	const state = { links: new Map(initialLinks.map((path) => [path, undefined])), sharedOutsideMapping: false }
 	let started = false
 
 	// reconstruct each syscall before assigning it to the installer
 	for (const row of rows) {
 		// Invalidate relative-path attribution as soon as a directory change can take effect.
-		if (fixedDirectory && changesDirectory(row)) {
-			fixedDirectory = undefined
+		if (knownWorkingDirectory && mayChangeWorkingDirectory(row)) {
+			knownWorkingDirectory = undefined
 		}
 		const entry = assembled(row, pending)
 		if (!entry) {
@@ -359,13 +359,13 @@ export function inspectTrace(
 		}
 		if (started) {
 			network(line, hosts, timestamp, allowed, connections)
-			filesystem(line, files, state, fixedDirectory)
+			filesystem(line, files, state, knownWorkingDirectory)
 		}
 	}
 
 	// check network capture and syscall coverage before returning findings
 	recordDnsQueries(dns, allowed, connections)
-	verifyTraceEnd({ started, pending, connections, files })
+	verifySystemCallLogEnd({ started, pending, connections, files })
 	if (!/\b0 packets dropped by kernel/.test(status)) {
 		markIncomplete(connections, "DNS capture dropped packets")
 	}
@@ -373,7 +373,7 @@ export function inspectTrace(
 }
 
 // summarize names of unfinished system calls
-function pendingSyscalls(pending: Map<string, TraceCall>): string[] {
+function pendingSyscalls(pending: Map<string, RecordedSystemCall>): string[] {
 	return [...new Set([...pending.values()].map((entry) => /^(\w+)\(/.exec(entry.line)?.[1] ?? "unknown"))]
 }
 function onlySocketReads(calls: string[]): boolean {
@@ -381,14 +381,14 @@ function onlySocketReads(calls: string[]): boolean {
 }
 
 // assess whether missing trace records affect coverage
-function verifyTraceEnd({
+function verifySystemCallLogEnd({
 	started,
 	pending,
 	connections,
 	files,
 }: {
 	started: boolean
-	pending: Map<string, TraceCall>
+	pending: Map<string, RecordedSystemCall>
 	connections: Observation
 	files: Observation
 }): void {
@@ -405,7 +405,7 @@ function verifyTraceEnd({
 	}
 }
 
-function changesDirectory(row: string): boolean {
+function mayChangeWorkingDirectory(row: string): boolean {
 	const call = /^\d+\s+(?:\d+\.\d+\s+)?((?:f?chdir|chroot|pivot_root)\(.*)$/.exec(row)?.[1]
 	if (!call) {
 		return false

@@ -9,18 +9,27 @@ import type { ReleaseNote } from "./readReleases.ts"
 import type { UsageEvidence } from "./readUpgradeEvidence.ts"
 import { caseMatchesTitle } from "./testCaseName.ts"
 
-const integrity = z.object({
-	discoveredFiles: z.array(z.string()).optional(),
-	files: z.array(z.string()),
-	hooks: z.array(z.string()),
-	cases: z.array(z.tuple([z.string(), z.string(), z.enum(["passed", "failed", "skipped", "todo"])])),
-	testFileErrors: z.array(z.string()),
-})
+// Decode the sandbox command's existing wire format at the provider boundary.
+const patchVerificationInputsPage = z
+	.object({
+		files: z.array(z.string()),
+		hooks: z.array(z.string()),
+		discoveredFiles: z.array(z.string()).optional(),
+		cases: z.array(z.tuple([z.string(), z.string(), z.enum(["passed", "failed", "skipped", "todo"])])),
+		testFileErrors: z.array(z.string()),
+		nextMetadataOffset: z.number().int().nonnegative().optional(),
+	})
+	.transform((page) => ({
+		projectFilePaths: page.files,
+		lifecycleHookSignatures: page.hooks,
+		...(page.discoveredFiles && { discoveredTestFiles: page.discoveredFiles }),
+		cases: page.cases,
+		testFileErrors: page.testFileErrors,
+		nextFileAndHookEntryOffset: page.nextMetadataOffset,
+	}))
 
-const integrityPage = integrity.extend({ nextMetadataOffset: z.number().int().nonnegative().optional() })
-
-export type Integrity = z.infer<typeof integrity>
-type CaseStatus = Integrity["cases"][number][2]
+export type PatchVerificationInputs = Omit<z.infer<typeof patchVerificationInputsPage>, "nextFileAndHookEntryOffset">
+type CaseStatus = PatchVerificationInputs["cases"][number][2]
 
 export type PatchEvidence = {
 	context: InspectionContext
@@ -32,7 +41,7 @@ export type PatchEvidence = {
 	// retain release and baseline observations for independent verification
 	usage: UsageEvidence
 	releaseNotes?: ReleaseNote[]
-	baselineIntegrity?: Integrity
+	baselinePatchVerificationInputs?: PatchVerificationInputs
 	baseInstall?: Observation
 	baseTests?: Observation
 }
@@ -54,34 +63,43 @@ export type State = {
 	testChanged: boolean
 }
 
-export async function readIntegrity(adapter: NodeAdapter): Promise<Integrity> {
-	const { nextMetadataOffset, ...first } = integrityPage.parse(await adapter.data(["integrity", "0"]))
+export async function readPatchVerificationInputs(
+	adapter: Pick<NodeAdapter, "data">,
+): Promise<PatchVerificationInputs> {
+	const { nextFileAndHookEntryOffset, ...first } = patchVerificationInputsPage.parse(
+		await adapter.data(["integrity", "0"]),
+	)
 	const result = { ...first, cases: [...first.cases] }
 
 	// Reassemble repository-wide paths separately from the case cursor.
-	let next = nextMetadataOffset
-	while (next !== undefined) {
-		const page = integrityPage.parse(await adapter.data(["integrity", "0", String(next)]))
-		if (next > 250000 || (page.nextMetadataOffset !== undefined && page.nextMetadataOffset <= next)) {
-			throw new Error("Invalid integrity metadata cursor")
+	let fileAndHookEntryOffset = nextFileAndHookEntryOffset
+	while (fileAndHookEntryOffset !== undefined) {
+		const page = patchVerificationInputsPage.parse(
+			await adapter.data(["integrity", "0", String(fileAndHookEntryOffset)]),
+		)
+		if (
+			fileAndHookEntryOffset > 250000 ||
+			(page.nextFileAndHookEntryOffset !== undefined && page.nextFileAndHookEntryOffset <= fileAndHookEntryOffset)
+		) {
+			throw new Error("Invalid file and hook entry offset")
 		}
 
 		// Keep the full protected inventory while transporting bounded pages.
-		result.files = result.files.concat(page.files)
-		result.hooks = result.hooks.concat(page.hooks)
+		result.projectFilePaths = result.projectFilePaths.concat(page.projectFilePaths)
+		result.lifecycleHookSignatures = result.lifecycleHookSignatures.concat(page.lifecycleHookSignatures)
 		result.testFileErrors = result.testFileErrors.concat(page.testFileErrors)
-		if (page.discoveredFiles) {
-			result.discoveredFiles = (result.discoveredFiles ?? []).concat(page.discoveredFiles)
+		if (page.discoveredTestFiles) {
+			result.discoveredTestFiles = (result.discoveredTestFiles ?? []).concat(page.discoveredTestFiles)
 		}
-		next = page.nextMetadataOffset
+		fileAndHookEntryOffset = page.nextFileAndHookEntryOffset
 	}
 
 	// page through protected test evidence with a fixed case ceiling
-	for (let offset = first.cases.length; offset && offset % 100 === 0; offset += 100) {
-		if (offset > 100000) {
+	for (let testCaseOffset = first.cases.length; testCaseOffset && testCaseOffset % 100 === 0; testCaseOffset += 100) {
+		if (testCaseOffset > 100000) {
 			throw new Error("Test case limit reached")
 		}
-		const page = integrity.parse(await adapter.data(["integrity", String(offset)]))
+		const page = patchVerificationInputsPage.parse(await adapter.data(["integrity", String(testCaseOffset)]))
 		result.cases.push(...page.cases)
 
 		// stop once the final partial page is consumed
@@ -108,13 +126,13 @@ export async function workspace(evidence: PatchEvidence, request: PatchOperation
 export function requireBaseline(evidence: PatchEvidence): asserts evidence is PatchEvidence & {
 	baseInstall: Observation
 	baseTests: Observation
-	baselineIntegrity: Integrity
+	baselinePatchVerificationInputs: PatchVerificationInputs
 } {
 	// require a passing baseline case for meaningful comparison
-	if (!evidence.baselineIntegrity) {
+	if (!evidence.baselinePatchVerificationInputs) {
 		throw new Error("Health Code could not read the original test inventory to verify a patch")
 	}
-	if (!evidence.baselineIntegrity.cases.some((entry) => entry[2] === "passed")) {
+	if (!evidence.baselinePatchVerificationInputs.cases.some((entry) => entry[2] === "passed")) {
 		throw new Error("Baseline has no comparable passing test cases")
 	}
 	for (const [name, observation] of [
@@ -148,7 +166,11 @@ export async function recordCommit(
 
 export function trackedLockfile(evidence: PatchEvidence): string {
 	const manager = evidence.adapter.project?.manager
-	const lock = manager && lockfiles[manager].find((file) => evidence.baselineIntegrity?.files.includes(file))
+	const lock =
+		manager &&
+		lockfiles[manager].find((file) => evidence.baselinePatchVerificationInputs?.projectFilePaths.includes(file))
+
+	// Require the lockfile that was present in the original checkout.
 	if (!lock) {
 		throw new Error("Missing tracked lockfile")
 	}
@@ -168,7 +190,7 @@ export function cleanInstall(current: Observation, baseline: Observation): boole
 
 export async function verifyTree(evidence: PatchEvidence, state: State): Promise<PatchVerification> {
 	requireBaseline(evidence)
-	const { adapter, baselineIntegrity, baseInstall, baseTests } = evidence
+	const { adapter, baselinePatchVerificationInputs, baseInstall, baseTests } = evidence
 
 	// reinstall the candidate and compare its network and file observations
 	const install = await adapter.install()
@@ -199,7 +221,7 @@ export async function verifyTree(evidence: PatchEvidence, state: State): Promise
 	if ((await workspace(evidence, { kind: "verify", tip: state.tip })) !== state.tip) {
 		throw new Error("Checks changed the tracked candidate tree")
 	}
-	const final = await readIntegrity(adapter)
+	const final = await readPatchVerificationInputs(adapter)
 
 	// reject a failed test process with no failing case or file
 	if (
@@ -211,8 +233,8 @@ export async function verifyTree(evidence: PatchEvidence, state: State): Promise
 	}
 
 	// compare lifecycle hooks and cases with the pinned baseline
-	verifyLifecycleHooks(baselineIntegrity.hooks, final.hooks)
-	verifyCases(baselineIntegrity, final)
+	verifyLifecycleHooks(baselinePatchVerificationInputs.lifecycleHookSignatures, final.lifecycleHookSignatures)
+	verifyCases(baselinePatchVerificationInputs, final)
 	for (const { file, name } of state.expectedCases) {
 		if (!hasCase(final, file, name, "passed")) {
 			throw new Error("Edited test case did not pass")
@@ -220,7 +242,7 @@ export async function verifyTree(evidence: PatchEvidence, state: State): Promise
 	}
 
 	// report newly discovered cases alongside the final check evidence
-	const prior = new Set(baselineIntegrity.cases.map(([file, name]) => JSON.stringify([file, name])))
+	const prior = new Set(baselinePatchVerificationInputs.cases.map(([file, name]) => JSON.stringify([file, name])))
 	const addedCases = final.cases
 		.filter(([file, name]) => !prior.has(JSON.stringify([file, name])))
 		.map(([file, name]) => ({ file, name }))
@@ -257,11 +279,14 @@ export function verifyLifecycleHooks(baseline: string[], current: unknown): void
 }
 
 // preserve discovered baseline test files
-export function verifyCases(baselineIntegrity: Integrity, final: Integrity): void {
-	if (baselineIntegrity.discoveredFiles?.some((file) => !final.discoveredFiles?.includes(file))) {
+export function verifyCases(
+	baselinePatchVerificationInputs: PatchVerificationInputs,
+	final: PatchVerificationInputs,
+): void {
+	if (baselinePatchVerificationInputs.discoveredTestFiles?.some((file) => !final.discoveredTestFiles?.includes(file))) {
 		throw new Error("A Baseline test file disappeared from discovery")
 	}
-	const original = groupCases(baselineIntegrity.cases)
+	const original = groupCases(baselinePatchVerificationInputs.cases)
 	const current = groupCases(final.cases)
 
 	// check every final group for new or ambiguous failures
@@ -282,7 +307,7 @@ export function verifyCases(baselineIntegrity: Integrity, final: Integrity): voi
 	}
 
 	// require the same set of file loading errors
-	if (!isDeepStrictEqual(final.testFileErrors, baselineIntegrity.testFileErrors)) {
+	if (!isDeepStrictEqual(final.testFileErrors, baselinePatchVerificationInputs.testFileErrors)) {
 		throw new Error("Changed test file errors")
 	}
 }
@@ -296,7 +321,7 @@ function verifyFinalGroup(prior: CaseStatus[] | undefined, statuses: CaseStatus[
 	}
 }
 
-function groupCases(cases: Integrity["cases"]): Map<string, CaseStatus[]> {
+function groupCases(cases: PatchVerificationInputs["cases"]): Map<string, CaseStatus[]> {
 	const groups = new Map<string, CaseStatus[]>()
 	for (const [file, name, status] of cases) {
 		// group repeated case identities by file and test name
@@ -324,7 +349,12 @@ export async function verifyManifest(evidence: PatchEvidence, file: string, expe
 	}
 }
 
-export function hasCase(inventory: Integrity, file: string, name: string, status: string): boolean {
-	const matches = inventory.cases.filter((entry) => entry[0] === file && caseMatchesTitle(entry[1], name))
+export function hasCase(
+	verificationInputs: PatchVerificationInputs,
+	file: string,
+	name: string,
+	status: string,
+): boolean {
+	const matches = verificationInputs.cases.filter((entry) => entry[0] === file && caseMatchesTitle(entry[1], name))
 	return matches.length === 1 && matches[0]?.[2] === status
 }

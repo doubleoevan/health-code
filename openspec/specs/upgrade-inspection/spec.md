@@ -50,7 +50,7 @@ Each Install Check SHALL observe the candidate's install under the registry-only
 #### Scenario: Observation unavailable
 
 - **WHEN** monitoring loses part of the command tree or cannot resolve whether a destination was allowed
-- **THEN** the Install Check and Upgrade Check record the missing evidence and the upgrade is untested. If installation succeeds with no recorded finding, the adapter runs the available candidate checks under the locked network policy and keeps their results as partial evidence.
+- **THEN** the Install Check and Upgrade Check record the missing evidence and the upgrade is untested. If installation succeeds with no recorded finding, the adapter runs the available candidate checks under the locked network policy and reports the outcome of each check separately.
 
 ### Requirement: Confirm new failures and restore state
 

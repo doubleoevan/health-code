@@ -9,7 +9,7 @@ import {
 	cleanInstall,
 	hasCase,
 	type PatchEvidence,
-	readIntegrity,
+	readPatchVerificationInputs,
 	recordCommit,
 	requireBaseline,
 	type State,
@@ -43,7 +43,7 @@ export async function applyDecision({
 					"contents" in proposal &&
 					!state.files.has(proposal.file) &&
 					// require new test files to sit beside discovered tests
-					!evidence.baselineIntegrity?.files.includes(proposal.file) &&
+					!evidence.baselinePatchVerificationInputs?.projectFilePaths.includes(proposal.file) &&
 					adjacentTest(proposal.file, testFiles),
 			)
 			.map((proposal) => proposal.file),
@@ -124,7 +124,10 @@ async function addDependency(
 
 	// check lifecycle changes before recording the dependency commit
 	requireBaseline(evidence)
-	verifyLifecycleHooks(evidence.baselineIntegrity.hooks, await adapter.data(["lifecycle"]))
+	verifyLifecycleHooks(
+		evidence.baselinePatchVerificationInputs.lifecycleHookSignatures,
+		await adapter.data(["lifecycle"]),
+	)
 	const lock = trackedLockfile(evidence)
 	await verifyManifest(evidence, "package.json", manifest)
 	const commit = await recordCommit(
@@ -156,7 +159,7 @@ async function proveBehavior({
 	behaviorChange: z.infer<typeof decision>["behaviorChange"]
 }): Promise<void> {
 	requireBaseline(evidence)
-	const { adapter, inspectionReport, baselineIntegrity, report, baseInstall } = evidence
+	const { adapter, inspectionReport, baselinePatchVerificationInputs, report, baseInstall } = evidence
 
 	// locate the confirmed failure in the upgrade report
 	const failingCase =
@@ -182,7 +185,7 @@ async function proveBehavior({
 	// require the old source and release evidence to support the change
 	if (
 		!state.bumpTip ||
-		!hasCase(baselineIntegrity, file, name, "passed") ||
+		!hasCase(baselinePatchVerificationInputs, file, name, "passed") ||
 		!note ||
 		!symbol ||
 		!behaviorChange?.quote.split(/[^\w$]+/).includes(symbol) ||
@@ -211,7 +214,7 @@ async function proveBehavior({
 
 		// require a failing result for the targeted assertion
 		const tests = await adapter.test()
-		if (tests.status !== "failed" || !hasCase(await readIntegrity(adapter), file, name, "failed")) {
+		if (tests.status !== "failed" || !hasCase(await readPatchVerificationInputs(adapter), file, name, "failed")) {
 			throw new Error("Old and new behavior could not be demonstrated independently")
 		}
 	}

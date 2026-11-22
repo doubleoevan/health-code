@@ -14,12 +14,12 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
-import { inspectTrace } from "../guest/observe.ts"
-import { pageMetadata } from "../guest/readIntegrity.ts"
-import { readTraceLines } from "../guest/readTraceLines.ts"
+import { inspectSandboxActivity } from "../guest/observe.ts"
+import { pageFileAndHookEntries } from "../guest/readPatchVerificationInputs.ts"
+import { readSystemCallLogLines } from "../guest/readSystemCallLogLines.ts"
 import { confirm } from "../src/confirmCheck.ts"
 import type { CheckResult, Project } from "../src/contracts.ts"
-import { traceByteLimit } from "../src/sandbox/traceByteLimit.ts"
+import { maxSystemCallLogBytes } from "../src/sandbox/maxSystemCallLogBytes.ts"
 import { selectUpgrades } from "../src/selectUpgrades.ts"
 
 const recorded = fileURLToPath(new URL("./fixtures/recorded/", import.meta.url))
@@ -163,14 +163,14 @@ test("tracks observed destinations and transient writes with explicit uncertaint
 		"1 IP 10.0.0.2.123 > 10.0.0.1.53: 10+ A? example.org. (29)\n2 IP 10.0.0.1.53 > 10.0.0.2.123: 10 1/0/0 A 192.0.2.5"
 
 	// verify the attempted destination against earlier dns evidence
-	const evidence = inspectTrace(trace, dns, "0 packets dropped by kernel", [])
+	const evidence = inspectSandboxActivity(trace, dns, "0 packets dropped by kernel", [])
 	assert.deepEqual(evidence.connections.findings, [
 		{ kind: "connection", destination: "example.org", outcome: "attempted" },
 	])
 
 	// check filesystem attribution and explicitly dropped packets
 	assert.deepEqual(evidence.files.findings, [{ kind: "write", path: "/tmp/outside" }])
-	assert.equal(inspectTrace(trace, "", "1 packets dropped by kernel", []).connections.complete, false)
+	assert.equal(inspectSandboxActivity(trace, "", "1 packets dropped by kernel", []).connections.complete, false)
 })
 test("opaque baseline and non-reproducing failures remain untested", async () => {
 	const failed: CheckResult = { status: "failed", evidence: [], failingTests: [] }
@@ -256,30 +256,41 @@ test("streamed install evidence preserves split records and rejects truncated ca
 	try {
 		const row = "x".repeat(256 * 1024 - 1) + "é"
 		writeFileSync(path, row + "\nnext\n")
-		assert.deepEqual([...readTraceLines(path)], [row, "next"])
+		assert.deepEqual([...readSystemCallLogLines(path)], [row, "next"])
 
 		// Require both the final record boundary and the collector's overflow marker.
 		writeFileSync(path, "partial")
-		assert.throws(() => [...readTraceLines(path)], /ended during/)
-		truncateSync(path, traceByteLimit + 1)
-		assert.throws(() => [...readTraceLines(path)], /exceeded/)
+		assert.throws(() => [...readSystemCallLogLines(path)], /ended during/)
+		truncateSync(path, maxSystemCallLogBytes + 1)
+		assert.throws(() => [...readSystemCallLogLines(path)], /exceeded/)
 	} finally {
 		rmSync(directory, { recursive: true, force: true })
 	}
 })
 
-test("integrity metadata pages preserve paths, hooks and file errors beyond the transport limit", () => {
-	const files = Array.from({ length: 2400 }, (_, index) => `${"a".repeat(500)}/${index}.ts`)
-	const metadata = { files, hooks: ["postinstall"], discoveredFiles: ["unit.test.ts"], testFileErrors: ["load failed"] }
-	const first = pageMetadata(metadata, { cases: [["unit.test.ts", "passes", "passed"]], offset: 0 })
-	assert.ok(first.nextMetadataOffset)
+test("patch verification pages preserve paths, lifecycle hooks and test file errors beyond the transport limit", () => {
+	const projectFilePaths = Array.from({ length: 2400 }, (_, index) => `${"a".repeat(500)}/${index}.ts`)
+	const fileAndHookEntries = {
+		projectFilePaths,
+		lifecycleHookSignatures: ["postinstall"],
+		discoveredTestFiles: ["unit.test.ts"],
+		testFileErrors: ["load failed"],
+	}
+	const first = pageFileAndHookEntries(fileAndHookEntries, {
+		cases: [["unit.test.ts", "passes", "passed"]],
+		fileAndHookEntryOffset: 0,
+	})
+	assert.ok(first.nextFileAndHookEntryOffset)
 
-	// Read the continuation at the same offset the sandbox returned.
-	const second = pageMetadata(metadata, { cases: [], offset: first.nextMetadataOffset })
-	assert.equal(second.nextMetadataOffset, undefined)
-	assert.deepEqual([...first.files, ...second.files], files)
-	assert.deepEqual(second.testFileErrors, metadata.testFileErrors)
-	assert.deepEqual(second.discoveredFiles, metadata.discoveredFiles)
-	assert.deepEqual(second.hooks, metadata.hooks)
+	// Read the continuation at the entry offset the sandbox returned.
+	const second = pageFileAndHookEntries(fileAndHookEntries, {
+		cases: [],
+		fileAndHookEntryOffset: first.nextFileAndHookEntryOffset,
+	})
+	assert.equal(second.nextFileAndHookEntryOffset, undefined)
+	assert.deepEqual([...first.projectFilePaths, ...second.projectFilePaths], projectFilePaths)
+	assert.deepEqual(second.testFileErrors, fileAndHookEntries.testFileErrors)
+	assert.deepEqual(second.discoveredTestFiles, fileAndHookEntries.discoveredTestFiles)
+	assert.deepEqual(second.lifecycleHookSignatures, fileAndHookEntries.lifecycleHookSignatures)
 	assert.ok(Buffer.byteLength(JSON.stringify(first)) < 1024 * 1024)
 })

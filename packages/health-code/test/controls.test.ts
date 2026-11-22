@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { inspectTrace } from "../guest/observe.ts"
+import { inspectSandboxActivity } from "../guest/observe.ts"
 import {
 	createFakeSandboxProvider,
 	createSandboxProvider,
@@ -127,7 +127,7 @@ test("unavailable repository releases its sandbox before any repository code exe
 	assert.ok(destroyed)
 })
 test("uses resolved descriptor targets for writes through symlinks", () => {
-	const result = inspectTrace(
+	const result = inspectSandboxActivity(
 		'1 execve("/usr/bin/env", [], []) = 0\n1 openat(AT_FDCWD</project>, "link", O_WRONLY|O_TRUNC) = 3</tmp/actual>\n1 write(3</tmp/actual>, "x", 1) = 1',
 		"",
 		"0 packets dropped by kernel",
@@ -143,7 +143,7 @@ test("unexpected DNS questions and ambiguous metadata writes cannot produce a cl
 	const trace = ['1 execve("/usr/bin/env", [], []) = 0', '1 mkdirat(AT_FDCWD</project>, "linked/dir", 0755) = 0'].join(
 		"\n",
 	)
-	const result = inspectTrace(
+	const result = inspectSandboxActivity(
 		trace,
 		"1 IP 10.0.2.1.111 > 10.0.2.3.53: 11+ TXT? example.org. (30)",
 		"0 packets dropped by kernel",
@@ -160,7 +160,10 @@ test("unexpected DNS questions and ambiguous metadata writes cannot produce a cl
 
 test("path metadata operations that follow the last symlink report incomplete coverage", () => {
 	const trace = '1 execve("/usr/bin/env", [], []) = 0\n1 chmod("/project/linked", 0600) = 0'
-	assert.equal(inspectTrace(trace, "", "0 packets dropped by kernel", [], ["/project/linked"]).files.complete, false)
+	assert.equal(
+		inspectSandboxActivity(trace, "", "0 packets dropped by kernel", [], ["/project/linked"]).files.complete,
+		false,
+	)
 })
 
 test("only DNS answers preceding a connection can establish its destination", () => {
@@ -172,7 +175,7 @@ test("only DNS answers preceding a connection can establish its destination", ()
 		"3 IP 10.0.0.2.123 > 10.0.0.1.53: 10+ A? registry.npmjs.org. (29)\n4 IP 10.0.0.1.53 > 10.0.0.2.123: 10 1/0/0 A 192.0.2.5"
 
 	// keep an address unresolved when its dns response follows the connection
-	const result = inspectTrace(trace, dns, "0 packets dropped by kernel", ["registry.npmjs.org"])
+	const result = inspectSandboxActivity(trace, dns, "0 packets dropped by kernel", ["registry.npmjs.org"])
 	assert.equal(result.connections.complete, false)
 	assert.deepEqual(result.connections.findings, [{ kind: "connection", destination: "192.0.2.5", outcome: "unknown" }])
 })
@@ -183,7 +186,7 @@ test("records descriptor metadata and keeps ambiguous mapping changes incomplete
 		"1 mmap(NULL, 4096, PROT_READ, MAP_SHARED, 4</tmp/shared>, 0) = 0x1234",
 	]
 	const read = (lines: string[]): Observation =>
-		inspectTrace(lines.join("\n"), "", "0 packets dropped by kernel", []).files
+		inspectSandboxActivity(lines.join("\n"), "", "0 packets dropped by kernel", []).files
 
 	// distinguish a known metadata write from an ambiguous mapped write
 	assert.deepEqual(read(trace), { complete: true, findings: [{ kind: "write", path: "/tmp/metadata" }] })
@@ -199,7 +202,7 @@ test("normalizes renamed link ancestors and reads descriptor-only timestamp chan
 	].join("\n")
 
 	// retain descriptor writes when a renamed link obscures path coverage
-	const result = inspectTrace(trace, "", "0 packets dropped by kernel", [], ["/project/dir/link"])
+	const result = inspectSandboxActivity(trace, "", "0 packets dropped by kernel", [], ["/project/dir/link"])
 	assert.equal(result.files.complete, false)
 	assert.deepEqual(result.files.findings, [{ kind: "write", path: "/tmp/outside" }])
 })
@@ -219,7 +222,7 @@ test("observes pnpm permission changes through project links alongside read-only
 	const { argv: args } = guestArguments({ argv: ["true"], timeoutMs: 1000 }, undefined)
 	const mount = args.indexOf("/usr")
 	assert.deepEqual(args.slice(mount - 1, mount + 2), ["--ro-bind", "/usr", "/usr"])
-	assert.deepEqual(inspectTrace(trace, "", "0 packets dropped by kernel", []).files, {
+	assert.deepEqual(inspectSandboxActivity(trace, "", "0 packets dropped by kernel", []).files, {
 		complete: true,
 		findings: [{ kind: "write", path: "/tmp/log" }],
 	})
@@ -240,7 +243,7 @@ test("keeps coverage incomplete for escaping, cyclic, or replaced link targets",
 	]) {
 		// apply the metadata change through each ambiguous link
 		const trace = [start, ...links, '1 chmod("/project/link/bin", 0755) = 0'].join("\n")
-		const files = inspectTrace(trace, "", "0 packets dropped by kernel", []).files
+		const files = inspectSandboxActivity(trace, "", "0 packets dropped by kernel", []).files
 		assert.equal(files.complete, false)
 		assert.match(files.reason ?? "", /symbolic link/)
 	}
@@ -251,7 +254,7 @@ test("attributes relative installs until a traced process can change directory",
 	const link = '1 symlink("target", "link") = 0'
 	const change = '2 chdir("/project/pkg") = 0'
 	const read = (rows: string[]): Observation =>
-		inspectTrace([start, ...rows], "", "0 packets dropped by kernel", []).files
+		inspectSandboxActivity([start, ...rows], "", "0 packets dropped by kernel", []).files
 
 	// Keep earlier evidence and treat even an unfinished change as ambiguous for concurrent writes.
 	assert.equal(read([link, change]).complete, true)
@@ -264,15 +267,18 @@ test("Bun hardlinks anonymous temporary inodes into the project", () => {
 		'2 execve("/usr/bin/env", [], []) = 0',
 		'2 linkat(5</project/.cache/#123>(deleted), "", 6</project/node_modules>, "pkg", AT_EMPTY_PATH) = 0',
 	].join("\n")
-	assert.deepEqual(inspectTrace(trace, "", "0 packets dropped by kernel", []).files, { complete: true, findings: [] })
+	assert.deepEqual(inspectSandboxActivity(trace, "", "0 packets dropped by kernel", []).files, {
+		complete: true,
+		findings: [],
+	})
 })
 
 test("network observation traces all outbound address-bearing calls and keeps unfinished sends inconclusive", () => {
 	// inspect an unfinished system call under network observation
 	const { argv: args } = guestArguments({ argv: ["true"], timeoutMs: 1000, observe: "network" }, "/evidence")
 	assert.ok(args.includes("trace=execve,connect,sendto,sendmsg,sendmmsg"))
-	const inspect = (name: string): ReturnType<typeof inspectTrace> =>
-		inspectTrace(
+	const inspect = (name: string): ReturnType<typeof inspectSandboxActivity> =>
+		inspectSandboxActivity(
 			`1 execve("/usr/bin/env", [], []) = 0\n2 ${name}(3, <unfinished ...>`,
 			"",
 			"0 packets dropped by kernel",

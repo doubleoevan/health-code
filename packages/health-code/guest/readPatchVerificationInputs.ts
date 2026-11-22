@@ -3,48 +3,61 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs"
 import { join } from "node:path"
 import { filesUnder, readText, workspaceDirectories } from "./inventory.ts"
 
-const inventoryFile = "/inspection-inventory"
-type InventoryMetadata = { files: string[]; hooks: string[]; discoveredFiles: string[]; testFileErrors: string[] }
-type InventoryPage = Partial<Pick<InventoryMetadata, "discoveredFiles">> &
-	Omit<InventoryMetadata, "discoveredFiles"> & {
+const testCasePagesDirectory = "/inspection-inventory"
+type FileAndHookEntries = {
+	projectFilePaths: string[]
+	lifecycleHookSignatures: string[]
+	discoveredTestFiles: string[]
+	testFileErrors: string[]
+}
+
+// Older test captures may omit the list of discovered test files.
+type PatchVerificationInputsPage = Partial<Pick<FileAndHookEntries, "discoveredTestFiles">> &
+	Omit<FileAndHookEntries, "discoveredTestFiles"> & {
 		cases: [string, string, string][]
-		nextMetadataOffset?: number
+		nextFileAndHookEntryOffset?: number
 	}
 
-export function readIntegrity(offset: number, metadataOffset?: number): InventoryPage {
-	if (![offset, metadataOffset ?? 0].every((value) => Number.isSafeInteger(value) && value >= 0)) {
-		throw new Error("Invalid inventory page")
-	}
-	const page: InventoryPage = JSON.parse(readFileSync(join(inventoryFile, offset + ".json"), "utf8"))
-	if (offset) {
-		return { cases: page.cases, files: [], hooks: [], testFileErrors: [] }
+export function readPatchVerificationInputs(
+	testCaseOffset: number,
+	fileAndHookEntryOffset?: number,
+): PatchVerificationInputsPage {
+	if (![testCaseOffset, fileAndHookEntryOffset ?? 0].every((value) => Number.isSafeInteger(value) && value >= 0)) {
+		throw new Error("Invalid patch verification page offset")
 	}
 
-	// Bound the path and lifecycle metadata independently of the protected test-case pages.
-	const metadata = {
-		files: filesUnder(".").filter((name) => !/^\.(?:env|git)/.test(name)),
-		hooks: readLifecycleHooks(),
-		discoveredFiles: page.discoveredFiles ?? [],
+	// Only the first test case page includes repository-wide entries.
+	const page: { cases: PatchVerificationInputsPage["cases"]; discoveredFiles?: string[]; testFileErrors?: string[] } =
+		JSON.parse(readFileSync(join(testCasePagesDirectory, testCaseOffset + ".json"), "utf8"))
+	if (testCaseOffset) {
+		return { cases: page.cases, projectFilePaths: [], lifecycleHookSignatures: [], testFileErrors: [] }
+	}
+
+	// Bound the path and lifecycle hook entries independently of the protected test-case pages.
+	const fileAndHookEntries = {
+		projectFilePaths: filesUnder(".").filter((name) => !/^\.(?:env|git)/.test(name)),
+		lifecycleHookSignatures: readLifecycleHookSignatures(),
+		discoveredTestFiles: page.discoveredFiles ?? [],
 		testFileErrors: page.testFileErrors ?? [],
 	}
-	const result = pageMetadata(metadata, {
-		cases: metadataOffset === undefined ? page.cases : [],
-		offset: metadataOffset ?? 0,
+	const result = pageFileAndHookEntries(fileAndHookEntries, {
+		cases: fileAndHookEntryOffset === undefined ? page.cases : [],
+		fileAndHookEntryOffset: fileAndHookEntryOffset ?? 0,
 	})
 	if (page.discoveredFiles === undefined) {
-		delete result.discoveredFiles
+		delete result.discoveredTestFiles
 	}
 	return result
 }
 
-export function pageMetadata(
-	metadata: InventoryMetadata,
-	{ cases, offset }: { cases: InventoryPage["cases"]; offset: number },
-): InventoryPage {
-	const result: InventoryMetadata & Pick<InventoryPage, "cases"> = {
-		files: [],
-		hooks: [],
-		discoveredFiles: [],
+export function pageFileAndHookEntries(
+	fileAndHookEntries: FileAndHookEntries,
+	{ cases, fileAndHookEntryOffset }: { cases: PatchVerificationInputsPage["cases"]; fileAndHookEntryOffset: number },
+): PatchVerificationInputsPage {
+	const result: FileAndHookEntries & Pick<PatchVerificationInputsPage, "cases"> = {
+		projectFilePaths: [],
+		lifecycleHookSignatures: [],
+		discoveredTestFiles: [],
 		testFileErrors: [],
 		cases,
 	}
@@ -52,24 +65,29 @@ export function pageMetadata(
 	let size = Buffer.byteLength(JSON.stringify(cases))
 
 	// Allow room for the enclosing object and escaping within the one-MiB transport limit.
-	for (const field of ["files", "hooks", "discoveredFiles", "testFileErrors"] as const) {
-		for (const entry of metadata[field]) {
-			if (position++ < offset) {
+	for (const field of [
+		"projectFilePaths",
+		"lifecycleHookSignatures",
+		"discoveredTestFiles",
+		"testFileErrors",
+	] as const) {
+		for (const entry of fileAndHookEntries[field]) {
+			if (position++ < fileAndHookEntryOffset) {
 				continue
 			}
 
 			// Count escaped UTF-8 bytes as they appear in the serialized response.
 			const bytes = Buffer.byteLength(JSON.stringify(entry)) + 1
 			if (bytes > 512 * 1024) {
-				throw new Error("Integrity entry exceeds the metadata page limit")
+				throw new Error("File or hook entry exceeds the page size limit")
 			}
 
 			// Resume from the first entry excluded from this page.
 			if (size + bytes > 768 * 1024) {
-				return { ...result, nextMetadataOffset: position - 1 }
+				return { ...result, nextFileAndHookEntryOffset: position - 1 }
 			}
 
-			// Keep the entry in its original metadata field.
+			// Keep the entry in its original field.
 			size += bytes
 			result[field].push(entry)
 		}
@@ -77,7 +95,7 @@ export function pageMetadata(
 	return result
 }
 
-export function readLifecycleHooks(): string[] {
+export function readLifecycleHookSignatures(): string[] {
 	// reject installs whose lifecycle inventory cannot be enumerated
 	if ([".pnp.cjs", ".pnp.js", ".pnp.loader.mjs"].some((file) => existsSync(file))) {
 		throw new Error("Lifecycle inventory unavailable for Yarn Plug'n'Play")

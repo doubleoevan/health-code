@@ -52,7 +52,7 @@ export class ModelInspection {
 	baseSize?: number
 	baseInstall?: Observation
 	baseTests?: Observation
-	baseIntegrity?: PatchEvidence["baselineIntegrity"]
+	baselinePatchVerificationInputs?: PatchEvidence["baselinePatchVerificationInputs"]
 
 	// clamp inspection limits before constructing the model budget
 	readonly meter = new RuntimeMeter()
@@ -150,7 +150,7 @@ export class ModelInspection {
 		this.installedEvidence.clear()
 		this.baseInstall = undefined
 		this.baseTests = undefined
-		this.baseIntegrity = undefined
+		this.baselinePatchVerificationInputs = undefined
 		this.baseSize = undefined
 	}
 
@@ -239,7 +239,7 @@ export class ModelInspection {
 				report,
 				usage,
 				releaseNotes: evidence.notes,
-				baselineIntegrity: this.baseIntegrity,
+				baselinePatchVerificationInputs: this.baselinePatchVerificationInputs,
 				baseInstall: this.baseInstall,
 				baseTests: this.baseTests,
 			}

@@ -129,6 +129,9 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			"Adoption outcome",
 			"Why no tested patch is available",
 			"Turn limit reached",
+			"What we could verify",
+			"Upgraded typecheck",
+			"Upgraded tests",
 			"Added dependencies",
 			"options-helper@1.0.0",
 			"Model cost",
@@ -170,6 +173,21 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 	patch.mailbox += "changed"
 	expect(() => publishReport(output, "MIT")).toThrow("verification")
 	store.database.close()
+})
+
+test("a timed-out upgrade install explains which checks did not run", async () => {
+	const output = await replay.inspect(repository, () => {})
+	const upgrade = output.report.upgrades[0]!
+	const timeout = "The upgrade install timed out after 180 seconds."
+	upgrade.install = { status: "untested", reason: "command-timeout", detail: timeout, evidence: [] }
+	upgrade.result = upgrade.install
+	upgrade.typecheck = upgrade.tests = { status: "untested", reason: "not-run", evidence: [] }
+
+	// Only describe both checks as skipped when the recorded results support it.
+	const published = (): string | undefined => publishReport(output, null).card.upgrades[0]?.untestedReason
+	expect(published()).toBe(`${timeout} The upgraded typecheck and tests did not run.`)
+	upgrade.tests = { status: "passed", evidence: [] }
+	expect(published()).toBe(timeout)
 })
 
 test("patch order belongs to the dependency that requires it", async () => {

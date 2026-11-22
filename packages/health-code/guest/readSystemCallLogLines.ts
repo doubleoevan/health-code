@@ -1,19 +1,19 @@
 import { closeSync, fstatSync, openSync, readFileSync, readSync, rmSync, statSync } from "node:fs"
 import { posix } from "node:path"
 import { StringDecoder } from "node:string_decoder"
-import { traceByteLimit } from "../src/sandbox/traceByteLimit.ts"
-import { inspectTrace } from "./observe.ts"
+import { maxSystemCallLogBytes } from "../src/sandbox/maxSystemCallLogBytes.ts"
+import { inspectSandboxActivity } from "./observe.ts"
 
 class CaptureLimitError extends Error {}
 
 /**
- * Reads the protected syscall capture without retaining the install's entire trace in memory.
+ * Reads the protected system call log one chunk at a time.
  */
-export function* readTraceLines(path: string): Generator<string> {
+export function* readSystemCallLogLines(path: string): Generator<string> {
 	const descriptor = openSync(path, "r")
 	try {
-		if (fstatSync(descriptor).size > traceByteLimit) {
-			throw new CaptureLimitError("Installation trace exceeded the capture limit")
+		if (fstatSync(descriptor).size > maxSystemCallLogBytes) {
+			throw new CaptureLimitError("System call log exceeded the capture limit")
 		}
 
 		// Bound each read independently of the total capture size.
@@ -26,14 +26,14 @@ export function* readTraceLines(path: string): Generator<string> {
 			const lines = (tail + decoder.write(buffer.subarray(0, size))).split("\n")
 			tail = lines.pop() ?? ""
 			if (tail.length > 1024 * 1024) {
-				throw new CaptureLimitError("Installation trace line exceeded the capture limit")
+				throw new CaptureLimitError("System call log line exceeded the capture limit")
 			}
 			yield* lines
 		}
 
 		// Require a complete last record from the tracer.
 		if (tail || decoder.end()) {
-			throw new CaptureLimitError("Installation trace ended during a syscall record")
+			throw new CaptureLimitError("System call log ended during a syscall record")
 		}
 	} finally {
 		closeSync(descriptor)
@@ -60,8 +60,8 @@ if (directory && /^\/var\/lib\/health-code\/evidence-[a-f0-9-]{36}$/.test(direct
 			.map((path) => posix.resolve("/project", path))
 		console.log(
 			JSON.stringify(
-				inspectTrace(
-					readTraceLines(`${directory}/syscalls`),
+				inspectSandboxActivity(
+					readSystemCallLogLines(`${directory}/syscalls`),
 					read("dns"),
 					read("status"),
 					process.argv.slice(3),
@@ -71,7 +71,7 @@ if (directory && /^\/var\/lib\/health-code\/evidence-[a-f0-9-]{36}$/.test(direct
 		)
 	} catch (error) {
 		// Publish only supervisor-defined diagnostics for an incomplete capture.
-		const reason = error instanceof CaptureLimitError ? error.message : "Could not read installation evidence"
+		const reason = error instanceof CaptureLimitError ? error.message : "Could not read installation activity records"
 		const missing = { complete: false, reason, findings: [] }
 		console.log(JSON.stringify({ connections: missing, files: missing }))
 	} finally {

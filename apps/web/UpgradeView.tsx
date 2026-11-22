@@ -196,13 +196,7 @@ function UsageDetails({ usage }: { usage: UpgradeCard["usage"] }): ReactElement 
 function UpgradeCoverage({ upgrade }: { upgrade: UpgradeCard }): ReactElement {
 	return (
 		<>
-			{upgrade.coverage && (
-				<p>
-					{upgrade.coverage === "skipped"
-						? "Skipped before checking this upgrade."
-						: "Partially checked. See the individual checks below."}
-				</p>
-			)}
+			{upgrade.coverage === "skipped" && <p>Skipped before checking this upgrade.</p>}
 			{upgrade.reusedFromInspectionId && (
 				<p>
 					Previously tested in{" "}
@@ -248,7 +242,7 @@ export function UpgradeView({
 			<UpgradeCoverage upgrade={upgrade} />
 
 			{/* repair outcome and test changes */}
-			{upgrade.verdict === "Untested" && upgrade.untestedReason && (
+			{(!upgrade.verdict || upgrade.verdict === "Untested") && upgrade.untestedReason && (
 				<p>
 					<strong>Why this upgrade was untested</strong> · {upgrade.untestedReason}
 				</p>
@@ -262,13 +256,16 @@ export function UpgradeView({
 				<p key={change}>Test change · {change}</p>
 			))}
 
-			{/* release summary and feature matches */}
-			<p>{upgrade.summary ?? "Release summary unavailable."}</p>
+			{/* results from the upgraded checkout */}
+			<h4>What we could verify</h4>
 			<dl>
-				<dt>Where this fits in your code</dt>
-				<dd>
-					<CodeFeatureMatches matches={upgrade.matches} />
-				</dd>
+				<dt>Upgrade install</dt>
+				<dd>{upgrade.checks.install}</dd>
+				<dt>Upgraded typecheck</dt>
+				<dd>{upgrade.checks.typecheck}</dd>
+				<dt>Upgraded tests</dt>
+				<dd>{upgrade.checks.tests}</dd>
+				<TestFileErrors errors={upgrade.testFileErrors} />
 
 				{/* observed installation activity */}
 				<dt>Installation findings</dt>
@@ -288,15 +285,15 @@ export function UpgradeView({
 						</p>
 					)}
 				</dd>
+			</dl>
 
-				{/* install, typecheck and test results */}
-				<dt>Install check</dt>
-				<dd>{upgrade.checks.install}</dd>
-				<dt>Typecheck and tests</dt>
+			{/* release summary and feature matches */}
+			<p>{upgrade.summary ?? "Release summary unavailable."}</p>
+			<dl>
+				<dt>Where this fits in your code</dt>
 				<dd>
-					{upgrade.checks.typecheck} · {upgrade.checks.tests}
+					<CodeFeatureMatches matches={upgrade.matches} />
 				</dd>
-				<TestFileErrors errors={upgrade.testFileErrors} />
 
 				{/* diagnostic source locations */}
 				<dt>Source locations</dt>

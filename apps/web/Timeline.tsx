@@ -34,6 +34,9 @@ function toActionLabel(event: Extract<SiteEvent, { type: "sandbox.event" }>): st
 	return event.detail && event.detail !== label ? `${label} ${event.detail}` : label
 }
 function toStepLabel(label: string): string {
+	if (label === "integrity") {
+		return "Read patch verification inputs"
+	}
 	if (label === "registry") {
 		return "Find available upgrades"
 	}

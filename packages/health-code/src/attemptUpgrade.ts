@@ -12,8 +12,8 @@ import { type decision, readDecision } from "./proposeEdits.ts"
 import { requestAgentTurn } from "./requestAgentTurn.ts"
 import {
 	cleanInstall,
-	type Integrity,
 	type PatchEvidence,
+	type PatchVerificationInputs,
 	requireBaseline,
 	type State,
 	verifyTree,
@@ -39,7 +39,7 @@ export async function attemptUpgrade(
 	])
 
 	// load the allowed source set and snapshot the starting candidate
-	const testFiles = discoveredTests(evidence.baselineIntegrity)
+	const testFiles = discoveredTests(evidence.baselinePatchVerificationInputs)
 	await loadAllowedFiles({ evidence, state, files })
 	const initial = structuredClone(state)
 	const initialSource = initial.files
@@ -119,8 +119,8 @@ export async function attemptUpgrade(
 	throw new Error("No verified repair within the attempt limits")
 }
 
-function discoveredTests(inventory?: Integrity): Set<string> {
-	return new Set(inventory?.discoveredFiles ?? inventory?.cases.map((entry) => entry[0]))
+function discoveredTests(verificationInputs?: PatchVerificationInputs): Set<string> {
+	return new Set(verificationInputs?.discoveredTestFiles ?? verificationInputs?.cases.map((entry) => entry[0]))
 }
 async function reportRejectedTurn({
 	evidence,
@@ -239,7 +239,7 @@ async function loadAllowedFiles({
 }): Promise<void> {
 	// restrict model-visible files to the baseline inventory
 	for (const file of files) {
-		if (!evidence.baselineIntegrity?.files.includes(file)) {
+		if (!evidence.baselinePatchVerificationInputs?.projectFilePaths.includes(file)) {
 			continue
 		}
 		const text = await workspace(evidence, { kind: "read", file, revision: state.tip }).catch(() => undefined)

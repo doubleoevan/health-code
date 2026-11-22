@@ -1,13 +1,13 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { type Integrity, verifyCases } from "../src/verifyCandidate.ts"
+import { type PatchVerificationInputs, readPatchVerificationInputs, verifyCases } from "../src/verifyCandidate.ts"
 
 test("final discovery preserves every comparable case and loaded suite", () => {
-	const initial: Integrity = {
-		files: [],
-		hooks: [],
+	const initial: PatchVerificationInputs = {
+		projectFilePaths: [],
+		lifecycleHookSignatures: [],
 		testFileErrors: [],
-		discoveredFiles: ["custom/empty.ts", "custom/check.ts"],
+		discoveredTestFiles: ["custom/empty.ts", "custom/check.ts"],
 		cases: [
 			["custom/check.ts", "passes", "passed"],
 			["custom/check.ts", "fails", "failed"],
@@ -17,7 +17,7 @@ test("final discovery preserves every comparable case and loaded suite", () => {
 	assert.ok(passes && fails)
 
 	// compare case inventories against the discovered baseline
-	const changed = (cases: Integrity["cases"]): void => verifyCases(initial, { ...initial, cases })
+	const changed = (cases: PatchVerificationInputs["cases"]): void => verifyCases(initial, { ...initial, cases })
 	assert.doesNotThrow(() => changed([passes, fails, ["custom/check.ts", "additional", "passed"]]))
 
 	// reject ambiguous, omitted and weakened cases
@@ -27,23 +27,29 @@ test("final discovery preserves every comparable case and loaded suite", () => {
 	assert.throws(() => changed([passes, fails, ["custom/check.ts", "new failure", "failed"]]), /New failures/)
 
 	// require the empty suite to remain discoverable
-	assert.throws(() => verifyCases(initial, { ...initial, discoveredFiles: ["custom/check.ts"] }), /disappeared/)
+	assert.throws(() => verifyCases(initial, { ...initial, discoveredTestFiles: ["custom/check.ts"] }), /disappeared/)
 })
 
 test("repeated Baseline titles retain every passing invocation", () => {
 	const repeated = ["advisories.test.ts", "invalid audit output fails closed", "passed"] as const
-	const cases: Integrity["cases"] = Array.from({ length: 4 }, () => [...repeated])
-	const initial: Integrity = { cases, files: [], hooks: [], testFileErrors: [] }
+	const cases: PatchVerificationInputs["cases"] = Array.from({ length: 4 }, () => [...repeated])
+	const initial: PatchVerificationInputs = {
+		cases,
+		projectFilePaths: [],
+		lifecycleHookSignatures: [],
+		testFileErrors: [],
+	}
 
 	// compare invocation counts before accepting repeated titles
-	const compare = (current: Integrity["cases"]): void => verifyCases(initial, { ...initial, cases: current })
+	const compare = (current: PatchVerificationInputs["cases"]): void =>
+		verifyCases(initial, { ...initial, cases: current })
 	assert.doesNotThrow(() => compare(cases))
 	assert.throws(() => compare(cases.slice(1)), /ambiguous|omitted/)
 	assert.throws(() => compare([...cases, [...repeated]]), /ambiguous/)
 
 	// reject mixed outcomes for indistinguishable invocations in either inventory
 	for (const state of ["failed", "skipped", "todo"] as const) {
-		const mixed: Integrity["cases"] = [...cases.slice(1), [repeated[0], repeated[1], state]]
+		const mixed: PatchVerificationInputs["cases"] = [...cases.slice(1), [repeated[0], repeated[1], state]]
 		assert.throws(() => compare(mixed), /ambiguous/)
 		assert.throws(() => verifyCases({ ...initial, cases: mixed }, initial), /ambiguous/)
 	}
@@ -61,4 +67,40 @@ test("runner suite and case titles retain their boundaries", async () => {
 	assert.equal(caseMatchesTitle(jsonCaseName({ fullName: left }), left), true)
 	assert.equal(caseMatchesTitle(right, "example"), false)
 	assert.equal(caseMatchesTitle(left, "example"), true)
+})
+
+test("reads every patch verification input from an existing sandbox provider", async () => {
+	const commands: string[][] = []
+	const inputs = await readPatchVerificationInputs({
+		async data(args) {
+			commands.push(args)
+			const files = ["src/widget.ts"]
+			const hook = "postinstall signature"
+
+			// Older providers use the same command with a separate offset for file and hook entries.
+			if (args.length === 2) {
+				return {
+					files,
+					hooks: [],
+					cases: [["widget.test.ts", "loads", "passed"]],
+					testFileErrors: [],
+					nextMetadataOffset: 1,
+				}
+			}
+			return { files: [], hooks: [hook], discoveredFiles: ["widget.test.ts"], cases: [], testFileErrors: [] }
+		},
+	})
+
+	// Reassemble both pages without losing the test result from the first response.
+	assert.deepEqual(commands, [
+		["integrity", "0"],
+		["integrity", "0", "1"],
+	])
+	assert.deepEqual(inputs, {
+		projectFilePaths: ["src/widget.ts"],
+		lifecycleHookSignatures: ["postinstall signature"],
+		discoveredTestFiles: ["widget.test.ts"],
+		cases: [["widget.test.ts", "loads", "passed"]],
+		testFileErrors: [],
+	})
 })

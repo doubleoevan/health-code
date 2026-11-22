@@ -18,6 +18,30 @@ function toChecks(checks: Baseline): UpgradeCard["checks"] {
 	}
 }
 
+function toUntestedReason(upgrade: InspectionReport["upgrades"][number]): string | undefined {
+	if (upgrade.result.status !== "untested") {
+		return undefined
+	}
+
+	// Explain skipped checks only when neither has recorded an execution.
+	const install = upgrade.install
+	if (install.status === "untested" && ["interrupted", "command-timeout"].includes(install.reason)) {
+		const checksDidNotRun = [upgrade.typecheck, upgrade.tests].every(
+			(check) =>
+				check.status === "untested" &&
+				check.evidence.length === 0 &&
+				["not-run", "install-failed", "incomplete-observation"].includes(check.reason),
+		)
+		if (checksDidNotRun) {
+			const detail = install.reason === "interrupted" ? upgrade.result.detail : install.detail
+			return [detail ?? "The upgrade install did not finish.", "The upgraded typecheck and tests did not run."].join(
+				" ",
+			)
+		}
+	}
+	return upgrade.result.detail ?? upgrade.result.reason
+}
+
 function toCitation(locator: UpgradeReportV2["locators"][number]): Citation {
 	return { label: [locator.file, locator.line, locator.reason].filter(Boolean).join(" · "), url: locator.url }
 }
@@ -101,8 +125,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 			observation: upgrade.observation,
 			verdict: upgradeV2?.verdict,
 			reason: upgradeV2?.diagnosis?.stopReason,
-			untestedReason:
-				upgrade.result.status === "untested" ? (upgrade.result.detail ?? upgrade.result.reason) : undefined,
+			untestedReason: toUntestedReason(upgrade),
 			testChanges: upgradeV2?.patches.flatMap((patch) =>
 				patch.commits.filter((commit) => commit.flag === "test").map((commit) => commit.reason ?? commit.subject),
 			),

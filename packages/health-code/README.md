@@ -41,4 +41,4 @@ Use `mode: "listUpgrades"` or `mode: "inspectUpgrades"` with the lower-level `in
 
 A release feature describes what the dependency added. Each `CodeFeatureMatch` in `upgrade.featureMatches` links a release feature to source in the inspected repository. When a result comes from an earlier inspection, `reusedFromInspectionId` identifies that inspection.
 
-If an install succeeds with incomplete observation and no recorded installation finding, Health Code reports the available upgraded typecheck and test results as partial evidence. The upgrade remains Untested and cannot produce a verified patch.
+If the upgrade installs and Health Code cannot verify all network connections or filesystem changes, the report identifies the missing activity. With no recorded installation finding, Health Code runs the tests and runs the typecheck when the baseline typecheck passed. The upgrade verdict stays Untested.

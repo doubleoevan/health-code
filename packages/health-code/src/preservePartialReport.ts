@@ -1,10 +1,13 @@
 import { ProjectEvidenceError, RegistryDeadlineError, skippedUpgrade } from "./checkProject.ts"
+import { toUpgradeInstallTimeout } from "./confirmCheck.ts"
 import {
 	type Baseline,
 	type CheckResult,
 	InspectionError,
+	type InspectionEvent,
 	type InspectionReport,
 	SandboxUnavailableError,
+	type UpgradeReport,
 } from "./contracts.ts"
 
 import { toUpgradeKey } from "./selectUpgrades.ts"
@@ -28,7 +31,6 @@ export function preservePartialReport({
 	activeUpgrade?: string
 }): void {
 	// Record the interrupted target for a bounded retry after sandbox loss.
-	const reason = toStopReason(error)
 	if (error instanceof SandboxUnavailableError) {
 		report.sandboxUnavailable = true
 		report.interruptedUpgrade = activeUpgrade
@@ -36,6 +38,10 @@ export function preservePartialReport({
 
 	// Identify the interrupted step using the event already recorded for it.
 	const last = report.timeline.findLast((event) => event.type === "step.finished")
+	const active = report.upgrades.find((item) => toUpgradeKey(item) === activeUpgrade)
+	const reason = toStopReason(error)
+
+	// Keep repository-wide stop reasons separate from a single upgrade timeout.
 	report.stoppedReason = last?.status === "failed" ? `${reason} Last step: ${last.summary}.` : reason
 	if ("reason" in report.packageManager) {
 		report.packageManager = { reason }
@@ -45,16 +51,16 @@ export function preservePartialReport({
 	}
 
 	// Keep evidence collected for the active upgrade before the interruption.
-	const active = report.upgrades.find((item) => toUpgradeKey(item) === activeUpgrade)
+	const activeCheckReason = toInterruptedInstallDetail({ error, step: last, upgrade: active }) ?? reason
 	if (last?.status === "failed") {
-		markInterruptedCheck(active ?? report.baseline, last.summary, reason)
+		markInterruptedCheck(active ?? report.baseline, last.summary, activeCheckReason)
 	}
 
 	// Preserve the completed stages on the active upgrade.
 	if (active) {
 		active.coverage = "partial"
 		if (active.result.status === "untested" && active.result.reason === "not-run") {
-			active.result = { ...active.result, detail: reason }
+			active.result = { ...active.result, detail: activeCheckReason }
 		}
 	}
 
@@ -69,6 +75,30 @@ export function preservePartialReport({
 	for (const upgrade of remaining) {
 		const skipped = skippedUpgrade(upgrade, "not-run", reason)
 		report.upgrades.push({ ...skipped, coverage: "skipped" })
+	}
+}
+
+function toInterruptedInstallDetail({
+	error,
+	step,
+	upgrade,
+}: {
+	error: unknown
+	step?: Extract<InspectionEvent, { type: "step.finished" }>
+	upgrade?: UpgradeReport
+}): string | undefined {
+	// Distinguish deadline expiry from an installation error or a lost sandbox.
+	if (
+		!(error instanceof InspectionError && error.code === "deadline") ||
+		step?.status !== "failed" ||
+		step.summary !== "install"
+	) {
+		return undefined
+	}
+
+	// Attribute the elapsed time only to this upgrade's unfinished installation.
+	if (upgrade && step.upgradeId === toUpgradeKey(upgrade) && isUnfinished(upgrade.install)) {
+		return toUpgradeInstallTimeout(step.durationMs)
 	}
 }
 

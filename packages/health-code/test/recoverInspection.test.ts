@@ -2,13 +2,14 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
 	type FixtureCommand,
+	InspectionError,
 	type InspectionEvent,
 	inspectRepository,
 	listUpgrades,
 	type SandboxProvider,
 	SandboxUnavailableError,
 } from "../src/index.ts"
-import { retainCompletedChecks } from "../src/preservePartialReport.ts"
+import { preservePartialReport, retainCompletedChecks } from "../src/preservePartialReport.ts"
 import { fixtureCommit, fixtureUrl } from "./providerContract.ts"
 import { base, command, provider, report, scripts } from "./replayProjectChecks.ts"
 
@@ -38,6 +39,40 @@ test("registry lookup has its own timeout and preserves that failure in the repo
 		"Couldn’t list available upgrades: registry lookup timed out after 60s.",
 	)
 	assert.equal(inspectionReport.baseline.install.status, "passed")
+})
+
+test("the interrupted upgrade uses its own install duration", async () => {
+	const inspection = await inspectRepository({
+		repositoryUrl: fixtureUrl,
+		sandboxProvider: provider(scripts([], [], [])),
+		limits: { maxUpgrades: 1 },
+	})
+	const upgrade = inspection.upgrades[0]!
+	upgrade.install = upgrade.result = { status: "untested", reason: "not-run", evidence: [] }
+
+	// Replay the timed-out step after successful baseline checks at the same commit.
+	const activeUpgrade = `${upgrade.dependency}@${upgrade.to}`
+	inspection.timeline.push({
+		version: 1,
+		inspectionId: "fixture",
+		timestamp: new Date(0).toISOString(),
+		sequence: inspection.timeline.length + 1,
+		type: "step.finished",
+		stepId: "candidate-install",
+		status: "failed",
+		upgradeId: activeUpgrade,
+		summary: "install",
+		durationMs: 180015,
+	})
+	preservePartialReport({
+		report: inspection,
+		activeUpgrade,
+		error: new InspectionError("deadline", "Inspection interrupted"),
+	})
+
+	// Keep the original installation's result separate from the upgrade's timeout.
+	assert.equal(inspection.baseline.install.status, "passed")
+	assert.equal(upgrade.result.detail, "The upgrade install timed out after 180 seconds.")
 })
 
 test("partial registry failures preserve upgrades from successful lookups", async () => {
