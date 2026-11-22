@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import type { Baseline, InspectionReport, ModelRequestSandboxInspectionReport, UpgradeReportV2 } from "health-code"
-import { testInventorySummarySchema } from "health-code"
+import { testInventorySummarySchema, toInspectionMode } from "health-code"
 import { type Citation, type PatchLink, type PublishedReport, toCheckText, type UpgradeCard } from "./report.ts"
 
 export type InspectionOutput = { report: InspectionReport | ModelRequestSandboxInspectionReport }
@@ -54,6 +54,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 	// collect links and bytes from the same verified patch series
 	function collectPatches(sources: UpgradeReportV2["patches"]): PatchLink[] {
 		const patches: PatchLink[] = []
+		const byId = new Map(sources.map((patch) => [patch.id, patch.digest]))
 		for (const patch of sources) {
 			// recompute the digest from the mailbox before publication
 			const bytes = new TextEncoder().encode(patch.mailbox)
@@ -69,6 +70,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 
 			// publish downloadable bytes and prompts only for licensed repositories
 			if (license) {
+				// Publish each prerequisite at its content-addressed URL.
 				blobs.set(digest, bytes)
 				patches.push({
 					digest,
@@ -76,7 +78,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 					base: patch.base,
 					prompt: patch.prompt,
 					testedTip: patch.testedTip,
-					prerequisite: patch.prerequisite,
+					prerequisite: toPrerequisiteDigest(patch.prerequisite, byId),
 					checks: patch.verification && toChecks(patch.verification),
 				})
 			}
@@ -90,6 +92,8 @@ export function publishReport(output: InspectionOutput, license: string | null):
 		const patches = collectPatches(upgradeV2?.patches ?? [])
 		return {
 			dependency: upgrade.dependency,
+			coverage: upgrade.coverage,
+			reusedFromInspectionId: upgradeV2?.reusedFromInspectionId ?? upgradeV2?.reusedFrom,
 			from: upgrade.from,
 			to: upgrade.to,
 			checks: toChecks(upgrade),
@@ -136,10 +140,13 @@ export function publishReport(output: InspectionOutput, license: string | null):
 		blobs,
 		card: {
 			version: 1,
+			upgradeMenu: toInspectionMode(report.selection) === "listUpgrades" ? report.selection.eligible : undefined,
 			promptVersions: report.promptVersions,
 			repository: report.repository,
 			usageAsOf: report.version === 2 ? report.runtimeUsage?.usageAsOf : undefined,
 			baseline: toChecks(report.baseline),
+			stoppedReason: report.stoppedReason,
+			omitted: report.selection.omitted.map((upgrade) => `${upgrade.dependency}@${upgrade.to}`),
 			baselineTestFileErrors: toTestFileErrors(report.baseline.tests),
 			turnLimits:
 				agent?.repair?.maxTurns !== undefined && agent.featureAdoption?.maxTurns !== undefined
@@ -152,4 +159,17 @@ export function publishReport(output: InspectionOutput, license: string | null):
 			featureCount: featureDigests.size,
 		},
 	}
+}
+
+function toPrerequisiteDigest(id: string | undefined, byId: Map<string, string>): string | undefined {
+	if (!id) {
+		return undefined
+	}
+
+	// Resolve the stored patch identity before handing out its URL.
+	const digest = byId.get(id)
+	if (!digest) {
+		throw new Error("Missing patch prerequisite")
+	}
+	return digest
 }

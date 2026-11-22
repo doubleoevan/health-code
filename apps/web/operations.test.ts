@@ -63,6 +63,19 @@ test("first-party cohorts exclude repeat and self views, count timely starts onc
 	assert.ok(html.includes("<td>$0.40</td><td>$0.25</td><td>$0.75</td><td>$10.00</td>"))
 	assert.ok(html.includes("<td>3</td><td>1</td><td>1 / 1</td>"))
 
+	// Exclude completed upgrade menus from both sides of the share rate across stored choice formats.
+	for (const payload of [{ mode: "listUpgrades" }, { discoveryOnly: true }]) {
+		const upgradeMenuId = start(JSON.stringify(payload), "author")
+		store.database.query("INSERT INTO inspection_choices VALUES(?,?)").run(upgradeMenuId, JSON.stringify(payload))
+		store.database.query("UPDATE inspections SET state='complete' WHERE id=?").run(upgradeMenuId)
+		store.admission.view(upgradeMenuId, "menu-visitor", now)
+	}
+
+	// Count only the tested report and its foreign viewers.
+	const activity = store.admission.daily().find((entry) => entry.day === day)
+	assert.equal(activity?.completed, 1)
+	assert.equal(JSON.parse(activity.counts).shared, 1)
+
 	// Retain aggregate counts after the visitor and network digests expire.
 	store.database.exec(
 		"UPDATE admissions SET day=date('now','-32 days');UPDATE foreign_views SET day=date('now','-32 days')",

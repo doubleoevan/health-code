@@ -15,6 +15,11 @@ type DailyActivity = {
 	pendingMicros: number
 	settledUpperMicros: number
 }
+// Use the small queued choice to distinguish upgrade menus from shareable reports.
+const shareableReport = `NOT EXISTS (
+	SELECT 1 FROM inspection_choices c WHERE c.id=inspections.id
+	AND coalesce(json_extract(c.payload,'$.mode')='listUpgrades',json_extract(c.payload,'$.discoveryOnly'),0))`
+
 export function toUtcDay(now = Date.now()): string {
 	return new Date(now).toISOString().slice(0, 10)
 }
@@ -57,6 +62,14 @@ export class AdmissionLedger {
 			.run(day, kind)
 	}
 
+	// Associate queued work with the release that will execute it.
+	updateQueuedRelease(libraryVersion: string, releaseRevision: string): void {
+		this.database
+			.query(`UPDATE admissions SET cacheKey=json_set(cacheKey,'$[2]',?,'$[3]',?,'$[4]',json_extract(settings,'$.maxUpgrades'))
+				WHERE id IN (SELECT id FROM inspections WHERE state='queued') AND json_valid(cacheKey)`)
+			.run(libraryVersion, releaseRevision)
+	}
+
 	// Include a live claim when joining an identical submission.
 	reuse(key: string, day: string): { id: string; reused: true } | null {
 		const id = this.cache(key)
@@ -88,7 +101,9 @@ export class AdmissionLedger {
 	private cache(key: string): string | undefined {
 		return this.database
 			.query<{ id: string }, [string]>(`SELECT id FROM admissions JOIN inspections USING(id)
-			WHERE cacheKey=? AND state IN ('queued','running','complete') LIMIT 1`)
+			WHERE cacheKey=? AND state IN ('queued','running','complete')
+			AND (state!='complete' OR CASE WHEN json_valid(cacheKey) THEN json_extract(cacheKey,'$[5]') IS NOT 'menu' ELSE 1 END
+			OR updated >= datetime('now','-1 hour')) LIMIT 1`)
 			.get(key)?.id
 	}
 
@@ -258,7 +273,7 @@ export class AdmissionLedger {
 			.transaction(() => {
 				const author = this.database
 					.query<{ visitor: string; completed: string }, [string]>(
-						"SELECT visitor,date(updated) completed FROM admissions JOIN inspections USING(id) WHERE id=? AND state='complete'",
+						`SELECT visitor,date(updated) completed FROM admissions JOIN inspections USING(id) WHERE id=? AND state='complete' AND ${shareableReport}`,
 					)
 					.get(id)
 				if (!author?.visitor || author.visitor === visitor) {
@@ -289,7 +304,7 @@ export class AdmissionLedger {
 				DailyActivity,
 				[]
 			>(`WITH days AS (SELECT date('now') day UNION SELECT day FROM launch_counts UNION SELECT day FROM admissions UNION SELECT settledDay FROM admissions WHERE settledDay IS NOT NULL UNION SELECT date(updated) FROM admissions JOIN inspections USING(id) WHERE state='complete')
-		SELECT day,(SELECT count(*) FROM admissions JOIN inspections USING(id) WHERE state='complete' AND date(updated)=d.day) completed,
+		SELECT day,(SELECT count(*) FROM admissions JOIN inspections USING(id) WHERE state='complete' AND date(updated)=d.day AND ${shareableReport}) completed,
 		(SELECT json_group_object(kind,count) FROM launch_counts WHERE day=d.day) counts,
 		(SELECT coalesce(sum(model),0) FROM admissions WHERE settledDay=d.day) modelMicros,
 		(SELECT coalesce(sum(sandbox),0) FROM admissions WHERE settledDay=d.day) sandboxUpperMicros,

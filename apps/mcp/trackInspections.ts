@@ -2,11 +2,13 @@ import { setTimeout as delay } from "node:timers/promises"
 import {
 	InspectionError,
 	type InspectionEvent,
+	type InspectionOptions,
 	type InspectionReport,
 	type ModelRequestSandboxEvent,
 	type ModelRequestSandboxInspectionReport,
 } from "health-code"
 import * as z from "zod"
+import { listPatches, patchReference } from "./listPatches.ts"
 import { UserError } from "./modelSettings.ts"
 import {
 	type Event,
@@ -27,24 +29,31 @@ export const readOutput = z.object({
 	nextSequence: z.number(),
 	hasMore: z.boolean(),
 	report: page.nullable(),
+	patches: z.array(patchReference),
 	results: z.array(outcomeSchema),
 	failure: z.string().optional(),
 })
 
 // accept either supported event and report format from the inspection engine
-export type Inspect = (options: {
-	repositoryUrl: string
-	signal: AbortSignal
-	onEvent: (event: InspectionEvent | ModelRequestSandboxEvent) => void
-}) => Promise<InspectionReport | ModelRequestSandboxInspectionReport>
+type Choice = Pick<InspectionOptions, "revision" | "mode" | "upgrade">
+export type Inspect = (
+	options: Choice & {
+		repositoryUrl: string
+		signal: AbortSignal
+		onEvent: (event: InspectionEvent | ModelRequestSandboxEvent) => void
+	},
+) => Promise<InspectionReport | ModelRequestSandboxInspectionReport>
 
 // retain live progress until the report is saved
 type State = {
 	events: Event[]
 	step: string
 	status: "running" | "failed" | "complete"
+
+	// Retain terminal evidence when the report cannot be saved.
 	failure?: string
 	reportText?: string
+	patches?: z.infer<typeof patchReference>[]
 }
 
 // track cancellation and cursors for each read request
@@ -121,7 +130,7 @@ export class Inspections {
 		}
 		await Promise.all(this.jobs.values())
 	}
-	async start(repositoryUrl: string): Promise<string> {
+	async start(repositoryUrl: string, choice?: Choice & { signal?: AbortSignal }): Promise<string> {
 		// prepare separate promises for acceptance and completion
 		const controller = new AbortController()
 		const state: State = { events: [], step: "Starting inspection", status: "running" }
@@ -130,8 +139,9 @@ export class Inspections {
 		const operation = Promise.resolve()
 			.then(() =>
 				this.inspect({
+					...choice,
 					repositoryUrl,
-					signal: controller.signal,
+					signal: choice?.signal ? AbortSignal.any([choice.signal, controller.signal]) : controller.signal,
 					onEvent: (input) => {
 						// Validate before publishing an event or waking a polling client.
 						this.store.guard(JSON.stringify(input))
@@ -177,6 +187,7 @@ export class Inspections {
 						// retain the report in memory if every write fails
 						if (attempt === 2) {
 							state.reportText = JSON.stringify(saved)
+							state.patches = listPatches(saved)
 							throw new UserError("Inspection Report is available in memory only. Check local storage.")
 						}
 						await delay(100)
@@ -217,6 +228,47 @@ export class Inspections {
 		this.jobs.set(controller, operation)
 		return accepted.promise
 	}
+	async run({
+		repositoryUrl,
+		choice,
+		request,
+	}: {
+		repositoryUrl: string
+		choice: Choice
+		request: ReadRequest
+	}): Promise<string> {
+		// Bind cancellation to this call’s inspection.
+		request.signal?.throwIfAborted()
+		const id = await this.start(repositoryUrl, { ...choice, signal: request.signal })
+
+		// Deliver the durable identity before waiting on long sandbox checks.
+		await request.progress?.(`Inspection ${id}`)
+		let afterSequence = 0
+		for (;;) {
+			request.signal?.throwIfAborted()
+			const result = await this.read(
+				{ inspectionId: id, afterSequence, waitMs: 5000, reportOffset: 0 },
+				{ signal: request.signal },
+			)
+			for (const event of result.events) {
+				if (event.type !== "detail") {
+					await request.progress?.(`#${event.sequence} · ${toEventLine(event)}`)
+				}
+			}
+
+			// Drain the last events even if the inspection finished between reads.
+			afterSequence = result.nextSequence
+			if (result.failure && !result.hasMore) {
+				throw new UserError(`Inspection ${id}: ${result.failure}`)
+			}
+
+			if (result.status === "complete" && !result.hasMore) {
+				break
+			}
+		}
+		return id
+	}
+
 	private async waitForEvents(input: Read, request: ReadRequest): Promise<void> {
 		// establish the deadline and report the current step before waiting
 		const { progress, signal } = request
@@ -268,6 +320,7 @@ export class Inspections {
 			nextSequence,
 			hasMore: nextSequence < (timeline.at(-1)?.sequence ?? 0),
 			report: report ? textPage(report, input.reportOffset) : null,
+			patches: saved ? listPatches(saved.report) : (state?.patches ?? []),
 			results,
 		}
 	}

@@ -140,5 +140,5 @@ An Inspection SHALL lazily allocate at most one Model Request Sandbox at the fir
 
 #### Scenario: Model request sandbox call deadline
 
-- **WHEN** a summary or Feature Match is dispatched through the model request sandbox
+- **WHEN** a summary or Code Feature Match is dispatched through the model request sandbox
 - **THEN** the call has at most 120 seconds and ends sooner when the remaining Inspection work time expires. The teardown reserve remains available.

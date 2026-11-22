@@ -12,7 +12,7 @@ The unscoped `health-code` npm package SHALL start the Node stdio server with `n
 #### Scenario: Install one release
 
 - **WHEN** a developer installs the packed release in a fresh Node project
-- **THEN** the public entry exports the library, the MCP serves its four tools, and both printed client entries launch the installed version using the existing pinned command from the user’s home.
+- **THEN** the public entry exports the library, the MCP serves its inspection tools, and both printed client entries launch the installed version using the existing pinned command from the user’s home.
 - **AND** the default Claude Code environment and Codex environment list each contain only the token reference.
 
 #### Scenario: First setup and key rotation
@@ -32,12 +32,12 @@ The unscoped `health-code` npm package SHALL start the Node stdio server with `n
 
 ### Requirement: Route personally funded inspections
 
-The caller SHALL fund sandbox, model request sandbox and model use. All four roles SHALL default to Claude Opus 5.5 on Anthropic and accept configured model ID and host overrides. The MCP SHALL select model request sandbox execution for summaries and Feature Matches and use the existing sandbox binding for Repair and Feature adoption. Live MCP Inspections SHALL require only `RUNTA_TOKEN` at default settings. An optional GitHub credential SHALL serve release retrieval only.
+The caller SHALL fund sandbox, model request sandbox and model use. All four roles SHALL default to Claude Opus 5.5 on Anthropic and accept configured model ID and host overrides. The MCP SHALL select model request sandbox execution for summaries and Code Feature Matches and use the existing sandbox binding for Repair and Feature adoption. Live MCP Inspections SHALL require only `RUNTA_TOKEN` at default settings. An optional GitHub credential SHALL serve release retrieval only.
 
 #### Scenario: First Inspection after setup
 
 - **WHEN** the client supplies only the sandbox token after a successful default setup
-- **THEN** it can complete and save an Inspection, including summaries and Feature Matches from the Model Request Sandbox and eligible Agent Attempts. No local authenticated model client is constructed. Tool payloads, logs and saved evidence contain no raw key.
+- **THEN** it can complete and save an Inspection, including summaries and Code Feature Matches from the Model Request Sandbox and eligible Agent Attempts. No local authenticated model client is constructed. Tool payloads, logs and saved evidence contain no raw key.
 
 #### Scenario: Host key missing
 
@@ -51,7 +51,7 @@ The caller SHALL fund sandbox, model request sandbox and model use. All four rol
 
 ### Requirement: Discover and start inspections
 
-Both clients SHALL discover four titled tools with input and output schemas, plain summary-first text, accurate read-only and open-world hints, and usable structured success results. `start_inspection` SHALL accept a public GitHub Repository URL, return an Inspection ID immediately and continue work in the local server process.
+Both clients SHALL discover eight titled tools with input and output schemas, plain summary-first text, accurate read-only and open-world hints, and usable structured success results. `start_inspection` SHALL accept a public GitHub Repository URL, return an Inspection ID immediately and continue work in the local server process.
 
 #### Scenario: Inspect a slow repository
 
@@ -120,3 +120,19 @@ The MCP server SHALL save completed Inspection Reports with their exact Patch ar
 
 - **WHEN** the referenced Patch is absent, an adaptation lacks a description or the pull request URL is malformed
 - **THEN** the tool returns an actionable error and preserves prior results
+
+### Requirement: Choose a dependency upgrade
+
+The MCP SHALL accept a repository URL in `list_upgrades` and return release features and an upgrade menu ID. A subsequent `get_upgrade` call SHALL return the selected version’s verified patch or recorded checks and reason. When the client requests progress, both tools SHALL forward ordered inspection, step and sandbox events during execution.
+
+#### Scenario: Browse a saved discovery result
+
+- **WHEN** the client uses `discover_upgrades` to inspect the lockfile and registry before installation or model calls, then reopens the upgrade menu with `list_upgrades`
+- **THEN** the upgrade menu groups eligible targets by dependency, supports name search, sorts by minor availability, name or declaring workspace count, and can filter to targets with a verified local upgrade patch.
+
+#### Scenario: Select one version
+
+- **WHEN** the developer requests a target from the upgrade menu
+- **THEN** the server SHALL return the verified patch from the existing inspection or inspect only that dependency and target version at the upgrade menu's commit.
+
+The MCP SHALL offer `get_upgrade_features` for a version listed in the upgrade menu. Each feature SHALL cite upstream release evidence and identify the workspaces crossing that release. A preview SHALL use no sandbox or model call.

@@ -7,7 +7,7 @@ Give a shared link a durable record of what Health Code inspected, what Runta en
 
 ### Requirement: Durable, readable evidence
 
-A stable Inspection Report URL SHALL render a one-line summary, the Repository and pinned commit, Baseline under “Checks before the upgrade”, and one card per inspected Upgrade. Each card SHALL identify the dependency, all source versions, target, textual Verdict, plain-language changes, Feature Matches, Install Check findings, typecheck and deprecation evidence, size difference and available Patches. Evidence links SHALL use GitHub permalinks where supplied. Missing evidence SHALL be visible.
+Each stable Inspection Report URL SHALL show a summary, Repository, pinned commit, Baseline under “Checks before the upgrade”, and one card per Upgrade. Each card SHALL show the dependency, source and target versions, textual Verdict, plain-language changes, Code Feature Matches, Install Check findings, typecheck and deprecation evidence, size difference and available Patches. The report SHALL link supplied GitHub permalinks and identify missing evidence.
 
 #### Scenario: Every Verdict and sparse evidence
 

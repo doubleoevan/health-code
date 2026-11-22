@@ -43,6 +43,12 @@ export type InspectionModels = {
 // bound each role by turns, duration and cost
 type AttemptLimits = { maxTurns: number; maxDurationMs: number; maxCostUsd: number }
 export type InspectionOptionsV2 = Omit<InspectionOptions, "models" | "onEvent" | "limits"> & {
+	// Read previously verified results for the pinned repository from the caller's cache.
+	reuseUpgrade?: (
+		repository: InspectionReport["repository"],
+		upgrade: import("./contracts.ts").Upgrade,
+	) => UpgradeReportV2 | undefined
+
 	models: InspectionModels
 	githubToken?: string
 
@@ -125,7 +131,7 @@ export type AgentCapability = (
 export type Locator = { file: string; line?: number; url?: string; reason?: string }
 
 // tie a suggested replacement to its evidence
-export type FeatureMatch = {
+export type CodeFeatureMatch = {
 	rank?: number
 	replacement?: "direct" | "inferred"
 	directQuote?: string
@@ -175,9 +181,15 @@ export type Verdict = "Passes as is" | "Fixed" | "Fixed with test changes" | "Ca
 
 // summarize upgrade evidence and the resulting verdict
 export type UpgradeReportV2 = UpgradeReport & {
+	reusedFromInspectionId?: string
+
+	/**
+	 * @deprecated Read reusedFromInspectionId on new inspection reports.
+	 */
+	reusedFrom?: string
 	usageLimitations?: string[]
 	releaseSummary: { text: string; sources: string[]; gaps?: string[] }
-	featureMatches: FeatureMatch[]
+	featureMatches: CodeFeatureMatch[]
 	locators: Locator[]
 	installSize: { before?: number; after?: number; delta?: number; reason?: string; method?: string }
 	verdict: Verdict

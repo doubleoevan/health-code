@@ -43,7 +43,7 @@ async function main(args: string[]): Promise<void> {
 	})
 
 	// Connect stdio independently of remote recovery.
-	const server = createServer(inspections, version)
+	const server = createServer({ inspections, version })
 	const transport = new StdioServerTransport()
 	server.server.onclose = () => {
 		void inspections.close()

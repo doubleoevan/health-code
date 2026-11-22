@@ -1,6 +1,6 @@
 # Inspection engine
 
-`index.ts` is the public library entry. `contracts.ts` owns the JSON report and event types, provider interface, and typed errors. `inspectRepository.ts` owns allocation, the pinned Baseline, candidate sequencing, and finally-block cleanup.
+`index.ts` is the public library entry. `contracts.ts` owns the JSON report and event types, provider interface, and typed errors. `openRepositoryRuntime.ts` owns repository runtime allocation, checkout, network lockdown and replacement admission. `inspectRepository.ts` owns one bounded recovery attempt and final cleanup. `inspectProject.ts` runs the pinned baseline and serial upgrade checks.
 
 `checkProject.ts` drives the Node Ecosystem Adapter and compares check evidence. `selectUpgrades.ts` orders registry candidates. `collectEvents.ts` owns per-inspection deadlines and callback delivery. `createFakeSandboxProvider.ts` replays caller-supplied fixtures. The `sandbox/` module owns the production provider.
 
@@ -27,3 +27,7 @@ A confirmed install failure can enter repair after a clean observation. The supe
 `readPrompt.ts` validates each Inspection’s bundled or caller-supplied Markdown and identifies effective templates by name, version and SHA-256. `buildPrompt.ts` fences bounded, redacted evidence at call time. `traceGeneration.ts` adapts an optional caller-owned tracer to the SDK’s per-call interface.
 
 `inspectUpgrade.ts` runs the Install Check, confirms new failures and compares each Upgrade Check against the Baseline.
+
+`listUpgrades.ts` exposes the two operations to discover an upgrade menu with release features and test one pinned upgrade. `readUpgradeFeatures.ts` extracts bounded, source-linked feature entries from release notes for a chosen target. Set `mode: "listUpgrades"` to list eligible upgrades and release the sandbox before installation. Pass an exact `upgrade` and `revision` to test a chosen target. The public `health-code` entry groups, searches and sorts eligible versions.
+
+`requestHostModel.ts` dispatches summaries and feature matching. `mergeTestInventory.ts` combines test inventory and command results.

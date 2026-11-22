@@ -16,12 +16,22 @@ An inspection SHALL select at most six distinct dependency and target pairs by d
 
 ### Requirement: Establish a comparable Baseline
 
-The engine SHALL capture install, applicable typecheck, and test results at the pinned commit before attributing failures to upgrades. A failed Baseline install or build SHALL make every selected Upgrade untested.
+The engine SHALL capture install, applicable typecheck, and test results at the pinned commit before attributing failures to upgrades. A failed Baseline install SHALL prevent upgrade checks. If the install succeeds and the required Baseline build fails, Health Code SHALL retain independent upgrade install and test evidence and mark the overall comparison partial.
+
+#### Scenario: Broken Baseline install
+
+- **WHEN** frozen install fails
+- **THEN** the report lists each selected upgrade as skipped and explains why
 
 #### Scenario: Broken Baseline build
 
-- **WHEN** frozen install or the required Baseline build fails
-- **THEN** each selected Upgrade is untested with the Baseline reason and the engine performs no upgrade installations
+- **WHEN** frozen install succeeds and the required Baseline build fails
+- **THEN** the report shows the independent install and test results, the skipped typecheck and an Untested Verdict
+
+#### Scenario: Sandbox loss during checks
+
+- **WHEN** the sandbox becomes unavailable after checkout and network lockdown and deletion succeeds
+- **THEN** the engine may start one replacement under the original time and spend limits, pin the same commit, lock the network, measure its baseline again and finish outstanding upgrades serially. Untouched upgrades precede the interrupted target. A partial report retains completed evidence and lists selected upgrades that never started
 
 #### Scenario: Known Baseline failures
 
@@ -93,9 +103,18 @@ Each version 2 Upgrade SHALL receive one of Passes as is, Fixed, Fixed with test
 #### Scenario: Adoption rejected after an accepted repair
 
 - **WHEN** an adoption fails its independent check after the repair was accepted
-- **THEN** the repair Verdict and upgrade Patch remain available and the Feature Match explains why no feature Patch was retained.
+- **THEN** the repair Verdict and upgrade Patch remain available and the Code Feature Match explains why no feature Patch was retained.
 
 #### Scenario: A confirmed break persists at the ceiling
 
 - **WHEN** repair reaches the time, cost or turn limit and the confirmed regression persists
 - **THEN** the Verdict is Can't fix, with diagnosis and attempts and no partial Patch.
+
+### Requirement: List available upgrades and test one choice
+
+The public library SHALL expose `listUpgrades` to return the inspected commit and the eligible dependencies with source-linked release features. `getUpgrade` SHALL accept a target from that list and its commit, run the checks for that target and return the inspection report with any verified patches. Both operations SHALL deliver inspection status through `onEvent`.
+
+#### Scenario: Test a single version from an upgrade menu
+
+- **WHEN** a library consumer chooses one dependency and target version from an upgrade menu
+- **THEN** the consumer can follow the checks at the listed commit as they run and read the selected upgrade’s verified patches or the reason verification stopped

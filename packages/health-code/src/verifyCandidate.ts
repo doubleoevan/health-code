@@ -91,7 +91,10 @@ export function requireBaseline(evidence: PatchEvidence): asserts evidence is Pa
 	baselineIntegrity: Integrity
 } {
 	// require a passing baseline case for meaningful comparison
-	if (!evidence.baselineIntegrity?.cases.some((entry) => entry[2] === "passed")) {
+	if (!evidence.baselineIntegrity) {
+		throw new Error("Health Code could not read the original test inventory to verify a patch")
+	}
+	if (!evidence.baselineIntegrity.cases.some((entry) => entry[2] === "passed")) {
 		throw new Error("Baseline has no comparable passing test cases")
 	}
 	for (const [name, observation] of [

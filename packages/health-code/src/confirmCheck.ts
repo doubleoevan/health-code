@@ -1,10 +1,12 @@
 import { type CheckResult, type Evidence, InspectionError, type TestFailure } from "./contracts.ts"
 
 const reasonDetails: Readonly<Record<string, string>> = {
+	"not-run": "Skipped. This check did not run.",
 	"no-tsconfig": "The project has no TypeScript configuration.",
 	"missing-test-script": "The project has no test script.",
 	"command-timeout": "The command reached its time limit.",
 	"inspection-deadline": "The inspection reached its time limit.",
+	"baseline-typecheck-unavailable": "Skipped. The original commit did not pass typechecking.",
 	"baseline-unavailable": "The Baseline could not establish a comparison.",
 	"installation-finding": "The installation attempted an unexpected connection or filesystem change.",
 	"incomplete-observation": "Installation observation was incomplete.",
@@ -17,7 +19,7 @@ const reasonDetails: Readonly<Record<string, string>> = {
 	"opaque-baseline": "The Baseline test failure could not be attributed to a specific test.",
 	"unconfirmed-failure": "The second attempt did not confirm the first failure.",
 }
-export function untested(reason: string, evidence: Evidence[] = []): CheckResult {
+export function untested(reason: string, evidence: Evidence[] = []): Extract<CheckResult, { status: "untested" }> {
 	return { status: "untested", reason, detail: reasonDetails[reason] ?? reason, evidence }
 }
 function toTestFailureKey(test: TestFailure): string {

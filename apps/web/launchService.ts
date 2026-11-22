@@ -1,18 +1,21 @@
 import { randomBytes } from "node:crypto"
 import { libraryVersion, toRepositoryUrl } from "health-code"
-import type { InspectionSource } from "./executeInspection.ts"
+import type { InspectionChoice, InspectionSource } from "./inspectionSource.ts"
 import { LaunchSettings } from "./launchLimits.ts"
-import { AdmissionError, toUtcDay, type Visitor } from "./recordAdmissions.ts"
+import { AdmissionError, type RepositoryHead, toUtcDay, type Visitor } from "./recordAdmissions.ts"
 import type { InspectionStore } from "./storeInspections.ts"
 import { verifyChallenge } from "./verifyVisitor.ts"
 
 export type AdmissionRequest = { identify: () => Visitor; challenge: unknown; hostname: string }
 
 export class LaunchService {
+	private readonly releaseRevision: string
 	readonly settings: LaunchSettings
 	readonly visitorKey: string
 	readonly challengeKey: string
 	readonly challengeSecret: string
+
+	// Keep the service availability and operator access settings together.
 	readonly configured: boolean
 	readonly adminPassword?: string
 	constructor(
@@ -26,6 +29,7 @@ export class LaunchService {
 			TURNSTILE_SITE_KEY: site,
 			TURNSTILE_SECRET_KEY: secret,
 		} = environment
+		this.releaseRevision = environment.NF_DEPLOYMENT_SHA ?? "local"
 		this.configured = replay || Boolean(key && key.length >= 32 && site && secret && token)
 		this.settings = new LaunchSettings(environment, token)
 
@@ -36,9 +40,36 @@ export class LaunchService {
 		this.adminPassword = environment.HEALTH_CODE_ADMIN_PASSWORD
 	}
 
+	resumeQueued(store: InspectionStore): void {
+		store.admission.updateQueuedRelease(libraryVersion, this.releaseRevision)
+	}
+
+	private cacheKeys(head: RepositoryHead, choice?: InspectionChoice): { report: string; scope: string } {
+		if (choice?.revision && choice.revision !== head.revision) {
+			throw new AdmissionError(
+				400,
+				"The repository has changed. Find upgrades again to choose from its current commit.",
+			)
+		}
+
+		// Separate discovery and each target from automatic inspections in the cache.
+		const scope = [
+			head.repositoryId,
+			head.revision,
+			libraryVersion,
+			this.releaseRevision,
+			this.settings.current.maxUpgrades,
+		]
+		const job = choice?.mode === "listUpgrades" ? "menu" : choice?.upgrade
+		return { report: JSON.stringify(job ? [...scope, job] : scope), scope: JSON.stringify(scope.slice(0, 4)) }
+	}
+
 	async admit(options: {
 		input: string
+		choice?: InspectionChoice
 		request: AdmissionRequest
+
+		// Resolve and queue the verified repository.
 		source: Pick<InspectionSource, "resolve">
 		store: InspectionStore
 		workerAvailable: () => boolean
@@ -53,7 +84,16 @@ export class LaunchService {
 		const head = await source.resolve(url)
 
 		// Join an existing inspection before challenging or charging its visitor.
-		const key = JSON.stringify([head.repositoryId, head.revision, libraryVersion])
+		const maxUpgrades = this.settings.current.maxUpgrades
+		const choice = options.choice
+		const { report: key, scope } = this.cacheKeys(head, choice)
+		const ready = store.upgrades.readyReport(scope, choice?.upgrade)
+		if (ready) {
+			store.admission.count("cache", toUtcDay())
+			return { id: ready, reused: true }
+		}
+
+		// Join queued work or a complete report for the same operation.
 		const day = toUtcDay()
 		const cached = store.admission.reuse(key, day)
 		if (cached) {
@@ -69,6 +109,11 @@ export class LaunchService {
 		}
 
 		// Derive quota identities only for fresh work.
+		if (choice?.upgrade && maxUpgrades === 0) {
+			throw new AdmissionError(503, "Upgrade testing is paused. Existing patches remain available.")
+		}
+
+		// Identify the visitor before reserving fresh work.
 		const identity = request.identify()
 		try {
 			store.admission.checkAllowance(identity, this.settings.current, day)
@@ -81,8 +126,11 @@ export class LaunchService {
 			if (toUtcDay(now) !== day) {
 				throw new AdmissionError(503, "The daily allowance just reset. Retry this inspection.")
 			}
+
+			// Match the reservation to the coverage used for the cache lookup.
 			const limits = this.settings.current
-			if (!workerAvailable() || !this.settings.available || head.sizeKiB > limits.maxSizeKiB) {
+			const changed = head.sizeKiB > limits.maxSizeKiB || limits.maxUpgrades !== maxUpgrades
+			if (changed || !workerAvailable() || !this.settings.available) {
 				throw new AdmissionError(503, "Admission settings changed. Retry.")
 			}
 
@@ -93,7 +141,7 @@ export class LaunchService {
 				limits,
 				identity,
 				now,
-				enqueue: () => store.enqueue(head.canonicalUrl ?? url),
+				enqueue: () => store.enqueue(head.canonicalUrl ?? url, choice),
 			})
 			setTimeout(wake, 0)
 			return result

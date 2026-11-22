@@ -40,3 +40,7 @@ export function selectUpgrades(
 	eligible.sort((a, b) => Number(a.kind === "major") - Number(b.kind === "major"))
 	return { eligible, selected: eligible.slice(0, limit), omitted: eligible.slice(limit), skipped }
 }
+
+export function toUpgradeKey(upgrade: Pick<Upgrade, "dependency" | "to">): string {
+	return `${upgrade.dependency}@${upgrade.to}`
+}

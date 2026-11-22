@@ -1,11 +1,19 @@
-import { InspectionError } from "health-code"
+import {
+	dependenciesPerPage,
+	InspectionError,
+	toFeaturePage,
+	toRepositoryUrl,
+	toUpgradeMenu,
+	type UpgradeMenuTarget,
+} from "health-code"
 import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { HTTPException } from "hono/http-exception"
 import { renderToStaticMarkup, renderToString } from "react-dom/server"
 import { adminPage } from "./adminPage.tsx"
 import type { Inspections } from "./executeInspection.ts"
-import { SiteError } from "./executeInspection.ts"
+import type { InspectionChoice } from "./inspectionSource.ts"
+import { SiteError } from "./inspectionSource.ts"
 import { Page, type PageProps } from "./Page.tsx"
 import { AdmissionError, type Visitor } from "./recordAdmissions.ts"
 import { mcpSetupUrl, toSummary } from "./report.ts"
@@ -16,7 +24,11 @@ type Assets = { script: string; styles: string[] }
 function render(props: PageProps, assets: Assets): string {
 	// describe the inspected revision in the page metadata
 	const report = props.snapshot?.card
-	const title = report ? `Health Code: ${toSummary(report)}` : "Health Code · Dependency inspections"
+	const title = props.upgradeMenu
+		? "Health Code · Choose a dependency upgrade"
+		: report
+			? `Health Code: ${toSummary(report)}`
+			: "Health Code · Dependency inspections"
 	const description = report
 		? `Dependency upgrade evidence for ${report.repository.url} at ${report.repository.commit.slice(0, 8)}.`
 		: "Watch dependency upgrades being tested in a Runta sandbox."
@@ -49,12 +61,97 @@ function render(props: PageProps, assets: Assets): string {
 	return `<!doctype html><html lang="en">${head}<body><div id="app">${renderToString(<Page {...props} />)}</div><script id="page-state" type="application/json">${state}</script><script type="module" src="${assets.script}"></script></body></html>`
 }
 
-async function readSubmission(context: Context): Promise<{ repositoryUrl: string; challenge?: unknown } | null> {
+type Submission = {
+	repositoryUrl: string
+	challenge?: unknown
+	action?: unknown
+	upgradeMenuId?: unknown
+	menuId?: unknown
+	dependency?: unknown
+	to?: unknown
+}
+
+function resolveChoice(input: Submission, inspections: Inspections): InspectionChoice & { readyId?: string } {
+	if (input.action === undefined) {
+		return {}
+	}
+	if (input.action === "discover") {
+		return { mode: "listUpgrades" }
+	}
+	const upgradeMenuId = input.upgradeMenuId ?? input.menuId
+	if (
+		input.action !== "select" ||
+		typeof upgradeMenuId !== "string" ||
+		(input.menuId !== undefined && input.menuId !== upgradeMenuId)
+	) {
+		throw new SiteError("Choose an upgrade from the upgrade menu.")
+	}
+
+	// Resolve the exact version against the server's pinned discovery result.
+	const report = inspections.store.snapshot(upgradeMenuId)?.card
+	const target = report?.upgradeMenu?.find((item) => item.dependency === input.dependency && item.to === input.to)
+	if (
+		!report ||
+		!target ||
+		report.repository.url.toLowerCase() !== toRepositoryUrl(input.repositoryUrl).toLowerCase()
+	) {
+		throw new SiteError("Choose an available dependency and version from this repository’s upgrade menu.")
+	}
+	return {
+		readyId: inspections.launch ? undefined : target.patch?.inspectionId,
+		revision: report.repository.commit,
+		upgrade: { dependency: target.dependency, from: target.from, to: target.to },
+	}
+}
+
+function isChoiceField(value: unknown, maximum: number): value is string {
+	return typeof value === "string" && value.length > 0 && value.length <= maximum
+}
+
+function readFeatureQuery(context: Context): { dependency: string; to: string; offset: number } | undefined {
+	const { dependency, to } = context.req.query()
+	const offset = Number(context.req.query("offset") ?? "0")
+	if (Number.isSafeInteger(offset) && offset >= 0 && isChoiceField(dependency, 214) && isChoiceField(to, 256)) {
+		return { dependency, to, offset }
+	}
+}
+
+function toUpgradeMenuView(
+	targets: UpgradeMenuTarget[] | undefined,
+	query: Record<string, string>,
+): NonNullable<PageProps["upgradeMenu"]>["view"] | undefined {
+	if (!targets) {
+		return undefined
+	}
+
+	// Keep search and sorting in the upgrade menu URL across reloads and browser navigation.
+	const order = query.order === "alphabetical" || query.order === "workspaces" ? query.order : "minor"
+	const search = query.search?.slice(0, 256) ?? ""
+	const readyOnly = query.ready === "on"
+	const groups = toUpgradeMenu(targets, { order, search, readyOnly })
+
+	// Load release evidence only for the dependencies on this page.
+	const size = dependenciesPerPage
+	const pages = Math.max(1, Math.ceil(groups.length / size))
+	const requested = Number(query.page)
+	const page = Number.isSafeInteger(requested) ? Math.min(pages, Math.max(1, requested)) : 1
+	return {
+		order,
+		search,
+		readyOnly,
+		available: targets.length > 0,
+		choices: groups.slice((page - 1) * size, page * size),
+		page,
+		pages,
+	}
+}
+
+async function readSubmission(context: Context): Promise<Submission | null> {
 	const body: unknown = await context.req.json().catch(() => null)
 	if (!body || typeof body !== "object" || !("repositoryUrl" in body) || typeof body.repositoryUrl !== "string") {
 		return null
 	}
-	return { repositoryUrl: body.repositoryUrl, challenge: "challenge" in body ? body.challenge : undefined }
+	return { ...body, repositoryUrl: body.repositoryUrl }
 }
 
 function admissionFailure(context: Context, error: unknown, key?: string): Response {
@@ -169,13 +266,24 @@ export function createSite(options: {
 
 		// return a report location as soon as the inspection is queued
 		try {
+			const { readyId, ...choice } = resolveChoice(input, inspections)
+			if (readyId) {
+				context.header("Location", `/r/${readyId}`)
+				return context.json({ id: readyId }, 200)
+			}
+
+			// Reserve the selected job under the normal visitor and spending limits.
 			const { id, reused } = launch
-				? await inspections.admit(input.repositoryUrl, {
-						identify: () => visitor(context),
-						challenge: input.challenge,
-						hostname,
-					})
-				: { id: inspections.submit(input.repositoryUrl), reused: false }
+				? await inspections.admit(
+						input.repositoryUrl,
+						{
+							identify: () => visitor(context),
+							challenge: input.challenge,
+							hostname,
+						},
+						choice,
+					)
+				: { id: inspections.submit(input.repositoryUrl, choice), reused: false }
 			context.header("Location", `/r/${id}`)
 			return context.json({ id }, reused ? 200 : 202)
 		} catch (error) {
@@ -198,7 +306,43 @@ export function createSite(options: {
 				/* Report reads remain available when visitor identity is unavailable. */
 			}
 		}
-		return context.html(render({ snapshot, replay, url: `${options.origin}/r/${id}` }, assets))
+		const report = snapshot.card
+		const choices = toUpgradeMenuView(report?.upgradeMenu, context.req.query())
+		const upgradeMenu =
+			report && choices
+				? {
+						id,
+						view: choices,
+						commit: report.repository.commit,
+						repositoryUrl: report.repository.url,
+						issue: report.registryLookupIssue ?? report.stoppedReason ?? report.detection,
+					}
+				: undefined
+		return context.html(
+			render(
+				{ snapshot: upgradeMenu ? null : snapshot, upgradeMenu, replay, url: `${options.origin}/r/${id}` },
+				assets,
+			),
+		)
+	})
+
+	// Load version-specific upstream features for each visible target on the dependency page.
+	app.get("/api/inspections/:id/features", async (context) => {
+		const query = readFeatureQuery(context)
+		if (!query) {
+			return context.json({ message: "Choose a dependency and version." }, 400)
+		}
+		const { dependency, to, offset } = query
+		try {
+			const features = await inspections.features({ upgradeMenuId: context.req.param("id"), dependency, to })
+			context.header("Cache-Control", features.gaps.length ? "private, max-age=60" : "public, max-age=3600")
+			return context.json(toFeaturePage(features, offset))
+		} catch (error) {
+			if (error instanceof SiteError || error instanceof AdmissionError) {
+				return context.json({ message: error.message }, error instanceof SiteError ? 404 : error.status)
+			}
+			throw error
+		}
 	})
 
 	// resume streaming after the last delivered event

@@ -4,6 +4,7 @@ import type {
 	InspectionReport,
 	ModelRequestSandboxEvent,
 	Patch,
+	UpgradeMenuTarget,
 	UpgradeReport,
 	Verdict,
 } from "health-code"
@@ -23,11 +24,14 @@ export type PatchLink = Pick<Patch, "role" | "digest" | "base" | "prompt" | "pre
 }
 
 // summarize check outcomes and verdict evidence for one upgrade
-export type UpgradeCard = Pick<UpgradeReport, "dependency" | "from" | "to" | "observation"> & {
+export type UpgradeCard = Pick<UpgradeReport, "coverage" | "dependency" | "from" | "to" | "observation"> & {
+	reusedFromInspectionId?: string
 	testFileErrors?: { file: string; reason: string }[]
 	checks: Record<"install" | "typecheck" | "tests", string>
 	verdict?: Verdict
 	reason?: string
+
+	// Explain the evidence behind an inconclusive upgrade.
 	untestedReason?: string
 	testChanges?: string[]
 	summary?: string
@@ -52,6 +56,9 @@ export type UpgradeCard = Pick<UpgradeReport, "dependency" | "from" | "to" | "ob
 
 // combine baseline and upgrade evidence for the public report
 export type PublishedReport = {
+	upgradeMenu?: UpgradeMenuTarget[]
+	stoppedReason?: string
+	omitted?: string[]
 	promptVersions?: InspectionReport["promptVersions"]
 	usageAsOf?: string
 
@@ -84,22 +91,55 @@ export type Snapshot = {
 	card: PublishedReport | null
 }
 
+export function readPublishedReport(json: string): PublishedReport {
+	const report: PublishedReport & { menu?: PublishedReport["upgradeMenu"] } = JSON.parse(json)
+	if (report.menu) {
+		report.upgradeMenu ??= report.menu
+		delete report.menu
+	}
+
+	// Preserve source links in reports published with the original field name.
+	for (const upgrade of report.upgrades) {
+		if ("reusedFrom" in upgrade && typeof upgrade.reusedFrom === "string") {
+			upgrade.reusedFromInspectionId ??= upgrade.reusedFrom
+			delete upgrade.reusedFrom
+		}
+	}
+	return report
+}
+
 export function toCheckText(check: CheckResult): string {
 	if (check.status === "untested") {
 		return check.detail ?? check.reason
 	}
 
-	// include failing test names when the check identifies them
-	if (check.status === "failed" && check.failingTests.length) {
-		return `failed · ${check.failingTests.map((test) => test.name ?? test.file).join(", ")}`
+	let text: string = check.status
+	if (check.inventory) {
+		const { passed, failed, skipped, todo } = check.inventory.counts
+		text += ` · ${passed} passed, ${failed} failed, ${skipped} skipped, ${todo} todo`
 	}
-	return check.status
+
+	// Include failing test names alongside measured totals.
+	if (check.status === "failed" && check.failingTests.length) {
+		text += ` · ${check.failingTests.map((test) => test.name ?? test.file).join(", ")}`
+	}
+	return text
 }
 
 export function toSummary(report: PublishedReport): string {
+	if (report.upgradeMenu) {
+		return "Choose a dependency upgrade"
+	}
 	const count = report.upgrades.length
 	if (!count && report.registryLookupIssue) {
 		return report.registryLookupIssue
+	}
+
+	// Count the work actually reached before an interruption.
+	const partial = report.upgrades.filter((upgrade) => upgrade.coverage === "partial").length
+	const skipped = report.upgrades.filter((upgrade) => upgrade.coverage === "skipped").length
+	if (report.stoppedReason || partial || skipped) {
+		return `Partial inspection · ${count - partial - skipped} upgrades completed, ${partial} partial, ${skipped} skipped`
 	}
 
 	// count blocked installation connections across upgrades

@@ -12,6 +12,15 @@ const actions = {
 }
 
 function toActionLabel(event: Extract<SiteEvent, { type: "sandbox.event" }>): string {
+	if (event.action === "credentials-withheld" && event.placeholderVariableCount !== undefined) {
+		const count = event.placeholderVariableCount
+		return `${count} repository environment ${count === 1 ? "variable" : "variables"} given placeholder values`
+	}
+	if (event.action === "credentials-withheld" && event.storedModelKeyCount !== undefined) {
+		const count = event.storedModelKeyCount
+		return `${count} stored model ${count === 1 ? "key" : "keys"} kept outside the sandbox`
+	}
+
 	if (event.action === "model-relay-started") {
 		return (
 			event.detail?.replace(/^Model relay started/, "Model request sandbox started") ||

@@ -1,7 +1,6 @@
-import { generateText } from "ai"
+import { isDeepStrictEqual } from "node:util"
 import { z } from "zod"
 import type { AgentRole, InspectionEventV2, InspectionOptionsV2, UpgradeReportV2 } from "./agentContracts.ts"
-import { buildPrompt, parseAnswer } from "./buildPrompt.ts"
 import type { NodeAdapter } from "./checkProject.ts"
 import { cleanupAllowance, type InspectionContext, redactEvidence, rethrowInspectionFailure } from "./collectEvents.ts"
 import {
@@ -13,10 +12,9 @@ import {
 	type Sandbox,
 	type UpgradeReport,
 } from "./contracts.ts"
-import { agentLimits, cap, type Ledger, paidRequest, reserveCost } from "./modelBudget.ts"
+import { agentLimits, cap, type Ledger } from "./modelBudget.ts"
 import { validateModels } from "./modelOptions.ts"
 import {
-	callerOutputTokens,
 	ModelRequestSandboxAllocation,
 	type ModelRequestSandboxEvent,
 	type ModelRequestSandboxInspectionReport,
@@ -25,19 +23,25 @@ import {
 import { matchSchema, selectFeatureMatches, verifyMatch } from "./rankFeatureMatches.ts"
 import { readReleases } from "./readReleases.ts"
 import { diagnostics, locateDiagnostics, sizeBytes, type UsageEvidence, usageEvidence } from "./readUpgradeEvidence.ts"
+import { requestHostModel } from "./requestHostModel.ts"
 import { RuntimeMeter } from "./runtimeUsage.ts"
 import { credentialTarget } from "./sandbox/setCredentialBinding.ts"
+import { toUpgradeKey } from "./selectUpgrades.ts"
 import { type PatchEvidence, workspace } from "./verifyCandidate.ts"
 import { evaluatePatch } from "./verifyPatch.ts"
 
 const summarySchema = z.object({ text: z.string().max(8000), sources: z.array(z.string()) })
 type Candidate = { report: UpgradeReportV2; evidence: PatchEvidence }
 export class ModelInspection {
-	// accumulate the version two timeline, reports and adoption candidates
+	// Accumulate evidence in inspection order.
 	readonly timeline: ModelRequestSandboxEvent[] = []
 	readonly upgrades: UpgradeReportV2[] = []
-	readonly candidates: Candidate[] = []
+	readonly reused = new Map<string, UpgradeReportV2>()
+	private adoptionsStarted = 0
 	readonly limits: NonNullable<InspectionOptions["limits"]> & { maxDurationMs: number; maxCostUsd: number }
+
+	// Track the initial hold until the first repository runtime is deleted.
+	readonly repositoryReservationMicros: number
 	readonly ledger: Ledger
 	readonly matchLimit: number
 	attempt?: { attemptId: string; role: AgentRole }
@@ -91,11 +95,22 @@ export class ModelInspection {
 		if (!Number.isFinite(reserve) || reserve < 0) {
 			throw new InspectionError("pricing", "Sandbox price bound unavailable")
 		}
+		this.repositoryReservationMicros = Math.min(Math.floor(this.limits.maxCostUsd * 1e6), Math.ceil(reserve * 1e6))
 		this.ledger = {
 			remainingMicros: Math.max(0, Math.floor((this.limits.maxCostUsd - reserve) * 1e6)),
 			end: Date.now() + this.limits.maxDurationMs,
 			usage: [],
 		}
+	}
+
+	get storedModelKeyCount(): number {
+		const { repair, featureAdoption, releaseSummary, featureMatch } = this.options.models
+
+		// Count a stored credential once across roles without exposing its name.
+		const keys = [repair, featureAdoption, releaseSummary, featureMatch].flatMap((route) =>
+			"credential" in route ? [route.credential.name] : [],
+		)
+		return new Set(keys).size
 	}
 
 	// forward version two events using the shared sequence
@@ -123,94 +138,42 @@ export class ModelInspection {
 		this.timeline.push(event)
 		await context.deliver(() => this.options.onEvent?.(structuredClone(event)))
 	}
-	async requestHostModel(
-		role: "releaseSummary" | "featureMatch",
-		evidence: unknown,
-		context: InspectionContext,
-	): Promise<unknown> {
-		const configured = this.options.models[role]
-		const { pricing } = configured
 
-		// build a bounded prompt for the selected host role
-		const prompt = await buildPrompt(role, evidence, context.prompts)
-		const output = callerOutputTokens
-		const reserve = reserveCost({ pricing, prompt, output })
-		if (this.modelRequestSandbox && "credential" in configured) {
-			const modelRequestSandbox = this.modelRequestSandbox
-			await modelRequestSandbox.ready({
-				context,
-				ledger: this.ledger,
-				requestMicros: reserve,
-				start: async (name) => {
-					const options = this.options
-					if (options.callerModelExecution !== "modelRequestSandbox") {
-						throw new InspectionError("model-request-sandbox", "Invalid model request sandbox configuration")
-					}
-					const event: ModelRequestSandboxEvent = {
-						version: 2,
-						type: "sandbox.event",
-						action: "model-request-sandbox-started",
-						sandboxId: name,
-						inspectionId: context.id,
-						sequence: this.timeline.length + 1,
-						timestamp: new Date().toISOString(),
-						detail:
-							"Model request sandbox started. The sandbox provider supplies the model key. This machine doesn’t need it.",
-					}
-					this.timeline.push(event)
-					await context.deliver(() => options.onEvent?.(structuredClone(event)))
-				},
-				route: configured,
-				allocated: (name, reservedUsd) =>
-					this.meter.start(
-						"modelRequestSandbox",
-						name,
-						(ms) => modelRequestSandbox.provider.estimateMaxCost(ms),
-						reservedUsd,
-					),
-			})
+	// Replace sandbox-local evidence while retaining completed upgrades and the inspection ledger.
+	resume(report: InspectionReport): void {
+		const completed = this.buildInspectionReport(report).upgrades.filter((upgrade) => !upgrade.coverage)
+		for (const upgrade of completed) {
+			this.reused.set(toUpgradeKey(upgrade), upgrade)
 		}
-		const text = await context.step("setup", role, (operation) =>
-			paidRequest({
-				ledger: this.ledger,
-				context,
-				execution: this.modelRequestSandbox ? "modelRequestSandbox" : undefined,
-				role,
-				step: role,
-				pricing,
-				modelId: "model" in configured ? configured.model.modelId : configured.modelId,
-				prompt,
-				output,
-				signal: operation.signal,
-				send: async (budget, telemetry) => {
-					if ("credential" in configured && this.modelRequestSandbox) {
-						return this.modelRequestSandbox.send({ role, route: configured, prompt, output }, budget)
-					}
-					if (!("model" in configured)) {
-						throw new InspectionError("invalid-model", "Missing caller model")
-					}
 
-					// Dispatch local handles through the caller’s model client.
-					const { model } = configured
-					const reply = await generateText({
-						model,
-						prompt,
-						maxRetries: 0,
-						maxOutputTokens: 1024,
-						abortSignal: budget.signal,
-						telemetry,
-					})
-					return {
-						text: reply.text,
-						modelId: model.modelId,
-						inputTokens: reply.usage.inputTokens,
-						outputTokens: reply.usage.outputTokens,
-						requestId: reply.response.id,
-					}
-				},
-			}),
-		)
-		return parseAnswer(text)
+		// Measure the replacement baseline before comparing outstanding targets.
+		this.installedEvidence.clear()
+		this.baseInstall = undefined
+		this.baseTests = undefined
+		this.baseIntegrity = undefined
+		this.baseSize = undefined
+	}
+
+	// Match cached results against freshly selected dependency targets.
+	restoreUpgrades(report: InspectionReport): void {
+		for (const upgrade of report.selection.selected) {
+			if (this.reused.has(toUpgradeKey(upgrade))) {
+				continue
+			}
+
+			// Check the external cache for targets still outstanding.
+			const cached = this.options.reuseUpgrade?.(report.repository, upgrade)
+			const reusedFromInspectionId = cached?.reusedFromInspectionId ?? cached?.reusedFrom
+			if (!cached || !reusedFromInspectionId || cached.coverage || cached.verdict === "Untested") {
+				continue
+			}
+
+			// Verify the workspace pins before attaching a prior verdict.
+			const key = toUpgradeKey(upgrade)
+			if (toUpgradeKey(cached) === key && isDeepStrictEqual(cached.from, upgrade.from)) {
+				this.reused.set(key, { ...cached, reusedFromInspectionId })
+			}
+		}
 	}
 
 	// capture pinned usage before dependency installation changes the tree
@@ -232,7 +195,7 @@ export class ModelInspection {
 			.then((value) => z.string().parse(value))
 			.catch(() => "")
 		const after = await sizeBytes(adapter).catch(() => undefined)
-		this.installedEvidence.set(upgradeKey(upgrade), { changelog, bytes: after })
+		this.installedEvidence.set(toUpgradeKey(upgrade), { changelog, bytes: after })
 	}
 	async inspect(
 		context: InspectionContext,
@@ -246,7 +209,7 @@ export class ModelInspection {
 		const report = toUpgradeReport(upgrade)
 		this.upgrades.push(report)
 		const usage = this.pinnedUsage.get(upgrade.dependency) ?? { usage: [], unresolved: [], changelog: "" }
-		const measured = this.installedEvidence.get(upgradeKey(upgrade))
+		const measured = this.installedEvidence.get(toUpgradeKey(upgrade))
 		const changelog = measured?.changelog ?? ""
 		const after = measured?.bytes
 		report.usageLimitations = usage.unresolved
@@ -265,34 +228,38 @@ export class ModelInspection {
 		const evidence = await context.step("setup", "Read release notes", (op) =>
 			readReleases({ upgrade, githubToken: this.options.githubToken, changelog, signal: op.signal }),
 		)
-		await this.matchFeatures({ context, report, usage, evidence, repository: inspectionReport.repository })
-		report.releaseSummary.gaps = evidence.gaps
-		const patchEvidence: PatchEvidence = {
-			context,
-			adapter,
-			sandbox,
-			inspectionReport,
-			report,
-			usage,
-			releaseNotes: evidence.notes,
-			baselineIntegrity: this.baseIntegrity,
-			baseInstall: this.baseInstall,
-			baseTests: this.baseTests,
-		}
-
-		// verify diagnostic locations against the pinned source
-		await locateDiagnostics({
-			repository: inspectionReport.repository,
-			locators: report.locators,
-			read: (file) => workspace(patchEvidence, { kind: "read", revision: inspectionReport.repository.commit, file }),
-		})
 		try {
+			await this.matchFeatures({ context, report, usage, evidence, repository: inspectionReport.repository })
+			report.releaseSummary.gaps = evidence.gaps
+			const patchEvidence: PatchEvidence = {
+				context,
+				adapter,
+				sandbox,
+				inspectionReport,
+				report,
+				usage,
+				releaseNotes: evidence.notes,
+				baselineIntegrity: this.baseIntegrity,
+				baseInstall: this.baseInstall,
+				baseTests: this.baseTests,
+			}
+
+			// verify diagnostic locations against the pinned source
+			await locateDiagnostics({
+				repository: inspectionReport.repository,
+				locators: report.locators,
+				read: (file) => workspace(patchEvidence, { kind: "read", revision: inspectionReport.repository.commit, file }),
+			})
+			if (report.coverage === "partial") {
+				return
+			}
+
 			await evaluatePatch(this, patchEvidence)
+			await this.adopt({ report, evidence: patchEvidence })
 		} finally {
-			// keep the model usage even when patch evaluation fails
+			// Retain all receipts, including model work completed before an interruption.
 			report.modelUsage = this.ledger.usage.slice(offset)
 		}
-		this.candidates.push({ report, evidence: patchEvidence })
 	}
 	private async matchFeatures({
 		context,
@@ -314,18 +281,21 @@ export class ModelInspection {
 		}
 		try {
 			// accept only sources present in the collected evidence
-			const summary = summarySchema.parse(await this.requestHostModel("releaseSummary", evidence, context))
+			const summary = summarySchema.parse(
+				await requestHostModel({ engine: this, role: "releaseSummary", evidence, context }),
+			)
 			if (summary.sources.length && summary.sources.every((source) => sources.includes(source))) {
 				report.releaseSummary = summary
 			}
 			if (usage.usage.length) {
 				// request feature matches against observed source usage
 				const matches = matchSchema.parse(
-					await this.requestHostModel(
-						"featureMatch",
-						{ notes: evidence.notes, summary: report.releaseSummary, usage: usage.usage },
+					await requestHostModel({
+						engine: this,
+						role: "featureMatch",
+						evidence: { notes: evidence.notes, summary: report.releaseSummary, usage: usage.usage },
 						context,
-					),
+					}),
 				)
 				for (const match of matches) {
 					// retain matches that cite verified source locations
@@ -344,19 +314,19 @@ export class ModelInspection {
 			recordEvidenceError(report, error, Boolean(this.modelRequestSandbox))
 		}
 	}
-	async adopt(): Promise<void> {
+	private async adopt(target: Candidate): Promise<void> {
 		// evaluate the highest-ranked eligible match for each upgrade
-		for (const { candidate, match } of selectFeatureMatches(this.candidates, this.matchLimit)) {
-			const offset = this.ledger.usage.length
+		for (const { candidate, match } of selectFeatureMatches([target], this.matchLimit - this.adoptionsStarted)) {
+			this.adoptionsStarted++
 			candidate.evidence.context.upgradeId = `${candidate.report.dependency}@${candidate.report.to}`
+
 			await evaluatePatch(this, candidate.evidence, match)
-			candidate.report.modelUsage.push(...this.ledger.usage.slice(offset))
 		}
 	}
 
 	// assemble the version two report from the measured upgrades
 	buildInspectionReport(inspectionReport: InspectionReport): ModelRequestSandboxInspectionReport {
-		const reports = new Map(this.upgrades.map((upgrade) => [upgradeKey(upgrade), upgrade]))
+		const reports = collectUpgradeAttempts(this.upgrades)
 		return {
 			...inspectionReport,
 			version: 2,
@@ -369,16 +339,22 @@ export class ModelInspection {
 				},
 			},
 			upgrades: redactEvidence(
-				inspectionReport.upgrades.map((upgrade) => reports.get(upgradeKey(upgrade)) ?? toUpgradeReport(upgrade)),
+				inspectionReport.upgrades.map((upgrade) => {
+					const key = toUpgradeKey(upgrade)
+					const previous = this.reused.get(key)
+					if (previous) {
+						return previous
+					}
+
+					// Retain the last completed checks on an interrupted upgrade.
+					const result = reports.get(key) ?? toUpgradeReport(upgrade)
+					return toMeasuredUpgrade(result, upgrade, inspectionReport.stoppedReason)
+				}),
 			),
 			timeline: this.timeline,
 			runtimeUsage: this.meter.snapshot(this.ledger.usage),
 		}
 	}
-}
-
-function upgradeKey(upgrade: Pick<UpgradeReport, "dependency" | "to">): string {
-	return `${upgrade.dependency}@${upgrade.to}`
 }
 
 // initialize unmeasured upgrade evidence with an explicit verdict
@@ -406,4 +382,36 @@ function recordEvidenceError(report: UpgradeReportV2, error: unknown, modelReque
 		error instanceof InspectionError && error.code === "model-budget"
 			? " (model budget reached)"
 			: " (model evidence incomplete)"
+}
+
+function toMeasuredUpgrade(result: UpgradeReportV2, upgrade: UpgradeReport, stoppedReason?: string): UpgradeReportV2 {
+	if (upgrade.coverage) {
+		return { ...result, coverage: upgrade.coverage }
+	}
+
+	// Identify feature adoption work left pending when the sandbox stopped.
+	if (stoppedReason && result.featureMatches.some((match) => match.disposition === "ranked")) {
+		return { ...result, coverage: "partial" }
+	}
+	return result
+}
+
+function collectUpgradeAttempts(attempts: UpgradeReportV2[]): Map<string, UpgradeReportV2> {
+	const reports = new Map<string, UpgradeReportV2>()
+	for (const attempt of attempts) {
+		const key = toUpgradeKey(attempt)
+
+		// Attribute model receipts from both attempts to their dependency target.
+		const first = reports.get(key)
+		if (!first) {
+			reports.set(key, attempt)
+			continue
+		}
+
+		// Keep a verified mailbox if the replacement stopped before verifying another.
+		const result =
+			first.patches.length && !attempt.patches.length ? { ...first, coverage: "partial" as const } : attempt
+		reports.set(key, { ...result, modelUsage: [...first.modelUsage, ...attempt.modelUsage] })
+	}
+	return reports
 }

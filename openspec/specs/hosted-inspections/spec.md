@@ -26,7 +26,12 @@ The home page SHALL offer one Repository URL field, one submit button and a plai
 
 ### Requirement: Durable background execution
 
-The site SHALL return a durable ID before starting an admitted cache miss and enforce global concurrency. Identical in-flight requests SHALL share an ID. Other eligible work SHALL queue in FIFO order and show its one-based position live and after reconnect. Through the public library API, live Inspections SHALL receive configured limits, Claude Opus 5.5 for every model role, the Runta secret name for the model key and an optional GitHub token.
+The site SHALL return a durable ID before starting an admitted cache miss and enforce global concurrency. Identical in-flight requests SHALL share an ID. Other eligible work SHALL queue in FIFO order and show its one-based position live and after reconnect.
+
+#### Scenario: Worker dispatches a selected upgrade
+
+- **WHEN** the worker calls the public library API
+- **THEN** it passes configured limits, the Runta secret name for the model key and an optional GitHub token. Opus 5.5 handles summaries and matching. Fable 5.2 handles selected upgrade repair and adoption.
 
 #### Scenario: Concurrent submissions
 
@@ -101,11 +106,21 @@ Development and test mode SHALL reproduce recorded event timing and the correspo
 
 ### Requirement: Resolve the cache before charging a visitor
 
-The site SHALL return the existing complete report for the same public repository, commit and library version. It SHALL verify current public visibility and the resolved head before returning a cache hit. Misses SHALL check repository size before allocating a sandbox. The site SHALL publish a result under the inspected SHA only.
+The site SHALL reuse a conclusive report for the same public repository, commit, library version and hosted deployment commit, including confirmed upgrade failures. Incomplete discovery, an unusable baseline or an Untested upgrade SHALL allow a fresh submission under the usual limits. A new deployment commit SHALL start a fresh cache and preserve existing report URLs.
+
+#### Scenario: Verify a public checkout
+
+- **WHEN** the site looks up a cached result
+- **THEN** it verifies public visibility and the resolved head. On a miss it checks repository size before allocating a sandbox and publishes under the inspected SHA only.
+
+#### Scenario: Retry after sandbox loss
+
+- **WHEN** an inspection loses its sandbox
+- **THEN** the report distinguishes completed checks, interrupted work and selected upgrades that never started. A retry measures a fresh baseline and may reuse conclusive results from the same repository, commit, library and deployment for the exact workspace versions and target. Each reused upgrade links to its original report.
 
 #### Scenario: Cached result at the cap
 
-- **WHEN** a visitor at the daily or personal limit submits the same public repository at an already inspected head and library version
+- **WHEN** a visitor at the daily or personal limit submits the same public repository at an already conclusively inspected head, library version and deployed revision
 - **THEN** the existing report URL is returned immediately after lookup, without a challenge, new Inspection, quota debit, spend reservation or queue entry
 
 #### Scenario: Race during lookup
@@ -155,3 +170,14 @@ The hosted deployment SHALL periodically reconcile all its runtime inventory pag
 
 - **WHEN** a previously active Inspection loses its worker and a site-owned runtime exceeds its deadline
 - **THEN** a scheduled sweep reclaims it without requiring another restart and preserves neighboring deployment and CLI runtimes
+
+### Requirement: Browse before testing
+
+The site SHALL discover eligible upgrade targets at a pinned commit before installing dependencies or invoking an agent. The upgrade menu SHALL show one row per dependency, searchable by name, with minor upgrades first by default. Visitors may choose alphabetical order or descending declaring workspace count. The Patch ready filter SHALL show only targets with published upgrade patches.
+
+#### Scenario: Choose one target
+
+- **WHEN** a visitor selects a version from the upgrade menu
+- **THEN** the site SHALL open its published patch or admit a single-target inspection at the discovered commit under the hosted limits. If the repository head has moved before admission, the site SHALL prompt the visitor to refresh the upgrade menu.
+
+Each dependency page SHALL load version-specific release features for its visible targets without a model call. Each entry SHALL link to its release notes. Missing notes and notes with no identified feature entries SHALL have distinct messages.

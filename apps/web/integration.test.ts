@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test"
-import { createFakeSandboxProvider, type InspectionReport, inspectRepository } from "health-code"
+import {
+	createFakeSandboxProvider,
+	type InspectionReport,
+	inspectRepository,
+	SandboxUnavailableError,
+} from "health-code"
 import { createLiveSource } from "./configureSite.ts"
 import { createTestSite, replay } from "./fixtures/createTestSite.ts"
 import { toLaunchLimits } from "./launchLimits.ts"
@@ -97,6 +102,12 @@ test("admitted workers forward the current ceilings and the immutable revision",
 
 	const source = createLiveSource(environment, async (options) => {
 		expect(options.revision).toBe(output.report.repository.commit)
+		for (const route of [options.models.repair, options.models.featureAdoption]) {
+			expect(route.modelId).toBe("claude-fable-5-2")
+			expect(route.pricing).toMatchObject({ inputUsdPerMillion: 8, outputUsdPerMillion: 40 })
+		}
+
+		// Preserve the hosted ceilings when the selected patch uses Fable.
 		expect(options.limits?.maxCostUsd).toBe(4)
 		expect(options.limits?.maxUpgrades).toBe(1)
 		expect(options.limits?.agent?.repair?.maxCostUsd).toBe(1.5)
@@ -104,7 +115,11 @@ test("admitted workers forward the current ceilings and the immutable revision",
 		return output.report
 	})
 
-	await source.inspect(repositoryUrl, () => {}, { settings, revision: output.report.repository.commit })
+	await source.inspect(repositoryUrl, () => {}, {
+		settings,
+		revision: output.report.repository.commit,
+		upgrade: { dependency: "widget", from: "1.2.0", to: "1.3.0" },
+	})
 })
 
 test("an unavailable sandbox quote stops an inspection before it allocates a runtime", async () => {
@@ -249,4 +264,71 @@ test("the full queue rejects a submission without allocating a report", async ()
 	store.claim()
 	expect((await submit()).status).toBe(202)
 	store.database.close()
+})
+
+test("a hosted retry runs a fresh baseline and only installs outstanding targets", async () => {
+	const { report: prior } = await replay.inspect(repositoryUrl, () => {})
+	const finished = prior.upgrades[0]!
+	const project = {
+		manager: "npm",
+		version: "10.0.0",
+		sources: { widget: finished.from },
+		skipped: [],
+		typecheck: "none",
+		environment: [],
+	}
+	const tool = ["node", "/opt/health-code/project.mjs"]
+	const commands = [
+		{ argv: [...tool, "detect"], result: { stdout: JSON.stringify(project) } },
+		{ argv: [...tool, "registry", "widget"], result: { stdout: JSON.stringify({ widget: ["1.3.0", "2.0.0"] }) } },
+		{
+			argv: [...tool, "usage", "widget"],
+			result: { stdout: JSON.stringify({ usage: [], unresolved: [], changelog: "" }) },
+		},
+		{ argv: [...tool, "install"], result: { exitCode: 0 } },
+	]
+	const fake = createFakeSandboxProvider({ commit: prior.repository.commit, commands })
+
+	// Lose the sandbox on the first outstanding upgrade after baseline installation.
+	const installs: string[][] = []
+	const execute = fake.executeCommand.bind(fake)
+	fake.executeCommand = (sandbox, command) => {
+		if (command.argv[2] === "install") {
+			installs.push(command.argv.slice(2))
+
+			// Let the original installation finish before interrupting the new target.
+			if (command.argv.length > 3) {
+				// Keep the pinned selection for the replacement checkout.
+				if (commands[1]?.argv[2] === "registry") {
+					commands.splice(1, 1)
+				}
+				throw new SandboxUnavailableError("unavailable")
+			}
+		}
+		return execute(sandbox, command)
+	}
+
+	// Run the public library through the hosted options with offline model handles.
+	const source = createLiveSource(
+		{
+			HEALTH_CODE_DEPLOYMENT: "fixture",
+			HEALTH_CODE_STORED_CREDENTIAL: "fixture",
+			RUNTA_TOKEN: "fixture",
+			ANTHROPIC_API_KEY: "fixture",
+		},
+		(options) => inspectRepository({ ...options, sandboxProvider: fake }),
+	)
+	const { report } = await source.inspect(repositoryUrl, () => {}, {
+		revision: prior.repository.commit,
+		reuseUpgrade: (_repository, target) =>
+			target.to === finished.to ? { ...finished, reusedFromInspectionId: "original-proof" } : undefined,
+	})
+
+	// Retain immutable proof from the earlier run alongside the new interruption.
+	expect(installs).toEqual([["install"], ["install", "widget", "2.0.0"], ["install"], ["install", "widget", "2.0.0"]])
+	expect(report.upgrades[0]).toMatchObject({ reusedFromInspectionId: "original-proof", verdict: "Passes as is" })
+	expect(report.upgrades[1]).toMatchObject({ coverage: "partial", verdict: "Untested" })
+	expect(report.stoppedReason).toContain("replacement sandbox also became unavailable")
+	expect(report.runtimeUsage?.runtimes.map((runtime) => runtime.deleted)).toEqual([true, true])
+	expect(report.runtimeUsage?.totalUpperBoundUsd).toBeDefined()
 })

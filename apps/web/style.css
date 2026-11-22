@@ -256,3 +256,24 @@ pre {
 	overflow-y: auto;
 	scrollbar-gutter: stable;
 }
+
+.upgrade-menu-filters {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: 0.75rem 1rem;
+	margin: 1.5rem 0;
+}
+.upgrade-menu-filters label {
+	margin: 0;
+}
+.upgrade-menu-filters :is(input[type="search"], select) {
+	display: block;
+	max-width: 100%;
+	background: var(--panel);
+	color: var(--ink);
+	border: 1px solid var(--rule);
+	border-radius: 0.5rem;
+	font: inherit;
+	padding: 0.55rem 0.75rem;
+}

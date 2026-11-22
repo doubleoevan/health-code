@@ -98,8 +98,22 @@ bun consumer.mjs
 
 # typecheck both inspection report versions against the packed declarations
 cat > consumer.ts <<'TS'
-import { inspectRepository, type InspectionOptions, type InspectionReport } from "health-code"
+import { inspectRepository, listUpgrades, getUpgrade, type InspectionOptions, type InspectionReport } from "health-code"
 import type {InspectionOptionsV2, InspectionReportV2} from "health-code"
+
+// Check the report entry and the earlier type spelling against the installed public package.
+export function matchLocation(match: import("health-code").CodeFeatureMatch): import("health-code").FeatureMatch["location"] {
+  return match.location
+}
+
+// Compile the two-operation upgrade menu and patch workflow against the published API.
+export async function selectedUpgrade(options: InspectionOptionsV2): Promise<InspectionReportV2 | undefined> {
+  const upgradeMenu = await listUpgrades({repositoryUrl: options.repositoryUrl, sandboxProvider: options.sandboxProvider})
+  const upgrade = upgradeMenu.dependencies[0]?.targets[0]
+  if (upgrade) {
+    return getUpgrade({...options, revision: upgradeMenu.repository.commit, upgrade})
+  }
+}
 export function inspectWithModels(options: InspectionOptionsV2): Promise<InspectionReportV2> {
   return inspectRepository(options)
 }

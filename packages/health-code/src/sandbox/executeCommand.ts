@@ -42,9 +42,14 @@ export async function executeCommand(instance: Instance, command: Command): Prom
 		const remaining = remainingOperation(command)
 		const id = randomUUID()
 		const dir = command.observe ? `/var/lib/health-code/evidence-${id}` : undefined
-		const { argv, capture } = buildTestCommand({ command, dir, id, previous: instance.testCapture })
+		const { argv, capture, maxOutputBytes, placeholderVariableCount } = buildTestCommand({
+			command,
+			dir,
+			id,
+			previous: instance.testCapture,
+		})
 		await replaceTestCapture(instance, command, capture, remaining)
-		const result = await exec(instance.runtime, argv, command)
+		const result = await exec(instance.runtime, argv, command, maxOutputBytes)
 
 		// associate observation evidence with this command id
 		if (dir) {
@@ -66,7 +71,7 @@ export async function executeCommand(instance: Instance, command: Command): Prom
 		}
 
 		// release the command slot after recording its result
-		return result
+		return { ...result, placeholderVariableCount }
 	} finally {
 		instance.commands--
 	}

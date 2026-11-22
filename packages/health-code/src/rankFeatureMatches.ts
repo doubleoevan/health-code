@@ -1,5 +1,5 @@
 import { z } from "zod"
-import type { FeatureMatch, Locator, UpgradeReportV2 } from "./agentContracts.ts"
+import type { CodeFeatureMatch, Locator, UpgradeReportV2 } from "./agentContracts.ts"
 import type { InspectionReport } from "./contracts.ts"
 import type { ReleaseNote } from "./readReleases.ts"
 import { permalink, type UsageEvidence } from "./readUpgradeEvidence.ts"
@@ -31,7 +31,7 @@ export function verifyMatch({
 	usage: UsageEvidence
 	notes: ReleaseNote[]
 	repository: InspectionReport["repository"]
-}): FeatureMatch | undefined {
+}): CodeFeatureMatch | undefined {
 	// match the cited location and symbol against observed usage
 	const candidates = usage.usage.filter((entry) => entry.file === match.file && entry.line === match.line)
 	const hit = match.symbol
@@ -120,7 +120,7 @@ function statesReplacement(quote: string, symbol: string, feature: string): bool
 export function selectFeatureMatches<T extends { report: UpgradeReportV2 }>(
 	candidates: T[],
 	limit: number,
-): { candidate: T; match: FeatureMatch }[] {
+): { candidate: T; match: CodeFeatureMatch }[] {
 	// rank matches by evidence strength and affected locations
 	const ordered = candidates
 		.flatMap((candidate) => candidate.report.featureMatches.map((match) => ({ candidate, match })))
@@ -135,7 +135,7 @@ export function selectFeatureMatches<T extends { report: UpgradeReportV2 }>(
 				a.match.feature.localeCompare(b.match.feature) ||
 				a.match.source.localeCompare(b.match.source),
 		)
-	const selected: { candidate: T; match: FeatureMatch }[] = []
+	const selected: { candidate: T; match: CodeFeatureMatch }[] = []
 	const tried = new Set<UpgradeReportV2>()
 
 	// rank every match while retaining reasons for skipped attempts

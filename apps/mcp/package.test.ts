@@ -10,7 +10,16 @@ import { Client } from "@modelcontextprotocol/client"
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio"
 import { toHash } from "./storeInspection.ts"
 
-const expectedTools = ["get_tested_patch", "read_inspection", "report_patch_result", "start_inspection"]
+const expectedTools = [
+	"discover_upgrades",
+	"get_tested_patch",
+	"get_upgrade",
+	"get_upgrade_features",
+	"list_upgrades",
+	"read_inspection",
+	"report_patch_result",
+	"start_inspection",
+]
 const releaseWorkspace = fileURLToPath(new URL("../../packages/health-code", import.meta.url))
 function checkStderr(key: string): (chunk: Buffer | string) => void {
 	let suffix = ""
@@ -97,7 +106,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
  const {modelRequestSandboxFixture}=await import(process.argv[1])
  const {provider:sandboxProvider}=await modelRequestSandboxFixture(createFakeSandboxProvider)
  const inspections=new Inspections(new InspectionStore(),options=>inspectWithAccount({...options,sandboxProvider},process.env))
- await createServer(inspections,"fixture").connect(new StdioServerTransport())
+ await createServer({inspections, version:"fixture"}).connect(new StdioServerTransport())
  `,
 				fixture,
 			],

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import { chromium, type Page } from "playwright"
+import { chromium, type Locator, type Page } from "playwright"
 import { z } from "zod"
 
 const repositories = [
@@ -35,9 +35,40 @@ type Snapshot = {
 	}
 }
 
-async function submit(page: Page, repository: string): Promise<{ path: string; reused: boolean }> {
+async function submit(
+	page: Page,
+	repository: string,
+): Promise<{ path: string; reused: boolean; upgradeMenuPath: string }> {
 	await page.getByLabel("Public GitHub repository").fill(`https://github.com/${repository}`)
-	const button = page.getByRole("button", { name: "Inspect repository" })
+	const upgradeMenu = await admit(page, page.getByRole("button", { name: "Find upgrades" }))
+	await page.waitForURL((url) => url.pathname === upgradeMenu.path)
+	await page.getByRole("heading", { name: "Choose a dependency upgrade" }).waitFor({ timeout: 2400000 })
+
+	// Select the first displayed target through the same controls as a visitor.
+	const group = page
+		.locator("article")
+		.filter({
+			has: page.getByRole("button", { name: "Get upgrade" }).or(page.getByRole("link", { name: "View tested patch" })),
+		})
+		.first()
+
+	const target = group.locator("li").first()
+	const ready = target.getByRole("link", { name: "View tested patch" })
+
+	// Follow the existing patch directly when its report is already available.
+	if (await ready.count()) {
+		const link = await ready.getAttribute("href")
+		assert.ok(link)
+		await ready.click()
+		return { path: new URL(link, page.url()).pathname, reused: true, upgradeMenuPath: upgradeMenu.path }
+	}
+	return {
+		...(await admit(page, target.getByRole("button", { name: "Get upgrade" }))),
+		upgradeMenuPath: upgradeMenu.path,
+	}
+}
+
+async function admit(page: Page, button: Locator): Promise<{ path: string; reused: boolean }> {
 	const response = page.waitForResponse(
 		(item) => new URL(item.url()).pathname === "/api/inspections" && item.request().method() === "POST",
 	)
@@ -101,13 +132,40 @@ async function verifyCleanup(options: { inspectionId: string; deployment: string
 	}
 }
 
+async function verifyHistoryCleanup(
+	events: Snapshot["events"],
+	options: { deployment: string; token: string },
+): Promise<void> {
+	// Pair each lifetime with a later deletion even when a replacement reuses its name.
+	const live = new Set<string>()
+	let inspectionId: string | undefined
+	for (const event of events) {
+		if (event.type !== "sandbox.event" || !event.sandboxId) {
+			continue
+		}
+
+		// Record each creation before accepting its matching deletion.
+		if (event.action === "created") {
+			assert.ok(!live.has(event.sandboxId), "Sandbox name reused before deletion")
+			live.add(event.sandboxId)
+			inspectionId = event.inspectionId
+		} else if (event.action === "deleted") {
+			live.delete(event.sandboxId)
+		}
+	}
+
+	assert.ok(inspectionId, "Missing sandbox creation")
+	assert.equal(live.size, 0, "Missing sandbox deletion")
+	await verifyCleanup({ ...options, inspectionId })
+}
+
 async function inspect(
 	page: Page,
 	options: { origin: string; repository: string; deployment: string; token: string },
 ): Promise<Evidence> {
 	await page.goto(options.origin)
-	const { path, reused } = await submit(page, options.repository)
-	await page.waitForURL(options.origin + path)
+	const { path, reused, upgradeMenuPath } = await submit(page, options.repository)
+	await page.waitForURL((url) => url.origin === options.origin && url.pathname === path)
 
 	// Wait for terminal SSR and retain rendered verdict coverage only.
 	await page
@@ -150,12 +208,17 @@ async function inspect(
 		)
 	}
 
-	// Match the recorded deletion to the runtime that was created for this library inspection.
-	const created = snapshot.events.find((event) => event.type === "sandbox.event" && event.action === "created")
-	assert.ok(
-		created && snapshot.events.some((event) => event.action === "deleted" && event.sandboxId === created.sandboxId),
-	)
-	await verifyCleanup({ ...options, inspectionId: created.inspectionId })
+	// Verify teardown for both discovery and the selected upgrade, including replacement runtimes.
+	const upgradeMenuId = upgradeMenuPath.split("/").at(-1)
+	const response = await page.request.get(`${options.origin}/api/inspections/${upgradeMenuId}/events`)
+	assert.ok(response.ok())
+	const frames = (await response.text()).split("\n\n")
+	const events: Snapshot["events"] = frames
+		.filter((frame) => frame.includes("event: inspection\n"))
+		.map((frame) => JSON.parse(frame.split("data: ")[1]!))
+
+	await verifyHistoryCleanup(events, options)
+	await verifyHistoryCleanup(snapshot.events, options)
 	return {
 		id: snapshot.id,
 		url: options.origin + path,

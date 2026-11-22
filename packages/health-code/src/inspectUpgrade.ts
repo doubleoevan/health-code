@@ -22,6 +22,12 @@ export async function inspectUpgrade({
 	baseline: Baseline
 	afterInstall?: () => Promise<void>
 }): Promise<void> {
+	// Preserve independently comparable checks when the original build is unavailable.
+	if (adapter.project?.typecheck !== "none" && baseline.typecheck.status !== "passed") {
+		report.coverage = "partial"
+		report.typecheck = untested("baseline-typecheck-unavailable")
+	}
+
 	// start each installation check from the pinned project
 	await adapter.resetProject()
 	const first = await adapter.bumpDependency(report)
@@ -64,9 +70,15 @@ export async function inspectUpgrade({
 
 async function checkStages(adapter: EcosystemAdapter, report: UpgradeReport, baseline: Baseline): Promise<boolean> {
 	for (const stage of ["typecheck", "tests"] as const) {
+		// Continue with independent tests when the original TypeScript build failed.
+		if (stage === "typecheck" && report.coverage === "partial") {
+			continue
+		}
+
 		// run and confirm each applicable check against the baseline
 		const firstCheck = stage === "tests" ? await adapter.test() : await adapter.typecheck()
-		report[stage] = await confirm(firstCheck, baseline[stage], () => repeatCheck(adapter, report, stage))
+		report[stage] = firstCheck
+		report[stage] = await confirm(firstCheck, baseline[stage], () => repeatCheck({ adapter, report, stage, baseline }))
 		const checked = report[stage]
 		const interrupted =
 			checked.status === "untested" &&
@@ -87,11 +99,17 @@ async function checkStages(adapter: EcosystemAdapter, report: UpgradeReport, bas
 	return true
 }
 
-async function repeatCheck(
-	adapter: EcosystemAdapter,
-	report: UpgradeReport,
-	stage: "typecheck" | "tests",
-): Promise<CheckResult> {
+async function repeatCheck({
+	adapter,
+	report,
+	stage,
+	baseline,
+}: {
+	adapter: EcosystemAdapter
+	report: UpgradeReport
+	stage: "typecheck" | "tests"
+	baseline: Baseline
+}): Promise<CheckResult> {
 	// reinstall the upgrade on a freshly restored project
 	await adapter.resetProject()
 	const install = await adapter.bumpDependency(report)
@@ -105,7 +123,7 @@ async function repeatCheck(
 	if (stage === "typecheck") {
 		return adapter.typecheck()
 	}
-	if (adapter.project?.typecheck !== "none") {
+	if (baseline.typecheck.status === "passed") {
 		const typecheck = await adapter.typecheck()
 
 		// preserve a missing confirmation build as untested

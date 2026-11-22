@@ -3,7 +3,11 @@ import type { Command } from "../contracts.ts"
 const reserved =
 	/^(?:PATH|HOME|TMP.*|TEMP|PWD|SHELL|USER|LOGNAME|IFS|ENV|BASH_ENV|NODE.*|BUN.*|NPM.*|npm_.*|YARN.*|PNPM.*|GIT.*|LD_.*|DYLD_.*|SSL_.*|.*PROXY|RUNTA_.*|COREPACK.*|XDG_.*|CI|LANG|LC_.*|SHELLOPTS|BASHOPTS)$/i
 type TestMount = { path: string; kind: "report" | "inventory"; writable?: boolean }
-export function guestArguments(command: Command, observation: string | undefined, testMount?: TestMount): string[] {
+export function guestArguments(
+	command: Command,
+	observation: string | undefined,
+	testMount?: TestMount,
+): { argv: string[]; placeholderVariableCount: number } {
 	// Build a minimal filesystem with one persistent writable project directory.
 	const args = [
 		"ip",
@@ -123,15 +127,17 @@ export function guestArguments(command: Command, observation: string | undefined
 	)
 
 	// pass placeholders only for permitted application variables
-	for (const name of command.environment ?? []) {
+	const start = args.length
+	for (const name of new Set(command.environment)) {
 		if (/^[A-Z_][A-Z0-9_]{0,127}$/i.test(name) && !reserved.test(name)) {
 			args.push(`${name}=placeholder`)
 		}
 	}
 
 	// launch the command through the trusted syscall filter
+	const placeholderVariableCount = args.length - start
 	args.push("/usr/bin/python3", "-I", "/opt/health-code/execute.py", ...command.argv)
-	return args
+	return { argv: args, placeholderVariableCount }
 }
 
 /**

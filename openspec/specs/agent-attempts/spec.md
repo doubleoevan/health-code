@@ -7,7 +7,7 @@ Let a caller fund bounded work to repair a confirmed dependency break or adopt a
 
 ### Requirement: Dispatch four caller-selected roles
 
-A configured Inspection SHALL use the caller’s models, endpoints and pricing. Release summaries and Feature Matches SHALL use the caller’s process by default, or a Model Request Sandbox when selected. Repair and Feature adoption SHALL execute inside the repository sandbox with bounded editing and checking tools.
+A configured Inspection SHALL use the caller’s models, endpoints and pricing. Release summaries and Code Feature Matches SHALL use the caller’s process by default, or a Model Request Sandbox when selected. Repair and Feature adoption SHALL execute inside the repository sandbox with bounded editing and checking tools.
 
 #### Scenario: Two consumers choose different routes
 
@@ -86,4 +86,4 @@ Feature adoption SHALL begin only from an Upgrade that passed its checks. It SHA
 #### Scenario: Feature edit lacks a benefit
 
 - **WHEN** an adoption changes formatting only, fails tests or exhausts its budget
-- **THEN** the Feature Match keeps its permalink and reason, and the green upgrade and its Patch remain available.
+- **THEN** the Code Feature Match keeps its permalink and reason, and the green upgrade and its Patch remain available.

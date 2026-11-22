@@ -1,6 +1,6 @@
 import { toRepositoryUrl } from "health-code"
 import licenses from "spdx-license-list"
-import { type InspectionSource, SiteError } from "./executeInspection.ts"
+import { type InspectionSource, SiteError } from "./inspectionSource.ts"
 import { AdmissionError, type RepositoryHead } from "./recordAdmissions.ts"
 
 export function createRepositoryLookup(

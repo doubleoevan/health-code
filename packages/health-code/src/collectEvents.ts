@@ -9,6 +9,8 @@ import {
 } from "./contracts.ts"
 import { InspectionPrompts } from "./readPrompt.ts"
 
+export const defaultMaxCostUsd = 0.25
+export const defaultDurationMs = 1800000
 const defaults = { setup: 300000, detect: 60000, registry: 180000, install: 180000, typecheck: 120000, tests: 180000 }
 
 /**
@@ -108,6 +110,7 @@ export class InspectionContext {
 	private deliveryFailed = false
 	private groupEnd?: number
 	private detectionEnd?: number
+	private setupStarted = this.started
 	attemptEnd?: number
 
 	// retain teardown and upgrade state for event delivery
@@ -121,8 +124,8 @@ export class InspectionContext {
 	) {
 		this.prompts = new InspectionPrompts(options.prompts)
 		const limits = options.limits ?? {}
-		const duration = limits.maxDurationMs ?? 1800000
-		const cost = limits.maxCostUsd ?? 0.25
+		const duration = limits.maxDurationMs ?? defaultDurationMs
+		const cost = limits.maxCostUsd ?? defaultMaxCostUsd
 		this.maximum = limits.maxUpgrades ?? 6
 		this.timeouts = { ...defaults, ...limits.timeouts }
 
@@ -162,6 +165,13 @@ export class InspectionContext {
 		return remaining > 0 ? Math.min(this.cleanupMs, remaining) : this.cleanupMs
 	}
 
+	// Give the replacement checkout fresh stage deadlines within the original inspection window.
+	restartSetup(): void {
+		this.setupStarted = Date.now()
+		this.setupComplete = false
+		this.detectionEnd = undefined
+	}
+
 	// share the detection deadline across detection operations
 	operation(stage: Stage): Operation {
 		if (stage === "detect") {
@@ -174,7 +184,7 @@ export class InspectionContext {
 				(this.attemptEnd ?? this.end) - Date.now(),
 				stage === "detect" ? (this.detectionEnd ?? this.end) - Date.now() : Infinity,
 				this.end - Date.now() - this.cleanupMs,
-				stage === "setup" && !this.setupComplete ? this.started + this.timeouts.setup - Date.now() : Infinity,
+				stage === "setup" && !this.setupComplete ? this.setupStarted + this.timeouts.setup - Date.now() : Infinity,
 			),
 			signal: this.options.signal,
 		}

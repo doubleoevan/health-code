@@ -1,15 +1,10 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
 import { test } from "node:test"
 import {
-	createFakeSandboxProvider,
 	createSandboxProvider,
-	type FixtureCommand,
 	InspectionError,
 	type InspectionEvent,
 	inspectRepository,
-	type Observation,
-	type SandboxProvider,
 	SandboxUnavailableError,
 } from "../src/index.ts"
 import {
@@ -20,55 +15,8 @@ import {
 	providerContract,
 	registryCommand,
 } from "./providerContract.ts"
+import { clean, command, provider, report, scripts } from "./replayProjectChecks.ts"
 
-const base = ["node", "/opt/health-code/project.mjs"]
-const clean: Observation = { complete: true, findings: [] }
-function command(args: string[], stdout = "", exitCode = 0): FixtureCommand {
-	return { argv: [...base, ...args], result: { stdout, exitCode } }
-}
-function report(names: string[]): FixtureCommand {
-	return command(
-		["report"],
-		JSON.stringify({
-			complete: true,
-			granularity: "case",
-			failures: names.map((name) => ({ file: "unit.test.js", workspace: ".", name })),
-		}),
-	)
-}
-function scripts(baseline: string[], upgraded: string[], repeated: string[]): FixtureCommand[] {
-	const transcript = JSON.parse(
-		readFileSync(new URL("./fixtures/recorded/pnpm/transcript.json", import.meta.url), "utf8"),
-	)
-
-	// replay baseline and upgrade checks in execution order
-	const steps = [
-		command(["detect"], JSON.stringify(transcript.project)),
-		command(["registry", "widget"], JSON.stringify(transcript.registry)),
-		command(["install"]),
-		command(["typecheck", "build"]),
-		command(["tests"], "", Number(!!baseline.length)),
-		report(baseline),
-		command(["install", "widget", "1.3.0"]),
-		command(["typecheck", "build"]),
-		command(["tests"], "", Number(!!upgraded.length)),
-		report(upgraded),
-	]
-
-	// append a confirmation run only for newly failing cases
-	if (upgraded.some((name) => !baseline.includes(name))) {
-		steps.push(
-			command(["install", "widget", "1.3.0"]),
-			command(["typecheck", "build"]),
-			command(["tests"], "", Number(!!repeated.length)),
-			report(repeated),
-		)
-	}
-	return steps
-}
-function provider(commands: FixtureCommand[]): SandboxProvider {
-	return createFakeSandboxProvider({ commit: fixtureCommit, commands })
-}
 test("shares one provider contract with the credentialed suite", async () => {
 	// exercise the shared provider contract with recorded observations
 	await providerContract(
@@ -92,6 +40,28 @@ test("shares one provider contract with the credentialed suite", async () => {
 		]),
 	)
 })
+test("the first measured project command records its placeholder count once", async () => {
+	const entries = scripts([], [], [])
+	for (const entry of entries) {
+		entry.result.placeholderVariableCount = entry.argv[2] === "detect" ? 0 : 3
+	}
+	const report = await inspectRepository({
+		repositoryUrl: fixtureUrl,
+		sandboxProvider: provider(entries),
+		limits: { maxUpgrades: 1 },
+	})
+
+	// Exclude the detection command, which runs before the project environment is known.
+	const counts = report.timeline.flatMap((event) =>
+		event.type === "sandbox.event" &&
+		event.action === "credentials-withheld" &&
+		event.placeholderVariableCount !== undefined
+			? [event.placeholderVariableCount]
+			: [],
+	)
+	assert.deepEqual(counts, [3])
+})
+
 test("records existing, flaky and confirmed tests with exact callback replay", async () => {
 	// collect callback events as the fixture repeats the failing tests
 	const timeline: InspectionEvent[] = []
@@ -167,7 +137,11 @@ test("broken Baseline prevents all trials", async () => {
 	entries[2] = command(["install"], "broken", 1)
 	const inspectionReport = await inspectRepository({ repositoryUrl: fixtureUrl, sandboxProvider: provider(entries) })
 	assert.equal(inspectionReport.upgrades.length, 2)
-	assert.ok(inspectionReport.upgrades.every((u) => u.result.status === "untested"))
+	assert.ok(
+		inspectionReport.upgrades.every(
+			({ result }) => result.status === "untested" && result.detail?.includes("install the original dependencies"),
+		),
+	)
 })
 test("expired token and invalid sources fail before allocation", async () => {
 	// simulate expired credentials in the provider availability check
@@ -360,65 +334,4 @@ test("rejects malformed revisions before allocation and reclaims failed checkout
 		assert.equal(actions.at(-1), "deleted")
 		assert.ok(!actions.includes("network-locked"))
 	}
-})
-
-test("registry lookup has its own timeout and preserves that failure in the report", async () => {
-	const entries = scripts([], [], []).slice(0, 6)
-	entries[1] = { argv: [...base, "registry", "widget"], result: { exitCode: 124, timedOut: true } }
-	const sandboxProvider = provider(entries)
-	const execute = sandboxProvider.executeCommand.bind(sandboxProvider)
-	let registryBudget = 0
-
-	sandboxProvider.executeCommand = async (sandbox, command) => {
-		if (command.argv[2] === "registry") {
-			registryBudget = command.timeoutMs
-		}
-		return execute(sandbox, command)
-	}
-
-	// A short detection budget must leave the full registry window available.
-	const inspectionReport = await inspectRepository({
-		repositoryUrl: fixtureUrl,
-		sandboxProvider,
-		limits: { timeouts: { detect: 100, registry: 60000 } },
-	})
-	assert.equal(registryBudget, 60000)
-	assert.equal(
-		inspectionReport.selection.registryLookupIssue,
-		"Couldn’t list available upgrades: registry lookup timed out after 60s.",
-	)
-	assert.equal(inspectionReport.baseline.install.status, "passed")
-})
-
-test("partial registry failures preserve upgrades from successful lookups", async () => {
-	const entries = scripts([], [], [])
-	const detect = entries[0]
-	assert.ok(detect?.result.stdout)
-	const project = JSON.parse(detect.result.stdout)
-	project.sources.unavailable = { ".": "1.0.0" }
-	entries[0] = command(["detect"], JSON.stringify(project))
-
-	// Replay one successful response alongside a package whose request timed out.
-	entries[1] = command(
-		["registry", "widget", "unavailable"],
-		JSON.stringify({
-			widget: ["1.3.0"],
-			unavailable: "timed-out",
-		}),
-	)
-	const inspectionReport = await inspectRepository({
-		repositoryUrl: fixtureUrl,
-		sandboxProvider: provider(entries),
-		limits: { maxUpgrades: 1 },
-	})
-	assert.equal(
-		inspectionReport.selection.registryLookupIssue,
-		"Couldn’t list available upgrades for 1 of 2 dependencies: registry requests timed out.",
-	)
-	assert.ok(
-		inspectionReport.timeline.some(
-			(event) => event.type === "step.finished" && event.summary === "registry" && event.status === "untested",
-		),
-	)
-	assert.equal(inspectionReport.upgrades[0]?.dependency, "widget")
 })

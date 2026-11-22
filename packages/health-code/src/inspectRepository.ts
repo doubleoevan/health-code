@@ -1,28 +1,36 @@
 import type { InspectionOptionsV2, InspectionReportV2, PreviousInspectionOptions } from "./agentContracts.ts"
-import { NodeAdapter, ProjectEvidenceError, pending, RegistryDeadlineError, skippedUpgrade } from "./checkProject.ts"
 import { bounded, InspectionContext, redactEvidence } from "./collectEvents.ts"
-import { InspectionError, type InspectionOptions, type InspectionReport, type Sandbox } from "./contracts.ts"
+import {
+	InspectionError,
+	type InspectionOptions,
+	type InspectionReport,
+	type Sandbox,
+	SandboxUnavailableError,
+} from "./contracts.ts"
 import { ModelInspection } from "./inspectModels.ts"
-import { inspectUpgrade } from "./inspectUpgrade.ts"
+import { inspectProject } from "./inspectProject.ts"
 import { hasModels, toModelOptions } from "./modelOptions.ts"
 import type { ModelRequestSandboxInspectionReport, ModelRequestSandboxOptions } from "./modelRequestSandbox.ts"
-import { registryHosts } from "./networkPolicy.ts"
-import { sizeBytes } from "./readUpgradeEvidence.ts"
+import { RepositoryRuntime } from "./openRepositoryRuntime.ts"
+import { retainMeasuredStages } from "./preservePartialReport.ts"
+import { toInspectionMode } from "./toInspectionMode.ts"
 import { toRepositoryUrl } from "./toRepositoryUrl.ts"
-import { readIntegrity } from "./verifyCandidate.ts"
 
 /**
  * Inspects a pinned repository and releases its sandbox before returning the Inspection Report.
  */
 export function inspectRepository(options: ModelRequestSandboxOptions): Promise<ModelRequestSandboxInspectionReport>
 export function inspectRepository(options: InspectionOptionsV2 | PreviousInspectionOptions): Promise<InspectionReportV2>
+export function inspectRepository(
+	options: ModelRequestSandboxOptions | InspectionOptionsV2,
+): Promise<ModelRequestSandboxInspectionReport>
 export function inspectRepository(options: InspectionOptions): Promise<InspectionReport>
 export async function inspectRepository(
 	input: InspectionOptions | InspectionOptionsV2 | PreviousInspectionOptions | ModelRequestSandboxOptions,
 ): Promise<InspectionReport | ModelRequestSandboxInspectionReport> {
 	// select the model-backed inspection contract and validate the repository
 	const engine = createEngine(input)
-	const options = toCheckOptions(input, engine)
+	const options = { ...toCheckOptions(input, engine), mode: toInspectionMode(input) }
 	const repositoryUrl = toRepositoryUrl(options.repositoryUrl)
 
 	// Validate the requested pin before allocating either runtime.
@@ -40,7 +48,7 @@ export async function inspectRepository(
 
 	// retain the allocation identity for cleanup on all exit paths
 	const provider = options.sandboxProvider
-	let allocation: Sandbox | undefined
+	const runtime = new RepositoryRuntime(context, repositoryUrl, engine)
 	let inspectionReport: InspectionReport | undefined
 	let failure: InspectionError | undefined
 	try {
@@ -49,50 +57,14 @@ export async function inspectRepository(
 		await context.step("setup", "Check sandbox availability", (config) =>
 			provider.checkAvailability({ ...config, timeoutMs: Math.min(10000, config.timeoutMs) }),
 		)
-		const sandbox = await context.step("setup", "Create sandbox", async (config) => {
-			// reserve the sandbox identity before awaiting allocation
-			allocation = { id: `health-code-${context.id}` }
-			const lifetime = engine?.meter.start(
-				"repository",
-				allocation.id,
-				(ms) => provider.estimateMaxCost(ms),
-				provider.estimateMaxCost(context.end - context.started + (engine?.modelRequestSandbox ? context.cleanupMs : 0)),
-			)
-			const created = await provider.createSandbox(allocation.id, config)
-
-			// Some providers return an opaque ID after confirming the named allocation.
-			if (lifetime) {
-				lifetime.id = created.id
-			}
-			allocation = created
-			return created
-		})
-
-		// publish the sandbox lifecycle events before checkout
-		for (const action of ["created", "credentials-withheld"] as const) {
-			await context.emit({ type: "sandbox.event", sandboxId: sandbox.id, action })
-		}
-		const commit = await context.step("setup", "Prepare pinned checkout", (config) =>
-			provider.prepareRepository(sandbox, repositoryUrl, { ...config, revision: input.revision }),
-		)
-		if (!/^[0-9a-f]{40}$/.test(commit) || (input.revision && input.revision !== commit)) {
-			throw new InspectionError("repository-unavailable", "Unable to verify pinned repository")
-		}
-		await context.step("setup", "Lock network to registries", (config) =>
-			provider.setNetworkPolicy(sandbox, registryHosts, { ...config, timeoutMs: Math.min(10000, config.timeoutMs) }),
-		)
-		await context.emit({ type: "sandbox.event", sandboxId: sandbox.id, action: "network-locked" })
-
-		// inspect the pinned project under the registry policy
-		context.setupComplete = true
-		inspectionReport = await inspectProject(context, sandbox, { url: repositoryUrl, commit }, engine)
+		inspectionReport = await inspectWithRecovery({ runtime, context, engine, revision: input.revision })
 	} catch (error) {
 		failure = asFailure(error)
 	} finally {
 		context.cleaningUp = true
 
 		// release allocated resources even if setup failed
-		failure = await releaseAllocations({ context, allocation, engine, failure })
+		failure = await releaseAllocations({ context, allocation: runtime.allocation, engine, failure })
 	}
 	if (failure || !inspectionReport) {
 		return failInspection(context, failure, engine)
@@ -102,7 +74,9 @@ export async function inspectRepository(
 	try {
 		await context.emit({
 			type: "inspection.finished",
-			inspected: inspectionReport.upgrades.length,
+			inspected: inspectionReport.upgrades.filter(
+				(upgrade) => !upgrade.coverage && !("reusedFromInspectionId" in upgrade),
+			).length,
 			durationMs: Date.now() - context.started,
 		})
 	} catch (error) {
@@ -115,6 +89,67 @@ export async function inspectRepository(
 	// Include every prompt dispatched before cleanup completed.
 	inspectionReport.promptVersions = context.prompts.references
 	return engine ? engine.buildInspectionReport(redactEvidence(inspectionReport)) : redactEvidence(inspectionReport)
+}
+
+async function inspectWithRecovery({
+	runtime,
+	context,
+	engine,
+	revision,
+}: {
+	runtime: RepositoryRuntime
+	context: InspectionContext
+	engine?: ModelInspection
+	revision?: string
+}): Promise<InspectionReport> {
+	// Establish the first pinned checkout under the registry network policy.
+	const checkout = await runtime.open(revision)
+	const first = await inspectProject({ context, ...checkout, engine })
+	if (!first.sandboxUnavailable) {
+		return first
+	}
+
+	// Retain the first report if a second checkout cannot run inside the original limits.
+	try {
+		if (!(await runtime.replace())) {
+			first.stoppedReason += " A replacement sandbox could not start within the remaining time and spend limits."
+			return first
+		}
+
+		// Pin the replacement to the original commit and repeat its baseline.
+		const replacement = await runtime.open(first.repository.commit, "Create replacement sandbox")
+		engine?.resume(first)
+		const retried = await inspectProject({ context, ...replacement, engine, previous: first })
+
+		// Select the report using the replacement's own installation evidence.
+		const install = retried.baseline.install
+		if (install.status === "untested" && ["not-run", "interrupted"].includes(install.reason)) {
+			first.stoppedReason += ` Replacement checkout: ${retried.stoppedReason ?? "Baseline installation was interrupted."}`
+			return first
+		}
+
+		// Retain earlier baseline evidence only after the replacement installed the same checkout.
+		if (install.status === "passed") {
+			retainMeasuredStages(retried.baseline, first.baseline)
+		}
+		if (retried.sandboxUnavailable) {
+			retried.stoppedReason += " The replacement sandbox also became unavailable."
+		}
+		return retried
+	} catch (error) {
+		// Keep infrastructure interruptions separate from credential and integrity failures.
+		if (error instanceof SandboxUnavailableError && error.reason === "unavailable") {
+			first.stoppedReason += " The replacement checkout could not be established."
+			return first
+		}
+
+		// Preserve earlier evidence when the shared deadline expires.
+		if (error instanceof InspectionError && error.code === "deadline") {
+			first.stoppedReason += " The retry reached the time limit."
+			return first
+		}
+		throw error
+	}
 }
 
 function createEngine(
@@ -260,117 +295,4 @@ function asFailure(error: unknown): InspectionError {
 	return error instanceof InspectionError
 		? error
 		: new InspectionError("inspection-failed", "Inspection could not complete")
-}
-
-async function inspectProject(
-	context: InspectionContext,
-	sandbox: Sandbox,
-	repository: InspectionReport["repository"],
-	engine?: ModelInspection,
-): Promise<InspectionReport> {
-	const adapter = new NodeAdapter(context, sandbox)
-	adapter.watchChecks = !!engine
-	const inspectionReport: InspectionReport = {
-		version: 1,
-		inspectionId: context.id,
-		repository,
-		packageManager: { reason: "project-not-detected" },
-		baseline: pending("baseline-unavailable"),
-		selection: { limit: context.maximum, selected: [], eligible: [], omitted: [], skipped: [] },
-		upgrades: [],
-		timeline: context.timeline,
-	}
-	try {
-		// restore the pinned tree before detecting the project
-		await adapter.resetProject()
-		const project = await adapter.detectProject()
-		inspectionReport.packageManager = { name: project.manager, version: project.version }
-		Object.assign(inspectionReport.selection, await adapter.listUpgrades(project, context.maximum))
-		await engine?.captureUsage(
-			adapter,
-			inspectionReport.selection.selected.map((upgrade) => upgrade.dependency),
-		)
-		inspectionReport.baseline.install = await adapter.install()
-
-		// capture installation evidence for baseline comparisons
-		if (engine) {
-			engine.baseInstall = adapter.lastObservation
-			engine.baseSize = await sizeBytes(adapter).catch(() => undefined)
-		}
-		if (inspectionReport.baseline.install.status === "passed") {
-			inspectionReport.baseline.typecheck = await adapter.typecheck()
-			inspectionReport.baseline.tests = await adapter.test()
-
-			// retain baseline test coverage for independent patch checks
-			if (engine) {
-				engine.baseTests = adapter.lastObservation
-				engine.baseIntegrity = await readIntegrity(adapter).catch(() => undefined)
-			}
-		}
-
-		// check the selected upgrades before ranking feature adoption
-		await inspectSelected(context, adapter, inspectionReport, sandbox, engine)
-		await engine?.adopt()
-	} catch (error) {
-		let reason: string
-
-		// distinguish missing project evidence from fatal inspection failures
-		if (error instanceof ProjectEvidenceError) {
-			reason = error.message
-		} else if (error instanceof InspectionError && error.code === "deadline") {
-			reason = "inspection-deadline"
-		} else {
-			throw error
-		}
-
-		// preserve the reason that detection or inspection stopped
-		if ("reason" in inspectionReport.packageManager) {
-			inspectionReport.packageManager = { reason }
-		}
-
-		// Surface a busy registry command in the partial Inspection Report.
-		if (error instanceof RegistryDeadlineError) {
-			inspectionReport.selection.registryLookupIssue = reason
-		}
-		inspectionReport.selection.skipped.push(reason)
-		inspectionReport.upgrades.push(
-			...inspectionReport.selection.selected
-				.slice(inspectionReport.upgrades.length)
-				.map((u) => skippedUpgrade(u, reason)),
-		)
-	} finally {
-		// clear the upgrade identity before returning the partial report
-		context.upgradeId = undefined
-	}
-	return inspectionReport
-}
-
-async function inspectSelected(
-	context: InspectionContext,
-	adapter: NodeAdapter,
-	inspectionReport: InspectionReport,
-	sandbox: Sandbox,
-	engine?: ModelInspection,
-): Promise<void> {
-	for (const upgrade of inspectionReport.selection.selected) {
-		context.upgradeId = `${upgrade.dependency}@${upgrade.to}`
-
-		// identify upgrades blocked by an unavailable baseline or deadline
-		const blocked =
-			inspectionReport.baseline.install.status !== "passed" ||
-			(adapter.project?.typecheck !== "none" && inspectionReport.baseline.typecheck.status !== "passed")
-		const report = skippedUpgrade(upgrade, blocked ? "baseline-unavailable" : "inspection-deadline")
-		inspectionReport.upgrades.push(report)
-
-		// run checks only for upgrades with a usable baseline
-		if (!blocked) {
-			await inspectUpgrade({
-				adapter,
-				report,
-				baseline: inspectionReport.baseline,
-				afterInstall: engine ? () => engine.captureInstallation(adapter, report) : undefined,
-			})
-		}
-		await engine?.inspect(context, adapter, sandbox, inspectionReport, report)
-	}
 }

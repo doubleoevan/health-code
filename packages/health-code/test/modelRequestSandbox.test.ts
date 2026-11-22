@@ -6,6 +6,7 @@ import type { ModelRoute } from "../src/agentContracts.ts"
 import { InspectionContext } from "../src/collectEvents.ts"
 import {
 	createFakeSandboxProvider,
+	getUpgrade,
 	InspectionError,
 	inspectRepository,
 	type ModelRequestSandboxOptions,
@@ -13,6 +14,7 @@ import {
 import { ModelInspection } from "../src/inspectModels.ts"
 import { type Ledger, paidRequest } from "../src/modelBudget.ts"
 import { ModelRequestSandboxAllocation } from "../src/modelRequestSandbox.ts"
+import { requestHostModel } from "../src/requestHostModel.ts"
 import { RuntimeMeter } from "../src/runtimeUsage.ts"
 import type { Runtime } from "../src/sandbox/requestRuntime.ts"
 import { confirmGateway, sendSandboxModelRequest } from "../src/sandbox/sandboxModelRequest.ts"
@@ -56,6 +58,27 @@ test("model request sandbox admission rejects mixed options before creating eith
 		)
 	}
 	assert.deepEqual(provider.modelRequestSandboxEvents, [])
+})
+
+test("the sandbox event counts distinct stored model keys without publishing credential names", async () => {
+	const distinct = { ...role, credential: { ...role.credential, name: "fixture-second-key" } }
+	const provider = createFakeSandboxProvider({
+		commit: "a".repeat(40),
+		commands: [{ argv: ["node", "/opt/health-code/project.mjs", "detect"], result: { stdout: "{}" } }],
+		modelRequestSandbox: { replies: [] },
+	})
+	const report = await inspectRepository({
+		repositoryUrl,
+		sandboxProvider: provider,
+		callerModelExecution: "modelRequestSandbox",
+		models: { releaseSummary: role, featureMatch: distinct, repair: role, featureAdoption: role },
+	})
+
+	// Retain only the count as evidence in the public timeline.
+	const event = report.timeline.find((item) => item.type === "sandbox.event" && item.action === "credentials-withheld")
+	assert.ok(event?.type === "sandbox.event")
+	assert.equal(event.storedModelKeyCount, 2)
+	assert.ok(!JSON.stringify(event).includes(distinct.credential.name))
 })
 
 test("one opening is shared and unaffordable or expired work creates no model request sandbox", async () => {
@@ -267,8 +290,8 @@ test("local and model request sandbox requests use equivalent fenced evidence, v
 	}
 	const context = new InspectionContext({ repositoryUrl, sandboxProvider: provider, prompts })
 	assert.deepEqual(
-		await caller.requestHostModel("featureMatch", evidence, context),
-		await modelRequestSandbox.requestHostModel("featureMatch", evidence, context),
+		await requestHostModel({ engine: caller, role: "featureMatch", evidence, context }),
+		await requestHostModel({ engine: modelRequestSandbox, role: "featureMatch", evidence, context }),
 	)
 	const localPrompt = localPrompts[0] ?? ""
 	const remotePrompt = provider.modelRequestSandboxEvents.find((event) => event.request)?.request?.prompt ?? ""
@@ -301,12 +324,30 @@ test("a provider-assigned sandbox ID closes the original runtime charge", async 
 			}
 		},
 	}
-	await assert.rejects(inspectRepository(options), (error: InspectionError) => {
-		// Reconcile the pending name with the acknowledged deletion ID.
-		const usage = error.runtimeUsage
-		assert.equal(usage?.runtimes[0]?.id, "opaque-provider-id")
-		assert.equal(usage?.runtimes[0]?.deleted, true)
-		assert.equal(usage?.totalUpperBoundUsd, 0)
-		return true
-	})
+
+	// Reject an incompatible selection limit before contacting the provider.
+	await assert.rejects(
+		getUpgrade({
+			...options,
+			limits: { maxUpgrades: 0 },
+			revision: "a".repeat(40),
+			upgrade: { dependency: "widget", from: { ".": "1.0.0" }, to: "1.1.0", kind: "minor" },
+		}),
+		/maxUpgrades/,
+	)
+	await assert.rejects(
+		getUpgrade({
+			...options,
+			revision: "a".repeat(40),
+			upgrade: { dependency: "widget", from: { ".": "1.0.0" }, to: "1.1.0", kind: "minor" },
+		}),
+		(error: InspectionError) => {
+			// Reconcile the pending name with the acknowledged deletion ID.
+			const usage = error.runtimeUsage
+			assert.equal(usage?.runtimes[0]?.id, "opaque-provider-id")
+			assert.equal(usage?.runtimes[0]?.deleted, true)
+			assert.equal(usage?.totalUpperBoundUsd, 0)
+			return true
+		},
+	)
 })

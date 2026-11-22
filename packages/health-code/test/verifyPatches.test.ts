@@ -71,6 +71,14 @@ for (const adoption of ["simplify", "decline", "no-benefit"] as const) {
 		if (adoption === "simplify") {
 			assert.equal(report.patches[1]?.base, report.patches[0]?.testedTip)
 			assert.equal(report.patches[1]?.prerequisite, report.patches[0]?.id)
+			assert.match(
+				report.patches[1]?.prompt ?? "",
+				/keep your current branch if the prerequisite upgrade patch is already applied/,
+			)
+			assert.match(
+				report.patches[1]?.prompt ?? "",
+				/create a branch at the inspected commit and apply the prerequisite upgrade patch first/,
+			)
 			assert.equal(match?.disposition, "adopted")
 		}
 	})

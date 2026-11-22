@@ -9,6 +9,8 @@ const projectTool = "/opt/health-code/project.mjs"
 export function buildTestCommand(options: { command: Command; dir?: string; id: string; previous?: string }): {
 	argv: string[]
 	capture?: string
+	maxOutputBytes?: number
+	placeholderVariableCount: number
 } {
 	// identify trusted test and inventory requests before mounting evidence
 	const { command, dir, id, previous } = options
@@ -16,36 +18,42 @@ export function buildTestCommand(options: { command: Command; dir?: string; id: 
 	const trustedTool = node === "node" && tool === projectTool
 	const capture =
 		trustedTool && action === "tests" && option === "--inventory" ? `/var/lib/health-code/tests-${id}` : undefined
-	let argv: string[]
+	let maxOutputBytes: number | undefined
+	let guest: ReturnType<typeof guestArguments>
 
 	// give a fresh report write access only during its test run
 	if (capture) {
-		argv = guestArguments(command, dir, { path: `${capture}/raw/report`, kind: "report", writable: true })
+		guest = guestArguments(command, dir, { path: `${capture}/raw/report`, kind: "report", writable: true })
 	} else if (trustedTool && action === "registry") {
 		// Allow the guest to flush completed lookups before the remote command deadline.
 		const grace = Math.min(2000, command.timeoutMs / 4)
 		const budget = Math.max(0, Math.floor(command.timeoutMs - grace))
-		argv = guestArguments(
+		guest = guestArguments(
 			{ ...command, argv: [node, tool, action, `--timeout-ms=${budget}`, ...command.argv.slice(3)] },
 			dir,
 		)
 	} else if (trustedTool && action === "integrity" && previous) {
-		argv = guestArguments(command, dir, { path: `${previous}/inventory`, kind: "inventory" })
+		// Allow room for repository-wide file paths on the first protected page.
+		maxOutputBytes = option === "0" ? 1024 * 1024 : undefined
+		guest = guestArguments(command, dir, { path: `${previous}/inventory`, kind: "inventory" })
 	} else if (trustedTool && action === "report" && previous) {
-		argv = guestArguments({ ...command, argv: [...command.argv, "--protected"] }, dir, {
+		guest = guestArguments({ ...command, argv: [...command.argv, "--protected"] }, dir, {
 			path: `${previous}/report`,
 			kind: "report",
 		})
 	} else {
-		argv = guestArguments(command, dir)
+		guest = guestArguments(command, dir)
 	}
 
 	// wrap the prepared command in observation and capture as requested
+	let { argv } = guest
 	if (dir) {
 		argv = ["bash", "-c", observe, "observe", dir, ...argv]
 	}
+
+	// Capture test evidence outside the project filesystem.
 	if (capture) {
 		argv = ["/opt/health-code/bin/node", projectTool, "capture-tests", capture, ...argv]
 	}
-	return { argv, capture }
+	return { argv, capture, maxOutputBytes, placeholderVariableCount: guest.placeholderVariableCount }
 }

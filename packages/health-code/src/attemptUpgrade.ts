@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto"
-import { type AgentRole, agentRoleLabels, type FeatureMatch } from "./agentContracts.ts"
+import { type AgentRole, agentRoleLabels, type CodeFeatureMatch } from "./agentContracts.ts"
 import { applyDecision } from "./applyAgentEdits.ts"
 import { buildPrompt, parseAnswer } from "./buildPrompt.ts"
 import { sections } from "./bumpManifest.ts"
 import { redact, rethrowInspectionFailure } from "./collectEvents.ts"
+import { SandboxUnavailableError } from "./contracts.ts"
 import type { ModelInspection } from "./inspectModels.ts"
 import { measureFeature } from "./measureFeature.ts"
 import { attemptBudget } from "./modelBudget.ts"
@@ -23,7 +24,7 @@ export async function attemptUpgrade(
 	engine: ModelInspection,
 	evidence: PatchEvidence,
 	state: State,
-	match?: FeatureMatch,
+	match?: CodeFeatureMatch,
 ): Promise<void> {
 	// choose the role and its budget from the upgrade evidence
 	const { report } = evidence
@@ -107,6 +108,11 @@ export async function attemptUpgrade(
 		} catch (error) {
 			// preserve terminal inspection errors across rejected turns
 			rethrowInspectionFailure(error, evidence.context)
+			if (error instanceof SandboxUnavailableError) {
+				throw error
+			}
+
+			// Retry only agent decisions the current sandbox can still verify.
 			lastEvidence = await reportRejectedTurn({ evidence, state, role, turn, error, proposedEdit })
 		}
 	}
@@ -284,7 +290,7 @@ function recordBenefit({
 	initialSource,
 	testFiles,
 }: {
-	match: FeatureMatch
+	match: CodeFeatureMatch
 	evidence: PatchEvidence
 	state: State
 	initialSource: Map<string, string>

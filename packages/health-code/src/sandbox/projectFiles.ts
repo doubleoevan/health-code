@@ -59,7 +59,7 @@ export function readProjectFile({
 				timeoutMs: operation.timeoutMs,
 			},
 			undefined,
-		),
+		).argv,
 		operation,
 		true,
 	)
@@ -92,7 +92,7 @@ export async function writeProjectFile({
 				timeoutMs: operation.timeoutMs,
 			},
 			undefined,
-		),
+		).argv,
 		{ stdin: contents, timeoutSecs: Math.max(1, Math.ceil(operation.timeoutMs / 1000)) },
 	)
 	if (result.exitCode !== 0) {

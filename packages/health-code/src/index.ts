@@ -29,7 +29,11 @@ export type EnrichedInspectionOptions =
 	| import("./agentContracts.ts").PreviousInspectionOptions
 	| import("./agentContracts.ts").InspectionOptionsV2
 export type {
-	FeatureMatch,
+	CodeFeatureMatch,
+	/**
+	 * @deprecated Use CodeFeatureMatch.
+	 */
+	CodeFeatureMatch as FeatureMatch,
 	InspectionEventV2,
 	InspectionModels,
 	InspectionOptionsV2,
@@ -73,6 +77,12 @@ export type {
 export { InspectionError, SandboxUnavailableError } from "./contracts.ts"
 export { createFakeSandboxProvider, type FixtureCommand, type SandboxFixture } from "./createFakeSandboxProvider.ts"
 export { inspectRepository } from "./inspectRepository.ts"
+export {
+	getUpgrade,
+	listUpgrades,
+	readUpgradeMenuFeatures,
+	readUpgradeMenuFeatures as readMenuFeatures,
+} from "./listUpgrades.ts"
 export type {
 	ModelRequestSandbox,
 	ModelRequestSandboxEvent,
@@ -87,7 +97,24 @@ export type {
 	SandboxModelRoutes,
 } from "./modelRequestSandbox.ts"
 export { isModelRequestSandboxName, toModelRequestSandboxName } from "./modelRequestSandbox.ts"
+export {
+	type ReleaseFeaturePage,
+	readUpgradeFeatures,
+	toFeaturePage,
+	type UpgradeFeatures,
+} from "./readUpgradeFeatures.ts"
 export { createSandboxProvider, type ProviderOptions } from "./sandbox/createSandboxProvider.ts"
 export { reconcileSandboxes } from "./sandbox/reconcileSandboxes.ts"
 export { testInventorySummarySchema } from "./testInventorySummary.ts"
+export { type InspectionMode, toInspectionMode } from "./toInspectionMode.ts"
 export { toRepositoryUrl } from "./toRepositoryUrl.ts"
+export {
+	type DependencyChoice,
+	dependenciesPerPage,
+	toPinnedUpgradeKey,
+	toUpgradeMenu,
+	type UpgradeMenuOrder,
+	type UpgradeMenuOrder as MenuOrder,
+	type UpgradeMenuTarget,
+	type UpgradeMenuTarget as MenuTarget,
+} from "./upgradeMenu.ts"

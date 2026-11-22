@@ -1,30 +1,22 @@
 import { EventEmitter } from "node:events"
-import { InspectionError, toRepositoryUrl } from "health-code"
+import { InspectionError, toRepositoryUrl, type UpgradeFeatures } from "health-code"
+import { ReleaseFeatureCache } from "./cacheReleaseFeatures.ts"
+import { type InspectionChoice, type InspectionSource, SiteError } from "./inspectionSource.ts"
 import type { LaunchLimits } from "./launchLimits.ts"
 import type { AdmissionRequest, LaunchService } from "./launchService.ts"
 import { logInspection } from "./logInspection.ts"
 import { type InspectionOutput, publishReport } from "./publishReport.ts"
-import { AdmissionError, type RepositoryHead, toUtcDay } from "./recordAdmissions.ts"
+import { AdmissionError, toUtcDay } from "./recordAdmissions.ts"
 import type { SiteEvent } from "./report.ts"
 import type { InspectionStore } from "./storeInspections.ts"
-
-export class SiteError extends Error {}
-type DispatchOptions = { revision?: string; settings?: LaunchLimits; signal?: AbortSignal }
-export interface InspectionSource<Output extends InspectionOutput = InspectionOutput> {
-	verify(repositoryUrl: string, admission?: { repositoryId: string; maxSizeKiB: number }): Promise<void>
-
-	// Bind the checkout to the revision selected at admission.
-	resolve?(repositoryUrl: string): Promise<RepositoryHead>
-	inspect(repositoryUrl: string, emit: (event: SiteEvent) => void, options?: DispatchOptions): Promise<Output>
-	license(repository: { url: string; commit: string }): Promise<string | null>
-	recover(options?: { liveInspectionIds: ReadonlySet<string>; createdBefore: number }): Promise<number>
-	maxDurationMs?: number
-}
 
 // coordinate queued inspections and notify subscribers when their state changes
 export class Inspections {
 	readonly changes = new EventEmitter()
 	private timers: ReturnType<typeof setInterval>[] = []
+
+	// Share pending release requests for the same package versions.
+	private readonly featureLookups = new ReleaseFeatureCache()
 	private sweeping = false
 	private inventoryHealthy = true
 	private maintenanceHealthy = true
@@ -45,6 +37,16 @@ export class Inspections {
 			throw new Error("Invalid inspection concurrency")
 		}
 		this.changes.setMaxListeners(0)
+	}
+
+	async features(choice: Parameters<InspectionStore["upgradeMenuTarget"]>[0]): Promise<UpgradeFeatures> {
+		// Accept only an exact target from a published upgrade menu.
+		const target = this.store.upgradeMenuTarget(choice)
+		if (!target || !this.source.features) {
+			throw new SiteError("Release notes are unavailable for this target.")
+		}
+
+		return this.featureLookups.read(target, (upgrade) => this.source.features!(upgrade))
 	}
 
 	// Expose completion of startup cleanup to the readiness probe.
@@ -72,13 +74,18 @@ export class Inspections {
 			this.store.admission.liability(toUtcDay()) + Math.ceil(current.maxCostUsd * 1e6) > current.dailyMicros
 		)
 	}
-	async admit(input: string, request: AdmissionRequest): Promise<{ id: string; reused: boolean }> {
+	async admit(
+		input: string,
+		request: AdmissionRequest,
+		choice?: InspectionChoice,
+	): Promise<{ id: string; reused: boolean }> {
 		if (!this.launch) {
 			throw new AdmissionError(503, "Paid admission is unavailable.")
 		}
 
 		return this.launch.admit({
 			input,
+			choice,
 			request,
 			source: this.source,
 			store: this.store,
@@ -143,7 +150,10 @@ export class Inspections {
 		// retry deployment cleanup before accepting queued work
 		for (;;) {
 			try {
+				this.launch?.resumeQueued(this.store)
 				const interrupted = this.store.interrupt()
+
+				// Record interrupted inspections before reconciling their runtimes.
 				if (this.launch) {
 					for (const row of interrupted) {
 						logInspection({ row, state: "interrupted", durationMs: row.durationMs })
@@ -227,13 +237,13 @@ export class Inspections {
 		this.timers = []
 	}
 
-	submit(input: string): string {
+	submit(input: string, choice?: InspectionChoice): string {
 		// validate the repository and queue capacity before persisting a submission
 		const url = toRepositoryUrl(input)
 		if (this.launch) {
 			throw new Error("Hosted inspections require visitor admission")
 		}
-		const id = this.store.enqueue(url)
+		const id = this.store.enqueue(url, choice)
 
 		// Let the submission return its durable ID before starting external work.
 		setTimeout(() => this.drain(), 0)
@@ -310,7 +320,8 @@ export class Inspections {
 		try {
 			// confirm repository visibility before starting an inspection
 			const checkout = this.store.checkout(row.id)
-			const revision = checkout?.revision
+			const choice = this.store.requestedWork(row.id, checkout)
+			const { revision } = choice
 			const settings = this.launch?.settings.current
 			const limits = settings && this.store.admission.workerLimits(row.id, settings)
 			await this.source.verify(
@@ -332,7 +343,13 @@ export class Inspections {
 			// Verify checkout identity before publishing a cached report.
 			let output: InspectionOutput
 			try {
-				output = await this.source.inspect(row.repositoryUrl, emit, { revision, settings: limits, signal })
+				output = await this.source.inspect(row.repositoryUrl, emit, {
+					...choice,
+					revision,
+					settings: limits,
+					signal,
+					reuseUpgrade: this.store.upgrades.reader(row.id),
+				})
 			} finally {
 				// Let inventory reclaim a failed deletion even while terminal writes retry.
 				if (libraryId) {

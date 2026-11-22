@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util"
 import { z } from "zod"
 import { checkOperation, type InspectionContext, redact } from "./collectEvents.ts"
 import { untested } from "./confirmCheck.ts"
@@ -15,9 +16,9 @@ import type {
 	Upgrade,
 	UpgradeReport,
 } from "./contracts.ts"
-import { InspectionError } from "./contracts.ts"
+import { InspectionError, SandboxUnavailableError } from "./contracts.ts"
+import { mergeTestInventory } from "./mergeTestInventory.ts"
 import { selectUpgrades } from "./selectUpgrades.ts"
-import { testInventorySummarySchema } from "./testInventorySummary.ts"
 
 const projectSchema = z.object({
 	manager: z.enum(["npm", "bun", "pnpm", "yarn"]),
@@ -41,14 +42,16 @@ export function pending(reason: string): Baseline {
 
 // supply incomplete evidence for upgrades skipped before installation
 const unobserved: Observation = { complete: false, findings: [], reason: "Installation has not been observed" }
-export function skippedUpgrade(upgrade: Upgrade, reason: string): UpgradeReport {
-	return { ...upgrade, ...pending(reason), result: untested(reason), observation: unobserved }
+export function skippedUpgrade(upgrade: Upgrade, reason: string, detail?: string): UpgradeReport {
+	const result = untested(reason)
+	return { ...upgrade, ...pending(reason), result: detail ? { ...result, detail } : result, observation: unobserved }
 }
 
 export class NodeAdapter implements EcosystemAdapter {
 	project?: Project
 	lastObservation?: Observation
 	watchChecks = false
+	private reportedPlaceholders = false
 	constructor(
 		private readonly context: InspectionContext,
 		private readonly sandbox: Sandbox,
@@ -97,17 +100,28 @@ export class NodeAdapter implements EcosystemAdapter {
 
 	// return the full skipped list for an empty selection
 	async listUpgrades(project: Project, limit: number): Promise<InspectionReport["selection"]> {
-		if (limit === 0) {
+		if (limit === 0 && this.context.options.mode !== "listUpgrades") {
 			return { eligible: [], selected: [], omitted: [], skipped: [...project.skipped] }
 		}
 		const target = this.context.options.upgrade
 		if (target) {
 			// require the pinned source version in every declaring workspace
-			const versions = Object.values(project.sources[target.dependency] ?? {})
-			if (!versions.length || versions.some((locked) => locked !== target.from)) {
+			const sources = project.sources[target.dependency] ?? {}
+			const versions = Object.values(sources)
+			const matches =
+				typeof target.from === "string"
+					? versions.every((locked) => locked === target.from)
+					: isDeepStrictEqual({ ...sources }, { ...target.from })
+
+			// Reject a stale workspace pin before scheduling an install.
+			if (!versions.length || !matches) {
 				throw new ProjectEvidenceError("Pinned dependency source version differs")
 			}
-			const selection = selectUpgrades(project, { [target.dependency]: [target.to] }, limit)
+			const selection = selectUpgrades(
+				{ ...project, sources: { [target.dependency]: sources } },
+				{ [target.dependency]: [target.to] },
+				limit,
+			)
 
 			// reject a pinned target that fails upgrade selection
 			if (!selection.selected.length) {
@@ -196,12 +210,25 @@ export class NodeAdapter implements EcosystemAdapter {
 	private async call(args: string[], options: Operation, observe: boolean | "network" = false): Promise<CommandResult> {
 		// enforce cancellation before dispatching a guest command
 		checkOperation(options.signal)
-		return this.context.options.sandboxProvider.executeCommand(this.sandbox, {
+		const result = await this.context.options.sandboxProvider.executeCommand(this.sandbox, {
 			...options,
 			argv: [...guest, ...args],
 			environment: this.context.options.applicationEnvironment === "empty" ? [] : this.project?.environment,
 			observe,
 		})
+
+		// Publish placeholder counts only while the stage can still accept evidence.
+		checkOperation(options.signal)
+		if (this.project && !this.reportedPlaceholders && result.placeholderVariableCount !== undefined) {
+			this.reportedPlaceholders = true
+			await this.context.emit({
+				type: "sandbox.event",
+				action: "credentials-withheld",
+				sandboxId: this.sandbox.id,
+				placeholderVariableCount: result.placeholderVariableCount,
+			})
+		}
+		return result
 	}
 	async install(): Promise<CheckResult> {
 		return (await this.check(["install"], this.watchChecks)).check
@@ -249,7 +276,7 @@ export class NodeAdapter implements EcosystemAdapter {
 					// reconcile test failures with the runner's structured report
 					check = await this.testResult(check, options)
 					if (args.includes("--inventory")) {
-						check = withInventory(check, raw, evidence)
+						check = mergeTestInventory({ check, commandResult: raw, evidence })
 					}
 				}
 				return { check, observation }
@@ -368,38 +395,11 @@ export class NodeAdapter implements EcosystemAdapter {
 export class ProjectEvidenceError extends Error {}
 export class RegistryDeadlineError extends ProjectEvidenceError {}
 
-function parseInventory(text: string): unknown {
-	try {
-		return JSON.parse(text)
-	} catch {
-		return undefined
-	}
-}
-
-// merge inventory failures only when a complete summary is available
-function withInventory(check: CheckResult, raw: CommandResult, evidence: Evidence): CheckResult {
-	if (check.inventoryUnavailable) {
-		return check
-	}
-	const summary = raw.stdoutTruncated ? undefined : testInventorySummarySchema.safeParse(parseInventory(raw.stdout))
-	if (!summary?.success) {
-		return untested("incomplete-test-report", [evidence])
-	}
-
-	// represent file loading errors as additional test failures
-	const failures = summary.data.testFileErrors.map(({ file }) => ({ workspace: ".", file }))
-	if (failures.length) {
-		check = {
-			status: "failed",
-			evidence: [evidence],
-			failingTests: [...(check.status === "failed" ? check.failingTests : []), ...failures],
-		}
-	}
-	check.inventory = summary.data
-	return check
-}
-
 function toRegistryLookupIssue(error: unknown, timeoutReason: string): string {
+	if (error instanceof SandboxUnavailableError) {
+		throw error
+	}
+
 	if (error instanceof InspectionError && error.code === "deadline") {
 		// The remote command may still own the sandbox when the host deadline fires.
 		throw new RegistryDeadlineError(`Couldn’t list available upgrades: ${timeoutReason}.`)

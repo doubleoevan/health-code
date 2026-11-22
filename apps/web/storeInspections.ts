@@ -1,14 +1,17 @@
 import { Database } from "bun:sqlite"
 import { randomBytes, randomUUID } from "node:crypto"
-import { InspectionError } from "health-code"
+import { InspectionError, toInspectionMode, type Upgrade } from "health-code"
+import { isReusableReport, UpgradeCache } from "./cacheUpgrades.ts"
+import type { InspectionChoice } from "./inspectionSource.ts"
 import type { Publication } from "./publishReport.ts"
 import { AdmissionLedger, migrateAdmissions } from "./recordAdmissions.ts"
-import type { SiteEvent, Snapshot } from "./report.ts"
+import { readPublishedReport, type SiteEvent, type Snapshot } from "./report.ts"
 
 type StoredRow = Pick<Snapshot, "id" | "state" | "repositoryUrl" | "message"> & { report: string | null }
 export class InspectionStore {
 	readonly database: Database
 	readonly admission: AdmissionLedger
+	readonly upgrades: UpgradeCache
 	constructor(
 		path: string,
 		private readonly makeId: () => string = () => randomBytes(12).toString("base64url"),
@@ -51,7 +54,9 @@ export class InspectionStore {
 		}
 
 		// Attach the admission ledger to this same SQLite connection.
+		this.database.exec("CREATE TABLE IF NOT EXISTS inspection_choices(id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
 		this.admission = new AdmissionLedger(this.database)
+		this.upgrades = new UpgradeCache(this.database)
 	}
 	position(id: string): number | null {
 		// Expose a one-based queue position for durable rows.
@@ -80,7 +85,60 @@ export class InspectionStore {
 			null
 		)
 	}
-	enqueue(repositoryUrl: string): string {
+
+	// Restore the submitted target after a worker restart.
+	choice(id: string): InspectionChoice | undefined {
+		const row = this.database
+			.query<{ payload: string }, [string]>("SELECT payload FROM inspection_choices WHERE id=?")
+			.get(id)
+		if (!row) {
+			return undefined
+		}
+
+		// Resume jobs queued before the explicit inspection mode was stored.
+		const { discoveryOnly, ...choice }: InspectionChoice & { discoveryOnly?: boolean } = JSON.parse(row.payload)
+		if (discoveryOnly !== undefined) {
+			choice.mode = toInspectionMode({ mode: choice.mode, discoveryOnly })
+		}
+		return choice
+	}
+
+	upgradeMenuTarget({
+		upgradeMenuId,
+		dependency,
+		to,
+	}: {
+		upgradeMenuId: string
+		dependency: string
+		to: string
+	}): Upgrade | undefined {
+		// Read only the workspace pins and target needed for release lookup.
+		const row = this.database
+			.query<{ value: string }, [string, string, string]>(`
+			SELECT item.value FROM inspections i, json_each(coalesce(json_extract(i.report,'$.upgradeMenu'),json_extract(i.report,'$.menu'))) item
+			WHERE i.id=? AND json_extract(item.value,'$.dependency')=? AND json_extract(item.value,'$.to')=? LIMIT 1`)
+			.get(upgradeMenuId, dependency, to)
+		return row ? JSON.parse(row.value) : undefined
+	}
+
+	requestedWork(id: string, checkout: { revision: string } | null): InspectionChoice {
+		const choice = this.choice(id)
+		return { ...choice, revision: checkout?.revision ?? choice?.revision }
+	}
+
+	enqueue(repositoryUrl: string, choice?: InspectionChoice): string {
+		// Save the requested work alongside its queue entry in one transaction.
+		return this.database.transaction(() => {
+			const id = this.enqueueRepository(repositoryUrl)
+			if (choice) {
+				this.database.query("INSERT INTO inspection_choices VALUES(?,?)").run(id, JSON.stringify(choice))
+			}
+			return id
+		})()
+	}
+
+	// Insert the inspection into the bounded queue.
+	private enqueueRepository(repositoryUrl: string): string {
 		// Apply the queue bound to every fresh insertion.
 		if (this.queueFull()) {
 			throw new InspectionError("queue-full", "The inspection queue is full. Try again after an inspection starts.")
@@ -161,7 +219,12 @@ export class InspectionStore {
 				return null
 			}
 			const events = this.publicEvents(id, 0)
-			const report: Snapshot["card"] = row.report ? JSON.parse(row.report) : null
+			const report: Snapshot["card"] = row.report ? readPublishedReport(row.report) : null
+
+			// Refresh patch availability from published, licensed artifacts.
+			if (report?.upgradeMenu) {
+				this.upgrades.attachPatches(row.id, report)
+			}
 
 			// Preserve the reason on reports saved with the earlier field name.
 			if (
@@ -236,6 +299,17 @@ export class InspectionStore {
 			const report = publication.original
 			if (report.version === 2) {
 				this.admission.settle(id, report.runtimeUsage)
+				this.upgrades.save({ id, report, published: publication.card })
+			}
+
+			// Release incomplete reports for a fresh submission.
+			if (!isReusableReport(report)) {
+				this.database.query("UPDATE admissions SET cacheKey=NULL WHERE id=?").run(id)
+			} else if (report.selection.omitted.length && report.selection.limit !== undefined) {
+				// Match the complete report to a limit lowered before dispatch.
+				this.database
+					.query("UPDATE admissions SET cacheKey=json_set(cacheKey,'$[4]',?) WHERE id=? AND json_valid(cacheKey)")
+					.run(report.selection.limit, id)
 			}
 
 			// Store immutable patch bytes alongside their source report.

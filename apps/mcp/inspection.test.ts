@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
-import { randomUUID } from "node:crypto"
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, sep } from "node:path"
 import { test } from "node:test"
@@ -8,20 +7,10 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client"
 import { createFakeSandboxProvider, inspectRepository, type SandboxFixture } from "health-code"
 import { parse as parseToml } from "smol-toml"
 import { createServer } from "./createServer.ts"
-import { fetchPatch, validateOutcome } from "./fetchPatch.ts"
+import { environment, inspectionFixtureUrl, key, repo } from "./fixtures/inspectionSettings.ts"
 import { setupAccount } from "./setupAccount.ts"
-import { InspectionStore, protect, type SavedReport, toHash } from "./storeInspection.ts"
+import { InspectionStore, protect } from "./storeInspection.ts"
 import { Inspections } from "./trackInspections.ts"
-
-const key = "synthetic-model-key-for-tests"
-const environment = {
-	RUNTA_TOKEN: "synthetic-sandbox-token",
-	ANTHROPIC_API_KEY: key,
-	HEALTH_CODE_SUMMARY_MODEL: "claude-opus-5-5",
-}
-
-const repo = "https://github.com/example/project"
-const testRoot = new URL("../../scripts/fixtures/recorded/inspection.json", import.meta.url)
 
 test("setup registers and rotates a host-bound secret and prints name-only client settings", async () => {
 	// capture registrations without contacting the account service
@@ -103,14 +92,14 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 	// hold sandbox allocation until the client has received its inspection id
 	const root = await mkdtemp(join(tmpdir(), "mcp-inspection-"))
 	const store = new InspectionStore(root, protect(environment))
-	const fixture: SandboxFixture = JSON.parse(await readFile(testRoot, "utf8"))
+	const fixture: SandboxFixture = JSON.parse(await readFile(inspectionFixtureUrl, "utf8"))
 	const provider = createFakeSandboxProvider(fixture)
 	const gate = Promise.withResolvers<void>()
 	provider.checkAvailability = () => gate.promise
 
 	// connect the client and server through paired in-memory transports
 	const inspections = new Inspections(store, (options) => inspectRepository({ ...options, sandboxProvider: provider }))
-	const server = createServer(inspections, "1.2.3")
+	const server = createServer({ inspections, version: "1.2.3" })
 	const client = new Client({ name: "offline-test", version: "1" })
 	const [left, right] = InMemoryTransport.createLinkedPair()
 	try {
@@ -119,14 +108,23 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 		// check the public names and discovery titles together
 		const tools = await client.listTools()
 		assert.deepEqual(Object.fromEntries(tools.tools.map((tool) => [tool.name, tool.title])), {
+			discover_upgrades: "Find available dependency upgrades",
+			list_upgrades: "Browse dependency upgrades",
+			get_upgrade_features: "Preview what’s new in this upgrade",
 			get_tested_patch: "Get a tested patch by SHA-256",
 			read_inspection: "Read progress and the inspection report",
 			report_patch_result: "Record a patch result",
 			start_inspection: "Start an inspection",
+			get_upgrade: "Get a selected dependency upgrade",
 		})
 		for (const tool of tools.tools) {
 			assert.ok(tool.title && tool.inputSchema && tool.outputSchema)
-			assert.equal(tool.annotations?.openWorldHint, tool.name === "start_inspection")
+			assert.equal(
+				tool.annotations?.openWorldHint,
+				["discover_upgrades", "get_upgrade_features", "list_upgrades", "start_inspection", "get_upgrade"].includes(
+					tool.name,
+				),
+			)
 		}
 
 		// capture progress on the initial request
@@ -220,129 +218,12 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 	}
 })
 
-test("replay delivers exact Patch pages and durable application results", async () => {
-	const root = await mkdtemp(join(tmpdir(), "mcp-patches-"))
-	const store = new InspectionStore(root, protect(environment))
-	const inspectionId = randomUUID()
-
-	// use a multibyte patch to exercise text pagination
-	const mailbox = `first line\n${"x".repeat(4095)}🟢\n`
-	const sha256 = toHash(mailbox)
-	const patch = {
-		digest: sha256,
-		mailbox,
-		role: "upgrade",
-		id: "upgrade",
-		filename: "upgrade.patch",
-		base: "a".repeat(40),
-		testedTip: "b".repeat(40),
-		prompt: "Verify this Patch.",
-		commits: [],
-	}
-
-	// make the feature patch depend on the tested upgrade tip
-	const feature = {
-		...patch,
-		role: "feature",
-		prerequisite: "upgrade",
-		id: "feature",
-		base: "b".repeat(40),
-		mailbox: "adopt feature\n",
-		digest: toHash("adopt feature\n"),
-	}
-	const report: SavedReport = {
-		version: 2,
-		inspectionId,
-		repository: { url: repo, commit: "a".repeat(40) },
-		baseline: {},
-		timeline: [],
-		upgrades: [{ dependency: "widget", verdict: "Fixed", patches: [patch, feature] }],
-	}
-	try {
-		// reconstruct the saved mailbox and verify its digest
-		await store.save(report)
-		const saved = await store.load(inspectionId)
-		const first = fetchPatch(saved, { sha256, offset: 0 })
-		const rest = fetchPatch(saved, { sha256, offset: first.nextOffset ?? 0 })
-		assert.equal(toHash(first.text + rest.text), sha256)
-
-		// preserve each reported checkout relationship on the patch handoff
-		for (const relationship of ["equal", "ahead", "behind", "diverged", "unknown"] as const) {
-			const result = fetchPatch(saved, { sha256: feature.digest, offset: 0, checkout: { relationship, dirty: true } })
-			assert.equal(result.checkout.relationship, relationship)
-			assert.equal(result.prerequisiteSha256, sha256)
-		}
-		const outcome = {
-			inspectionId,
-			sha256,
-			application: "adapted" as const,
-			adaptation: "Adjusted an import",
-			tests: "passed" as const,
-			pullRequest: `${repo}/pull/1`,
-		}
-
-		// reject invalid adaptations, pull requests and patch identities
-		assert.throws(() => validateOutcome(saved, { ...outcome, adaptation: "" }))
-		assert.throws(() => validateOutcome(saved, { ...outcome, pullRequest: "https://example.org" }))
-		assert.throws(() => validateOutcome(saved, { ...outcome, sha256: "c".repeat(64) }))
-		validateOutcome(saved, outcome)
-
-		// deduplicate identical results while retaining different test outcomes
-		await Promise.all([store.record(outcome), store.record(outcome), store.record({ ...outcome, tests: "failed" })])
-		assert.equal((await new InspectionStore(root).outcomes(inspectionId)).length, 2)
-		await assert.rejects(store.record({ ...outcome, adaptation: key }))
-
-		// reject changed bytes under a previously verified digest
-		assert.throws(() =>
-			fetchPatch(
-				{ ...report, upgrades: [{ dependency: "widget", patches: [{ ...patch, mailbox: "altered" }] }] },
-				{ sha256, offset: 0 },
-			),
-		)
-
-		// stop the handoff for commits that edit tests
-		assert.match(
-			fetchPatch(
-				{
-					...report,
-					upgrades: [
-						{
-							dependency: "widget",
-							verdict: "Fixed with test changes",
-							patches: [{ ...patch, commits: [{ subject: "Edit tests", sha: "c".repeat(40), flag: "test" }] }],
-						},
-					],
-				},
-				{ sha256, offset: 0 },
-			).action,
-			/Stop/,
-		)
-
-		// reject credentials and corrupt report data on disk
-		await assert.rejects(store.save({ ...report, inspectionId: randomUUID(), exposed: key }))
-		await writeFile(join(root, inspectionId, "inspection-report.json"), "partial")
-		await assert.rejects(store.load(inspectionId), /unreadable/)
-		await assert.rejects(store.load("../escape"))
-
-		// reject linked records and ignore unfinished writes
-		const linked = randomUUID()
-		await symlink(join(root, inspectionId), join(root, linked))
-		await assert.rejects(store.load(linked), /unreadable/)
-
-		// confirm that pending records never appear under a finished id
-		await mkdir(join(root, ".pending-example"))
-		await assert.rejects(store.load(randomUUID()), /not found/)
-	} finally {
-		await rm(root, { recursive: true, force: true })
-	}
-})
-
 test("storage failure keeps the completed evidence readable without restarting paid work", async () => {
 	// occupy the storage path before starting the inspection
 	const home = await mkdtemp(join(tmpdir(), "mcp-unwritable-"))
 	const store = new InspectionStore(join(home, "file"))
 	await writeFile(store.root, "occupied")
-	const fixture: SandboxFixture = JSON.parse(await readFile(testRoot, "utf8"))
+	const fixture: SandboxFixture = JSON.parse(await readFile(inspectionFixtureUrl, "utf8"))
 
 	// count executions independently of failed save attempts
 	let starts = 0

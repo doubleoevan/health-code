@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { createHash } from "node:crypto"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { origin, replay, createTestSite as site } from "./fixtures/createTestSite.ts"
@@ -58,7 +59,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 	const match = upgrade.featureMatches[0]
 	const patchForReview = upgrade.patches[0]
 	if (!match || !patchForReview) {
-		throw new Error("The review fixture requires a Feature Match and a Patch")
+		throw new Error("The review fixture requires a Code Feature Match and a Patch")
 	}
 
 	// attach a direct quotation and affected call sites to the match
@@ -97,6 +98,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 		const id = store.enqueue(repository)
 		store.finish(id, publishReport(output, "MPL-2.0"))
 		const html = (await (await app.request(`/r/${id}`)).text()).replaceAll("<!-- -->", "")
+		expect((html.match(/>Copy patch instructions<\/button>/g) ?? []).length).toBe(upgrade.patches.length)
 		for (const expected of [
 			verdict.replace("'", "&#x27;"),
 			"repair v12",
@@ -125,7 +127,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			"Test file errors",
 			"Fixture setup failed",
 			"Adoption outcome",
-			"Why repair stopped",
+			"Why no tested patch is available",
 			"Turn limit reached",
 			"Added dependencies",
 			"options-helper@1.0.0",
@@ -168,6 +170,45 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 	patch.mailbox += "changed"
 	expect(() => publishReport(output, "MIT")).toThrow("verification")
 	store.database.close()
+})
+
+test("patch order belongs to the dependency that requires it", async () => {
+	// Publish a standalone upgrade alongside a feature with a required upgrade patch.
+	const output = await replay.inspect(repository, () => {})
+	const widget = output.report.upgrades[0]
+	const patch = widget?.patches.find((item) => item.role === "upgrade")
+	if (!widget || !patch) {
+		throw new Error("The fixture requires a tested upgrade patch")
+	}
+
+	// Give the independent target its own downloadable bytes.
+	const mailbox = patch.mailbox.replaceAll("widget", "gadget")
+	const digest = createHash("sha256").update(mailbox).digest("hex")
+	output.report.upgrades.push({ ...widget, dependency: "gadget", patches: [{ ...patch, id: digest, digest, mailbox }] })
+	const store = new InspectionStore(":memory:")
+	try {
+		// Read the public report and find the two dependency cards in display order.
+		const id = store.enqueue(repository)
+		store.finish(id, publishReport(output, "MIT"))
+		const app = site(store)
+		const html = await (await app.request(`/r/${id}`)).text()
+		const [first, second] = html.match(/<article>[\s\S]*?<\/article>/g) ?? []
+
+		// Number the verified prerequisite and feature within the first target only.
+		expect(first).toContain("<h3>widget</h3>")
+		expect(first).toMatch(/1\. Upgrade patch[\s\S]*2\. Optional feature patch/)
+		expect(first).not.toContain(digest)
+		expect(second).toContain("<h3>gadget</h3>")
+		expect(second).toContain("<h4>Upgrade patch</h4>")
+		expect(second).not.toContain(patch.digest)
+
+		// Fetch the independent patch directly from the link on its card.
+		const path = `/patches/${digest}.patch`
+		expect(second).toContain(`href="${path}"`)
+		expect(await (await app.request(path)).text()).toBe(mailbox)
+	} finally {
+		store.database.close()
+	}
 })
 
 test("unsupported and ambiguous projects preserve detection reasons without upgrades", async () => {
@@ -214,6 +255,32 @@ test("a saved model request sandbox startup is shown once in the pinned list and
 	}
 	const replayed = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: false, events: [historical] }))
 	expect(replayed.split(detail)).toHaveLength(3)
+})
+
+test("live and saved timelines show measured key counts and preserve uncounted events", () => {
+	const event = {
+		type: "sandbox.event",
+		action: "credentials-withheld",
+		version: 2,
+		inspectionId: "recorded",
+		sandboxId: "sandbox",
+		sequence: 1,
+		timestamp: new Date(0).toISOString(),
+	} as const
+	for (const live of [true, false]) {
+		for (const [measurement, label] of [
+			[{ storedModelKeyCount: 1 }, "1 stored model key kept outside the sandbox"],
+			[{ storedModelKeyCount: 2 }, "2 stored model keys kept outside the sandbox"],
+			[{ placeholderVariableCount: 0 }, "0 repository environment variables given placeholder values"],
+			[{ placeholderVariableCount: 1 }, "1 repository environment variable given placeholder values"],
+			[{ placeholderVariableCount: 3 }, "3 repository environment variables given placeholder values"],
+			[{}, "Real keys kept outside the sandbox"],
+		] as const) {
+			const events: SiteEvent[] = [{ ...event, ...measurement }]
+			const html = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live, events }))
+			expect(html.split(label)).toHaveLength(3)
+		}
+	}
 })
 
 test("an empty report explains registry failure on the shared report page", async () => {
@@ -280,4 +347,43 @@ test("the live and saved timelines label registry lookup and its partial results
 	const saved = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: false, events: [finished] }))
 	expect(saved).toContain("Find available upgrades")
 	expect(saved).toContain("Incomplete · 0.5s")
+})
+
+test("a partial report shows the interrupted step, skipped upgrades and reused evidence", async () => {
+	const store = new InspectionStore(":memory:")
+	const output = await replay.inspect(repository, () => {})
+	const upgrade = output.report.upgrades[0]!
+	output.report.stoppedReason = "The sandbox became unavailable. Last step: tests."
+	upgrade.reusedFromInspectionId = "original-proof"
+	output.report.upgrades.push({
+		...upgrade,
+		dependency: "unfinished",
+		coverage: "skipped",
+		reusedFromInspectionId: undefined,
+		verdict: "Untested",
+	})
+	output.report.selection.omitted = [{ ...upgrade, dependency: "outside-limit" }]
+
+	// Render a persisted report as a visitor would open its shared link.
+	const id = store.enqueue(repository)
+	store.finish(id, publishReport(output, null))
+	const html = (await (await site(store).request(`/r/${id}`)).text()).replaceAll("<!-- -->", "")
+
+	// Verify the reason, scope and original evidence are visible without JavaScript.
+	expect(html).toContain("Partial inspection")
+	expect(html).toContain("Previously tested in")
+	expect(html).toContain("Where this fits in your code")
+
+	// Show unfinished work alongside the link to the previous inspection.
+	expect(html).toContain("1 skipped")
+	expect(html).toContain("Last step: tests")
+	expect(html).toContain("outside-limit@")
+	expect(html).toContain('href="/r/original-proof"')
+
+	// Open the same source link from a report saved with the earlier field.
+	store.database
+		.query("UPDATE inspections SET report=replace(report,?,?) WHERE id=?")
+		.run('"reusedFromInspectionId"', '"reusedFrom"', id)
+	expect(await (await site(store).request(`/r/${id}`)).text()).toContain('href="/r/original-proof"')
+	store.database.close()
 })

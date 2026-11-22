@@ -1,5 +1,5 @@
 import { parse } from "@babel/parser"
-import type { FeatureMatch } from "./agentContracts.ts"
+import type { CodeFeatureMatch } from "./agentContracts.ts"
 
 type Scope = { files: Map<string, string>; tests: Set<string>; symbol?: string }
 function measure({ files, tests, symbol }: Scope): { lines: number; nodes: number; calls: number } {
@@ -57,7 +57,7 @@ export function measureFeature(options: {
 	tests: Set<string>
 	symbol?: string
 	removedDependency?: string
-}): NonNullable<FeatureMatch["benefit"]> {
+}): NonNullable<CodeFeatureMatch["benefit"]> {
 	// recognize removal of a direct dependency as a measured benefit
 	if (options.removedDependency) {
 		return { kind: "direct-dependency", before: 1, after: 0, name: options.removedDependency }

@@ -4,9 +4,10 @@ import {
 	type InspectionOptionsV2,
 	type InspectionReportV2,
 	inspectRepository,
+	readUpgradeFeatures,
 	reconcileSandboxes,
 } from "health-code"
-import type { InspectionSource } from "./executeInspection.ts"
+import type { InspectionSource } from "./inspectionSource.ts"
 
 import { createRepositoryLookup } from "./verifyRepository.ts"
 
@@ -29,7 +30,7 @@ export function isReplayEnabled(environment: NodeJS.ProcessEnv): boolean {
 export function createLiveSource(
 	environment: NodeJS.ProcessEnv,
 	inspect: (options: InspectionOptionsV2) => Promise<InspectionReportV2> = inspectRepository,
-): InspectionSource {
+): InspectionSource<{ report: InspectionReportV2 }> {
 	// require live credentials and a deployment namespace before accepting work
 	const token = environment.RUNTA_TOKEN
 	const key = environment.ANTHROPIC_API_KEY
@@ -45,7 +46,7 @@ export function createLiveSource(
 	const hostedModel = "claude-opus-5-5"
 	const modelId = environment.HEALTH_CODE_MODEL ?? hostedModel
 	if (modelId !== hostedModel) {
-		throw new Error("The hosted inspection requires Claude Opus 5.5")
+		throw new Error("HEALTH_CODE_MODEL must be claude-opus-5-5 for hosted release summaries and feature matching")
 	}
 
 	// bind host requests to the fixed endpoint and reject redirects
@@ -60,7 +61,7 @@ export function createLiveSource(
 		),
 	})
 
-	// share price bounds between host handles and credential-bound guest routes
+	// Price host analysis and credential-bound batch requests at the Opus rate.
 	const pricing = { inputUsdPerMillion: 4, outputUsdPerMillion: 20, maxInputTokens: 65536 }
 	const host = { model: provider(modelId), pricing }
 	const guest = {
@@ -71,8 +72,15 @@ export function createLiveSource(
 		pricing,
 	}
 
+	// Price selected patch attempts at the pinned Fable rate.
+	const patchAgent = {
+		...guest,
+		modelId: "claude-fable-5-2",
+		pricing: { ...pricing, inputUsdPerMillion: 8, outputUsdPerMillion: 40 },
+	}
+
 	// configure per-inspection spend, duration and upgrade limits
-	const sandboxProvider = createSandboxProvider({ deployment, token })
+	const sandboxProvider = createSandboxProvider({ deployment, token, memoryMib: 8192 })
 	const limits = {
 		maxUpgrades: toInspectionLimit(environment.HEALTH_CODE_MAX_UPGRADES, 2),
 		maxDurationMs: toInspectionLimit(environment.HEALTH_CODE_MAX_DURATION_MS, 1800000),
@@ -88,6 +96,7 @@ export function createLiveSource(
 	const firstSeen = new Map<string, number>()
 	return {
 		...createRepositoryLookup(githubToken),
+		features: (upgrade) => readUpgradeFeatures(upgrade, { githubToken }),
 		maxDurationMs: limits.maxDurationMs,
 		async recover(options): Promise<number> {
 			await reconcileSandboxes({ deployment, token, liveInspectionIds: new Set(), firstSeen, ...options })
@@ -96,14 +105,18 @@ export function createLiveSource(
 		async inspect(
 			repositoryUrl,
 			onEvent,
-			{ revision, settings, signal } = {},
+			{ revision, settings, signal, reuseUpgrade, mode, upgrade } = {},
 		): Promise<{ report: InspectionReportV2 }> {
+			const agent = upgrade ? patchAgent : guest
 			const report = await inspect({
 				repositoryUrl,
 				sandboxProvider,
 				githubToken,
 				signal,
 				revision,
+				reuseUpgrade,
+				mode,
+				upgrade,
 				limits: settings
 					? {
 							...limits,
@@ -116,7 +129,7 @@ export function createLiveSource(
 						}
 					: limits,
 				onEvent,
-				models: { releaseSummary: host, featureMatch: host, repair: guest, featureAdoption: guest },
+				models: { releaseSummary: host, featureMatch: host, repair: agent, featureAdoption: agent },
 			})
 			return { report }
 		},

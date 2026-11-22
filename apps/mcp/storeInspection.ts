@@ -138,6 +138,14 @@ export class InspectionStore {
 			await rm(temp, { recursive: true, force: true })
 		}
 	}
+	async reportIds(): Promise<string[]> {
+		// Enumerate only published report directories under the private storage root.
+		const entries = await readdir(this.root, { withFileTypes: true })
+		return entries
+			.filter((entry) => entry.isDirectory() && inspectionId.safeParse(entry.name).success)
+			.map((entry) => entry.name)
+	}
+
 	async load(id: string): Promise<SavedReport> {
 		return (await this.snapshot(id)).report
 	}

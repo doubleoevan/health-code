@@ -1,4 +1,5 @@
 import type { AgentCapability, PatchOperation } from "./agentContracts.ts"
+import type { InspectionModeOptions } from "./toInspectionMode.ts"
 export type Stage = "setup" | "detect" | "registry" | "install" | "typecheck" | "tests"
 export type Evidence = {
 	// retain bounded output alongside exit status and timing
@@ -89,7 +90,17 @@ export type EventPayload =
 			status: "passed" | "failed" | "untested"
 	  }
 	| { type: "detail"; stepId: string; stream: "stdout" | "stderr"; text: string; truncated: boolean }
-	| { type: "sandbox.event"; sandboxId: string; action: SandboxAction; detail?: string }
+	| {
+			// identify the sandbox boundary that produced this event
+			type: "sandbox.event"
+			sandboxId: string
+			action: SandboxAction
+			detail?: string
+
+			// report measured counts without exposing credential or variable names
+			storedModelKeyCount?: number
+			placeholderVariableCount?: number
+	  }
 	| { type: "inspection.finished"; inspected: number; durationMs: number }
 	| { type: "inspection.failed"; code: string; message: string; cleanupId?: string }
 
@@ -112,7 +123,7 @@ export type Command = {
 }
 
 // attach capture metadata to a command's evidence
-export type CommandResult = Evidence & { observationId?: string; timedOut?: boolean }
+export type CommandResult = Evidence & { observationId?: string; timedOut?: boolean; placeholderVariableCount?: number }
 export type Operation = { timeoutMs: number; signal?: AbortSignal; modelCallId?: string }
 export interface SandboxProvider {
 	modelRequestSandbox?: import("./modelRequestSandbox.ts").ModelRequestSandbox
@@ -148,7 +159,7 @@ export type InspectionLimits = {
 	timeouts?: Partial<Record<Stage, number>>
 }
 
-export type InspectionOptions = {
+export type InspectionOptions = InspectionModeOptions & {
 	callerModelExecution?: "local"
 
 	// select a public repository and its execution provider
@@ -165,7 +176,7 @@ export type InspectionOptions = {
 	applicationEnvironment?: "empty" | "placeholders"
 
 	// optionally pin an upgrade and supply role configuration
-	upgrade?: { dependency: string; from: string; to: string }
+	upgrade?: { dependency: string; from: string | Record<string, string>; to: string }
 	models?: Readonly<Record<string, string>>
 	signal?: AbortSignal
 }
@@ -174,6 +185,7 @@ export type Baseline = { install: CheckResult; typecheck: CheckResult; tests: Ch
 
 // associate upgrade checks with their installation observations
 export type UpgradeReport = Upgrade & {
+	coverage?: "partial" | "skipped"
 	install: CheckResult
 	observation: Observation
 	typecheck: CheckResult
@@ -199,6 +211,11 @@ export interface EcosystemAdapter {
 
 // identify the pinned repository and its baseline
 export type InspectionReport = {
+	stoppedReason?: string
+	sandboxUnavailable?: boolean
+	interruptedUpgrade?: string
+
+	// Record the templates used throughout the inspection.
 	promptVersions?: {
 		model: import("./readPrompt.ts").PromptReference[]
 		handoff: import("./readPrompt.ts").PromptReference[]
@@ -212,7 +229,7 @@ export type InspectionReport = {
 	baseline: Baseline
 
 	// retain selected upgrades and their ordered timeline
-	selection: {
+	selection: InspectionModeOptions & {
 		// Explain an incomplete registry lookup even when no upgrades were selected.
 		registryLookupIssue?: string
 		limit?: number

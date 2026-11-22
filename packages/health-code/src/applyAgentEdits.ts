@@ -1,6 +1,6 @@
 import { posix } from "node:path"
 import type { z } from "zod"
-import type { FeatureMatch } from "./agentContracts.ts"
+import type { CodeFeatureMatch } from "./agentContracts.ts"
 import { sections } from "./bumpManifest.ts"
 import type { decision } from "./proposeEdits.ts"
 import { reviewNewTest, reviewTestEdit } from "./reviewTestEdit.ts"
@@ -28,7 +28,7 @@ export async function applyDecision({
 }: {
 	evidence: PatchEvidence
 	state: State
-	match?: FeatureMatch
+	match?: CodeFeatureMatch
 	edit: z.infer<typeof decision>
 	testFiles: Set<string>
 }): Promise<void> {
@@ -323,7 +323,7 @@ async function reviewTests({
 	state: State
 
 	// bind test changes to their upgrade evidence
-	match?: FeatureMatch
+	match?: CodeFeatureMatch
 	evidence: PatchEvidence
 	reason: string
 	behaviorChange: z.infer<typeof decision>["behaviorChange"]
@@ -368,7 +368,7 @@ async function prepareDependencies({
 	state: State
 	evidence: PatchEvidence
 	edit: z.infer<typeof decision>
-	match?: FeatureMatch
+	match?: CodeFeatureMatch
 }): Promise<void> {
 	// require at least one actionable edit
 	if (!edit.edits.length && !edit.dependency && !edit.dependencies?.length && !edit.removeDependency) {

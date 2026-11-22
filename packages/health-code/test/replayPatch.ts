@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import type { FeatureMatch, InspectionModels, UpgradeReportV2 } from "../src/agentContracts.ts"
+import type { CodeFeatureMatch, InspectionModels, UpgradeReportV2 } from "../src/agentContracts.ts"
 import { NodeAdapter } from "../src/checkProject.ts"
 import { InspectionContext } from "../src/collectEvents.ts"
 import type { CheckResult, InspectionReport } from "../src/contracts.ts"
@@ -360,7 +360,7 @@ export async function replayPatch(
 
 	// evaluate the ranked feature against the accepted upgrade
 	if (adoption) {
-		const match: FeatureMatch = {
+		const match: CodeFeatureMatch = {
 			feature: "Use the new default",
 			source: "release",
 			location: { file: "index.ts", line: 1 },

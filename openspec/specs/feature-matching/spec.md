@@ -19,14 +19,14 @@ For each selected Upgrade the engine SHALL read package-specific releases newer 
 - **WHEN** GitHub rate limits a release request and no relevant changelog is available
 - **THEN** the Inspection Report explains the missing evidence and the regular Upgrade Check may proceed.
 
-### Requirement: Rank cited Feature Matches across the Inspection
+### Requirement: Rank cited Code Feature Matches across the Inspection
 
-The engine SHALL match a release feature to a pinned code range and identify the workaround, dependency, deprecated call or option it could replace. It SHALL rank matches deterministically, select up to the caller's inspection-wide cap and retain reasons for findings that receive no Patch.
+The engine SHALL match a release feature to a pinned code range and identify the workaround, dependency, deprecated call or option it could replace. It SHALL rank matches deterministically within each upgrade, finish the best eligible feature adoption before starting the next upgrade and respect the caller's inspection-wide cap. It SHALL retain reasons for findings that receive no Patch.
 
 #### Scenario: More opportunities than attempts
 
 - **WHEN** four green upgrades each have a verified opportunity under default limits
-- **THEN** the three highest-ranked opportunities receive adoption attempts, subject to budget, and the fourth retains its cited finding.
+- **THEN** the best eligible opportunity in each of the first three upgrades receives an adoption attempt in selection order, subject to budget, and the fourth retains its cited finding.
 
 #### Scenario: A release note identifies a direct replacement
 

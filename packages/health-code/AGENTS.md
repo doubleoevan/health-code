@@ -1,6 +1,6 @@
 # Inspection library
 
-The public ESM package `health-code` owns Repository inspections. Its single entry exports `inspectRepository`, provider factories, errors, and the Inspection Report and Inspection Event types. The site, MCP server, and scheduled consumers import by package name.
+The public ESM package `health-code` owns Repository inspections. Its single entry exports `listUpgrades`, `getUpgrade`, `inspectRepository`, provider factories, errors, and the Inspection Report and Inspection Event types. The site, MCP server, and scheduled consumers import by package name.
 
 | Module | Responsibility |
 | --- | --- |

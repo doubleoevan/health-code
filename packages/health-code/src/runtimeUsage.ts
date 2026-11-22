@@ -25,7 +25,7 @@ export class RuntimeMeter {
 
 	// End metering only when deletion has been acknowledged.
 	deleted(id: string): void {
-		const allocation = this.allocations.find((item) => item.id === id)
+		const allocation = this.allocations.find((item) => item.id === id && item.end === undefined)
 		if (allocation) {
 			allocation.end = performance.now()
 		}

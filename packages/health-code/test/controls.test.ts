@@ -39,18 +39,45 @@ test("verifies the complete allowlist before any repository-controlled command",
 	assert.equal(executed, false)
 	assert.throws(() => validateRegistryHosts(["github.com"]), { code: "policy" })
 })
+
+test("invalid or contradictory inspection modes are rejected before contacting the provider", async () => {
+	// Detect any attempt to allocate resources for an ambiguous request.
+	const sandboxProvider = createFakeSandboxProvider({ commit: fixtureCommit, commands: [] })
+	let contacted = false
+	sandboxProvider.checkAvailability = async () => {
+		contacted = true
+	}
+
+	// Exercise JavaScript inputs alongside conflicting options passed by a typed wrapper.
+	for (const options of [
+		{ mode: "inspectUpgrades", discoveryOnly: true },
+		{ mode: "listUpgrades", discoveryOnly: false },
+		{ mode: "unknown" },
+		{ discoveryOnly: "false" },
+	]) {
+		// Pass inputs through the same untyped boundary as a JavaScript consumer.
+		const input = { repositoryUrl: fixtureUrl, sandboxProvider, ...options } as Parameters<typeof inspectRepository>[0]
+		await assert.rejects(inspectRepository(input), { code: "invalid-mode" })
+	}
+	assert.equal(contacted, false)
+})
+
 test("guest environment contains inert application values and trusted controls", () => {
-	const argv = guestArguments(
+	const { argv, placeholderVariableCount } = guestArguments(
 		{
 			argv: ["node", "--version"],
 			timeoutMs: 5000,
-			environment: ["OPTION", "PATH", "NODE_OPTIONS", "RUNTA_TOKEN", "LD_PRELOAD", "HOME"],
+			environment: ["OPTION", "OPTION", "NOT-VALID", "PATH", "NODE_OPTIONS", "RUNTA_TOKEN", "LD_PRELOAD", "HOME"],
 		},
 		undefined,
 	)
 
 	// check which environment values reach the guest
-	assert.ok(argv.includes("OPTION=placeholder"))
+	assert.equal(placeholderVariableCount, 1)
+	assert.deepEqual(
+		argv.filter((arg) => arg === "OPTION=placeholder"),
+		["OPTION=placeholder"],
+	)
 	assert.ok(argv.includes("-i"))
 	for (const key of ["PATH", "NODE_OPTIONS", "RUNTA_TOKEN", "LD_PRELOAD", "HOME"]) {
 		assert.ok(!argv.includes(`${key}=placeholder`))
@@ -189,7 +216,7 @@ test("observes pnpm permission changes through project links alongside read-only
 	].join("\n")
 
 	// check the read-only mount and the write that escapes the project
-	const args = guestArguments({ argv: ["true"], timeoutMs: 1000 }, undefined)
+	const { argv: args } = guestArguments({ argv: ["true"], timeoutMs: 1000 }, undefined)
 	const mount = args.indexOf("/usr")
 	assert.deepEqual(args.slice(mount - 1, mount + 2), ["--ro-bind", "/usr", "/usr"])
 	assert.deepEqual(inspectTrace(trace, "", "0 packets dropped by kernel", []).files, {
@@ -229,7 +256,7 @@ test("Bun hardlinks anonymous temporary inodes into the project", () => {
 
 test("network observation traces all outbound address-bearing calls and keeps unfinished sends inconclusive", () => {
 	// inspect an unfinished system call under network observation
-	const args = guestArguments({ argv: ["true"], timeoutMs: 1000, observe: "network" }, "/evidence")
+	const { argv: args } = guestArguments({ argv: ["true"], timeoutMs: 1000, observe: "network" }, "/evidence")
 	assert.ok(args.includes("trace=execve,connect,sendto,sendmsg,sendmmsg"))
 	const inspect = (name: string): ReturnType<typeof inspectTrace> =>
 		inspectTrace(
@@ -258,6 +285,9 @@ test("only inventory readers receive the completed read-only snapshot", () => {
 	assert.equal(tests.argv.includes("/inspection-inventory"), false)
 
 	// verify that only the integrity reader receives the read-only inventory
+	assert.equal(args([...base, "integrity", "0"], tests.capture).maxOutputBytes, 1024 * 1024)
+	assert.equal(args([...base, "integrity", "0"]).maxOutputBytes, undefined)
+	assert.equal(tests.maxOutputBytes, undefined)
 	const read = args([...base, "integrity", "100"], tests.capture).argv
 	assert.deepEqual(read.slice(read.indexOf("/inspection-inventory") - 2, read.indexOf("/inspection-inventory") + 1), [
 		"--ro-bind",

@@ -96,7 +96,7 @@ A configured Inspection SHALL emit typed reading, matching, per-role Agent Attem
 
 ### Requirement: Return the evidence for every version 2 upgrade
 
-Each version 2 upgrade SHALL retain the original Check Results and include the cited release summary, Feature Matches, locators, installed-size delta, final Verdict, dependency reviews, accepted Patches and application prompts, diagnosis when applicable, and usage and cost per step. A missing measurement or skipped phase SHALL carry a reason. Customer copy SHALL describe what passed inspection and cite its evidence.
+Each version 2 upgrade SHALL retain the original Check Results and include the cited release summary, Code Feature Matches, locators, installed-size delta, final Verdict, dependency reviews, accepted Patches and application prompts, diagnosis when applicable, and usage and cost per step. A missing measurement or skipped phase SHALL carry a reason. Customer copy SHALL describe what passed inspection and cite its evidence.
 
 #### Scenario: An initially broken upgrade becomes green
 

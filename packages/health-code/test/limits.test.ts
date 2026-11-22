@@ -144,7 +144,12 @@ test("version one report can be replayed by a reader that ignores new fields", a
 		inspectionId: "inspection",
 		sandboxId: "sandbox",
 	}
-	const { promptVersions, ...legacy } = report
+	const { promptVersions, selection, ...rest } = report
+	const { mode, ...originalSelection } = selection
+	const legacy = { ...rest, selection: originalSelection }
+
+	// Compare the original report shape alongside the new operation and prompt metadata.
+	assert.equal(mode, "inspectUpgrades")
 	assert.deepEqual(promptVersions, { model: [], handoff: [] })
 	assert.deepEqual(JSON.parse(JSON.stringify(legacy, (key, value) => stable[key] ?? value)), golden)
 

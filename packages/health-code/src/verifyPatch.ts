@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto"
 import { z } from "zod"
-import type { FeatureMatch, Patch } from "./agentContracts.ts"
+import type { CodeFeatureMatch, Patch } from "./agentContracts.ts"
 import { attemptUpgrade } from "./attemptUpgrade.ts"
 import { bumpManifest } from "./bumpManifest.ts"
 import { redact, rethrowInspectionFailure } from "./collectEvents.ts"
-import { InspectionError } from "./contracts.ts"
+import { InspectionError, SandboxUnavailableError } from "./contracts.ts"
 import type { ModelInspection } from "./inspectModels.ts"
 import {
 	cleanInstall,
@@ -21,7 +21,7 @@ import {
 export async function evaluatePatch(
 	engine: ModelInspection,
 	evidence: PatchEvidence,
-	match?: FeatureMatch,
+	match?: CodeFeatureMatch,
 ): Promise<void> {
 	const { report, inspectionReport, context } = evidence
 	const confirmed = hasConfirmedFailure(report)
@@ -69,6 +69,11 @@ export async function evaluatePatch(
 		// distinguish terminal inspection failures from patch rejection
 		rethrowInspectionFailure(error, context)
 		recordRejection({ error, report, match, confirmed, actions })
+
+		// Return the completed evidence when the runtime disappears during verification.
+		if (error instanceof SandboxUnavailableError) {
+			throw error
+		}
 	} finally {
 		if (attemptStart !== undefined) {
 			report.attemptDurationMs ??= {}
@@ -91,7 +96,7 @@ function acceptPatch({
 	report: PatchEvidence["report"]
 	state: State
 	confirmed: boolean
-	match?: FeatureMatch
+	match?: CodeFeatureMatch
 	patch: Patch
 }): void {
 	// attach the verified patch to its upgrade report
@@ -107,7 +112,7 @@ function acceptPatch({
 	}
 }
 
-async function preparePatch(evidence: PatchEvidence, state: State, match?: FeatureMatch): Promise<Patch> {
+async function preparePatch(evidence: PatchEvidence, state: State, match?: CodeFeatureMatch): Promise<Patch> {
 	const { report } = evidence
 
 	// require an independently resolved initial lockfile
@@ -235,7 +240,7 @@ function recordRejection({
 }: {
 	error: unknown
 	report: PatchEvidence["report"]
-	match?: FeatureMatch
+	match?: CodeFeatureMatch
 	confirmed: boolean
 	actions: string[]
 }): void {
