@@ -7,7 +7,7 @@ import { LaunchService } from "./launchService.ts"
 import { readSiteEnvironment } from "./readConfiguration.ts"
 import { InspectionStore } from "./storeInspections.ts"
 
-type SiteRuntime = { replay: boolean; port: number; origin: string; inspections: Inspections }
+export type SiteRuntime = { replay: boolean; port: number; origin: string; inspections: Inspections }
 
 export async function startInspections(
 	options: {
@@ -26,13 +26,13 @@ export async function startInspections(
 		platform.HEALTH_CODE_ORIGIN ??
 			(platform.HEALTH_CODE_RUNTIME_CONFIG_TOKEN ? "https://runhealthcode.dev" : `http://localhost:${port}`),
 	).origin
-	const storage =
+	const databasePath =
 		platform.HEALTH_CODE_DATABASE ??
 		(replay ? resolve(import.meta.dir, "../../logs/site-replay.sqlite") : "/data/inspections.sqlite")
-	mkdirSync(dirname(storage), { recursive: true })
+	mkdirSync(dirname(databasePath), { recursive: true })
 
 	// Share the durable store across the read-only and configured workers.
-	const store = new InspectionStore(storage)
+	const store = new InspectionStore(databasePath)
 	const read = options.read ?? readSiteEnvironment
 	async function configure(): Promise<SiteRuntime> {
 		const environment = await read(platform)

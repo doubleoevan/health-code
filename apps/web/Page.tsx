@@ -7,22 +7,31 @@ import { mcpSetupUrl, replayRepositoryUrl, type SiteEvent, type Snapshot } from 
 import { Timeline } from "./Timeline.tsx"
 import { UpgradeMenu, type UpgradeMenuView } from "./UpgradeMenu.tsx"
 
+const siteModes = {
+	local: {
+		label: "Local inspection",
+		description: "Inspect a public repository using your Runta and model accounts. There’s no daily inspection limit.",
+	},
+	hosted: {
+		label: "Hosted demo",
+		description:
+			"Finding upgrades and testing an upgrade each use one inspection from your daily allowance. Cached results are free.",
+	},
+	replay: {
+		label: "Recorded example",
+		description: `Watch a recorded inspection of ${new URL(replayRepositoryUrl).pathname.slice(1)}.`,
+	},
+} as const
+
 export type PageProps = {
 	upgradeMenu?: { id: string; view: UpgradeMenuView; repositoryUrl: string; commit: string; issue?: string }
 	paused?: boolean
 	snapshot: Snapshot | null
 	url: string
-	replay: boolean
+	siteMode: keyof typeof siteModes
 }
-function Home({
-	replay,
-	paused,
-	upgradeMenu,
-}: {
-	replay: boolean
-	paused?: boolean
-	upgradeMenu?: PageProps["upgradeMenu"]
-}): ReactElement {
+function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "paused" | "upgradeMenu">): ReactElement {
+	const replay = siteMode === "replay"
 	const [error, setError] = useState("")
 	const [verification, setVerification] = useState<{
 		siteKey: string
@@ -80,11 +89,8 @@ function Home({
 						outside, and successful attempts return tested patches.
 					</p>
 
-					{/* discovery admission */}
-					<p>
-						Find available upgrades, then choose one to test. A fresh lookup and a fresh test each use one hosted
-						inspection.
-					</p>
+					{/* inspection mode */}
+					<p>{siteModes[siteMode].description}</p>
 
 					{/* public repository submission */}
 					{paused && (
@@ -105,7 +111,7 @@ function Home({
 								autoComplete="off"
 								spellCheck={false}
 								placeholder="https://github.com/owner/repository"
-								readOnly={pending}
+								readOnly={pending || replay}
 								onChange={() => {
 									setVerification(null)
 									setError("")
@@ -114,7 +120,7 @@ function Home({
 								defaultValue={replay ? replayRepositoryUrl : ""}
 							/>
 							<button type="submit" disabled={pending}>
-								{pending ? "Finding upgrades…" : "Find upgrades"}
+								{pending ? "Starting inspection…" : replay ? "Play recorded inspection" : "Find upgrades"}
 							</button>
 						</div>
 					</form>
@@ -253,19 +259,18 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 function Content(props: PageProps): ReactElement {
 	const { snapshot } = props
 	if (props.upgradeMenu) {
-		return <Home replay={props.replay} upgradeMenu={props.upgradeMenu} />
+		return <Home siteMode={props.siteMode} upgradeMenu={props.upgradeMenu} />
 	}
 	return snapshot ? (
 		<Inspection snapshot={snapshot} url={props.url} />
 	) : (
-		<Home replay={props.replay} paused={props.paused} />
+		<Home siteMode={props.siteMode} paused={props.paused} />
 	)
 }
 export function Page(props: PageProps): ReactElement {
-	const { replay } = props
 	return (
 		<main>
-			{/* home link and replay indicator */}
+			{/* home link and inspection mode */}
 			<div className="mast">
 				<Link href="/">
 					<span className="mark" aria-hidden="true">
@@ -273,7 +278,7 @@ export function Page(props: PageProps): ReactElement {
 					</span>{" "}
 					Health Code
 				</Link>
-				{replay && <small>Developer replay · example evidence</small>}
+				<small>{siteModes[props.siteMode].label}</small>
 			</div>
 
 			{/* repository form or inspection view */}

@@ -39,7 +39,7 @@ console.log(report.repository.commit, report.upgrades)
 
 Use `provider.checkAvailability()` to check a credential without allocating a sandbox. `SandboxUnavailableError` identifies authentication, permission, and availability errors. Other fatal inspection errors carry the event timeline and any unresolved cleanup identifier. Health Code checks each upgrade from the pinned commit. After transient sandbox loss it can start one replacement within the original time and spend limits. It repeats the baseline, preserves completed upgrades and gives untouched targets a turn before retrying the interrupted one. A partial report shows where work stopped. If the original typecheck fails, Health Code can still compare the upgrade’s install and tests.
 
-Choose **Find upgrades** to browse eligible dependency versions before testing. Search by name, sort minor upgrades first, alphabetically or by workspace count, and filter to **Patch ready**. Each target lists its documented features five at a time, with links to the upstream release notes. Choose one target version to test. A fresh discovery and a fresh test each use one hosted inspection. A ready patch opens immediately. Apply that upgrade’s patch first, then its optional feature patch. If you combine dependency upgrades, rerun your typecheck and tests on the combined changes.
+Choose **Find upgrades** to browse eligible dependency versions before testing. Search by name, sort minor upgrades first, alphabetically or by workspace count, and filter to **Patch ready**. Each target lists its documented features five at a time, with links to the upstream release notes. Choose one target version to test. In the hosted demo, finding upgrades and testing an upgrade each use one inspection from your daily allowance. Cached results are free. A ready patch opens immediately. Apply that upgrade’s patch first, then its optional feature patch. If you combine dependency upgrades, rerun your typecheck and tests on the combined changes.
 
 The hosted repository sandbox has 8 GiB of physical memory. Tools such as oxlint can reserve larger virtual address ranges and consume RAM as they use the pages.
 
@@ -49,7 +49,9 @@ Read each upgrade's `install.status` for the install command's Check Result. Its
 
 ## Inspection site
 
-Build the library with `bun run --cwd packages/health-code build`, then run `bun run --cwd apps/web dev`. Open `http://localhost:3000` and submit the prefilled fixture URL. The same short link displays the live log and the completed Inspection Report. Development replay streams a recorded library inspection with fixture model responses.
+**Local inspection.** Build the library with `bun run --cwd packages/health-code build`. Run `doppler run --project health-code --config dev -- bun run --cwd apps/web dev` and open `http://localhost:3000`. Enter a public repository to inspect it with your own Runta and model accounts. The local server reads `RUNTA_TOKEN`, `ANTHROPIC_API_KEY` and `HEALTH_CODE_STORED_CREDENTIAL` (the Runta secret name). The daily visitor and spend limits apply to the hosted demo. Individual inspections still have cost and time limits.
+
+**Recorded example.** Run `bun run --cwd apps/web replay` and select **Play recorded inspection** to watch the recording of `example/project` without credentials. Both commands hot reload. Set `PORT` to use another local port.
 
 The hosted upgrade menu reads release notes without model calls. For a selected upgrade, Opus 5.5 summarizes releases and matches features to code. Fable 5.2 handles repair and feature adoption when needed. Reports publish verified Patch bytes and application prompts when GitHub detects an OSI-approved license at the inspected commit. See [site operations](apps/web/AGENTS.md) for the Northflank Dockerfile, SQLite backups, deployment namespace and startup recovery.
 
@@ -112,7 +114,7 @@ Use the Bun version in `.bun-version`. From the repository root, run `bun instal
 | `bun test ./apps/mcp` | Exercises the MCP tools, account setup, private storage and the packed Node subprocess offline. |
 | `bun run --cwd apps/web build` | Builds the Vite browser entry for the Hono server. |
 | `bun run --cwd apps/web start` | Serves the built page, Inspection API and event stream. |
-| `bun run --cwd apps/web dev` or `replay` | Serves credential-free replay with React Fast Refresh, live CSS and server source reload. |
+| `bun run --cwd apps/web dev` or `replay` | Serves live local inspections (`dev`) or a recorded example (`replay`) with hot reload. |
 | `bun run check:package` | Packs the library and verifies its public entry in fresh Node and Bun consumers with frozen workspace dependencies. |
 | `bun run test:provider` | Runs the shared production contract and two pinned public fixtures when the test harness has `RUNTA_TOKEN`. |
 | `doppler run -- bun run eval --case typescript-7` | Scores the historical repair under the default limits. `--all` scores both cases. |

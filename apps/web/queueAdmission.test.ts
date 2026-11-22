@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { InspectionError } from "health-code"
+import { createLocalSiteRuntime } from "./createLocalSiteRuntime.ts"
+import { createSite } from "./createSite.tsx"
 import { Inspections } from "./executeInspection.ts"
 import { toLaunchLimits } from "./launchLimits.ts"
 import { LaunchService } from "./launchService.ts"
@@ -8,6 +10,35 @@ import { AdmissionError, toUtcDay } from "./recordAdmissions.ts"
 import { createReplaySource } from "./replayInspection.ts"
 import { replayRepositoryUrl } from "./report.ts"
 import { InspectionStore } from "./storeInspections.ts"
+
+test("local live submissions use their own queue even when the hosted allowances are zero", async () => {
+	const environment = {
+		RUNTA_TOKEN: "fixture",
+		ANTHROPIC_API_KEY: "fixture",
+		HEALTH_CODE_STORED_CREDENTIAL: "fixture",
+		HEALTH_CODE_DATABASE: ":memory:",
+		HEALTH_CODE_DAILY_DEMO_LIMIT: "0",
+		HEALTH_CODE_DAILY_COST_USD: "0",
+	}
+	const runtime = createLocalSiteRuntime(environment)
+	const app = createSite({ ...runtime, assets: { script: "/client.js", styles: [] } })
+	try {
+		// Leave the worker stopped so these real-repository submissions never allocate a sandbox.
+		assert.equal(runtime.replay, false)
+		assert.equal(runtime.origin, "http://localhost:3000")
+		for (let index = 0; index < 6; index++) {
+			const result = await app.request("/api/inspections", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ repositoryUrl: "https://github.com/runta-dev/errand", action: "discover" }),
+			})
+			assert.equal(result.status, 202)
+		}
+		assert.throws(() => createLocalSiteRuntime({ ...environment, NODE_ENV: "production" }), /production server/)
+	} finally {
+		runtime.inspections.store.database.close()
+	}
+})
 
 test("a full queue joins existing work without billing for a rejected insertion", () => {
 	const store = new InspectionStore(":memory:")

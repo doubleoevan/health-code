@@ -195,6 +195,7 @@ export function createSite(options: {
 			: context.json({ message: "The service could not complete this request." }, 500),
 	)
 	const launch = inspections.launch
+	const siteMode = replay ? "replay" : launch ? "hosted" : "local"
 	const hostname = new URL(options.origin).hostname
 	function visitor(context: Context): Visitor {
 		if (!launch) {
@@ -245,7 +246,7 @@ export function createSite(options: {
 	})
 	app.get("/", (context) => {
 		context.header("Cache-Control", "no-store")
-		return context.html(render({ url: options.origin, replay, snapshot: null, paused: inspections.paused }, assets))
+		return context.html(render({ url: options.origin, siteMode, snapshot: null, paused: inspections.paused }, assets))
 	})
 
 	// accept bounded repository submissions
@@ -320,7 +321,7 @@ export function createSite(options: {
 				: undefined
 		return context.html(
 			render(
-				{ snapshot: upgradeMenu ? null : snapshot, upgradeMenu, replay, url: `${options.origin}/r/${id}` },
+				{ snapshot: upgradeMenu ? null : snapshot, upgradeMenu, siteMode, url: `${options.origin}/r/${id}` },
 				assets,
 			),
 		)
