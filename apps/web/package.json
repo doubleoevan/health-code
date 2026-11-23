@@ -3,7 +3,7 @@
 	"private": true,
 	"type": "module",
 	"dependencies": {
-		"@ai-sdk/anthropic": "4.0.105",
+		"@ai-sdk/anthropic": "4.0.106",
 		"health-code": "workspace:*",
 		"hono": "4.13.19",
 		"react": "19.3.1",
