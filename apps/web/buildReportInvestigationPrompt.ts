@@ -7,7 +7,7 @@ export function buildReportInvestigationPrompt(snapshot: Snapshot, url: string):
 		return undefined
 	}
 
-	// Offer a diagnostic handoff only for incomplete work.
+	// Include skipped and inconclusive upgrades in the diagnostic evidence.
 	const unfinished = report?.upgrades.filter(
 		(upgrade) =>
 			upgrade.coverage === "partial" ||
@@ -15,15 +15,14 @@ export function buildReportInvestigationPrompt(snapshot: Snapshot, url: string):
 			upgrade.verdict === "Untested" ||
 			upgrade.verdict === "Can't fix",
 	)
-	if (
-		!unfinished?.length &&
-		!report?.stoppedReason &&
-		!report?.registryLookupIssue &&
-		snapshot.state !== "failed" &&
-		snapshot.state !== "interrupted"
-	) {
+
+	// Keep early failures eligible even when the report contains no upgrade cards.
+	const stoppedEarly = snapshot.state === "failed" || snapshot.state === "interrupted"
+	if (!unfinished?.length && !report?.stoppedReason && !report?.registryLookupIssue && !stoppedEarly) {
 		return undefined
 	}
+
+	// Fall back to the submitted target when the checks stopped before producing a card.
 	return buildInvestigationPrompt({
 		reportUrl: url,
 		repository: report?.repository ?? snapshot.repositoryUrl,

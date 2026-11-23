@@ -178,6 +178,7 @@ export function Timeline({ events, live, id }: { events: SiteEvent[]; live: bool
 			<h2>Inspection log</h2>
 			<ol
 				className={live ? "timeline rolling" : "timeline history"}
+				style={{ paddingInlineStart: `${String(events.length).length + 2}ch` }}
 				ref={list}
 				onScroll={(event) => {
 					const element = event.currentTarget
