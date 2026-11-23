@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <title>HealthCode header logo filters</title>
+  <filter id="dark-logo" color-interpolation-filters="sRGB">
+    <!-- Keep the white brackets and red cross on a transparent background. -->
+    <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  1.7 0 0 0 -.4"/>
+  </filter>
+  <filter id="light-logo" color-interpolation-filters="sRGB">
+    <!-- Keep the bright brackets and remove the dark background. -->
+    <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 1.45 0 -.4" result="brackets"/>
+    <!-- The cross is the only part with more red than green. -->
+    <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1.7 -1.7 0 0 0" result="cross"/>
+    <feFlood flood-color="#e23a31"/>
+    <feComposite in2="cross" operator="in"/>
+    <feMerge><feMergeNode in="brackets"/><feMergeNode/></feMerge>
+  </filter>
+</svg>

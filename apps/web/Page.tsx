@@ -1,35 +1,37 @@
 import type { UpgradeMenuTarget } from "health-code"
-import { type FormEvent, type ReactElement, useCallback, useEffect, useState } from "react"
+import { type FormEvent, type KeyboardEvent, type ReactElement, useCallback, useEffect, useState } from "react"
 import { Challenge } from "./Challenge.tsx"
-import { Link } from "./ReportControls.tsx"
+import { CopyInvestigationPrompt, Link } from "./ReportControls.tsx"
 import { ReportView } from "./ReportView.tsx"
-import { mcpSetupUrl, replayRepositoryUrl, type SiteEvent, type Snapshot } from "./report.ts"
+import { mcpSetupUrl, replayRepositoryUrl, type SiteEvent, type Snapshot, toVersionChange } from "./report.ts"
 import { Timeline } from "./Timeline.tsx"
 import { UpgradeMenu, type UpgradeMenuView } from "./UpgradeMenu.tsx"
-
-const siteModes = {
-	local: {
-		label: "Local inspection",
-		description: "Inspect a public repository using your Runta and model accounts. There’s no daily inspection limit.",
-	},
-	hosted: {
-		label: "Hosted demo",
-		description:
-			"Finding upgrades and testing an upgrade each use one inspection from your daily allowance. Cached results are free.",
-	},
-	replay: {
-		label: "Recorded example",
-		description: `Watch a recorded inspection of ${new URL(replayRepositoryUrl).pathname.slice(1)}.`,
-	},
-} as const
 
 export type PageProps = {
 	upgradeMenu?: { id: string; view: UpgradeMenuView; repositoryUrl: string; commit: string; issue?: string }
 	paused?: boolean
 	snapshot: Snapshot | null
 	url: string
-	siteMode: keyof typeof siteModes
+	siteMode: "local" | "hosted" | "replay"
 }
+function handleRepositoryKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+	const input = event.currentTarget
+
+	// Preserve caret navigation and text selection when a repository has been entered.
+	if (
+		event.key === "ArrowRight" &&
+		!input.readOnly &&
+		!input.value &&
+		!event.shiftKey &&
+		!event.altKey &&
+		!event.ctrlKey &&
+		!event.metaKey
+	) {
+		event.preventDefault()
+		input.value = "https://github.com/"
+	}
+}
+
 function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "paused" | "upgradeMenu">): ReactElement {
 	const replay = siteMode === "replay"
 	const [error, setError] = useState("")
@@ -61,14 +63,17 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 		void submit(String(new FormData(event.currentTarget).get("repositoryUrl")))
 	}
 	return (
-		<section className="home">
+		<section className={upgradeMenu ? "home" : "home landing"}>
 			{/* inspection overview */}
 			{upgradeMenu ? (
 				<>
-					<h1>Choose a dependency upgrade</h1>
-					<p>
-						{upgradeMenu.repositoryUrl.slice(19)} · {upgradeMenu.commit.slice(0, 8)}
-					</p>
+					<header className="inspection-heading">
+						<h1>Upgrade a dependency</h1>
+						<p className="mono">
+							<Link href={upgradeMenu.repositoryUrl}>{upgradeMenu.repositoryUrl.slice(19)}</Link> ·{" "}
+							{upgradeMenu.commit.slice(0, 8)}
+						</p>
+					</header>
 					<UpgradeMenu
 						view={upgradeMenu.view}
 						issue={upgradeMenu.issue}
@@ -80,17 +85,19 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 			) : (
 				<>
 					<h1>
-						Inspect your
-						<br />
-						dependency upgrades.
+						Inspect your code
+						<span>for new features</span>
 					</h1>
 					<p className="intro">
-						AI agents try your dependency upgrades inside a Runta sandbox. The network is locked, real keys stay
-						outside, and successful attempts return tested patches.
+						AI agents show you new dependency features. Test an upgrade on your codebase inside a Runta sandbox. The
+						network is locked, real keys stay outside, and successful upgrades return tested patches.
 					</p>
 
-					{/* inspection mode */}
-					<p>{siteModes[siteMode].description}</p>
+					{/* repository inspection steps */}
+					<ol className="steps">
+						<li>Enter your public GitHub repo URL (Node.js or Bun) and click New features</li>
+						<li>Choose a dependency and click Test upgrade to test it on your codebase in a Runta sandbox.</li>
+					</ol>
 
 					{/* public repository submission */}
 					{paused && (
@@ -100,10 +107,10 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 						</p>
 					)}
 					<form onSubmit={handleSubmit}>
-						<label htmlFor="repository">Public GitHub repository</label>
 						<div className="field">
 							<input
 								id="repository"
+								aria-label="Public GitHub repository"
 								name="repositoryUrl"
 								type="url"
 								required
@@ -112,6 +119,7 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 								spellCheck={false}
 								placeholder="https://github.com/owner/repository"
 								readOnly={pending || replay}
+								onKeyDown={handleRepositoryKeyDown}
 								onChange={() => {
 									setVerification(null)
 									setError("")
@@ -120,7 +128,7 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 								defaultValue={replay ? replayRepositoryUrl : ""}
 							/>
 							<button type="submit" disabled={pending}>
-								{pending ? "Starting inspection…" : replay ? "Play recorded inspection" : "Find upgrades"}
+								{pending ? "Starting inspection…" : replay ? "Play recorded inspection" : "New features"}
 							</button>
 						</div>
 					</form>
@@ -189,6 +197,16 @@ function useSubmit(
 		[upgradeMenuId, setPending, setError, setOfferMcp, setVerification],
 	)
 }
+function toInspectionHeading(snapshot: Snapshot, live: boolean): string {
+	if (live) {
+		if (snapshot.selectedDependencyUpgrade) {
+			return "Inspecting upgrade..."
+		}
+		return snapshot.mode === "listUpgrades" ? "Finding upgrades..." : "Inspecting repository..."
+	}
+	return snapshot.state === "interrupted" ? "Inspection interrupted" : "Inspection failed"
+}
+
 function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): ReactElement {
 	const [position, setPosition] = useState(snapshot.position)
 	useEffect(() => {
@@ -224,30 +242,25 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 		})
 		return () => stream.close()
 	}, [live, snapshot.id, snapshot.events])
+	const status =
+		snapshot.message ??
+		(position ? `Queue position: ${position}` : live && !events.length ? "Queued for inspection" : null)
 	return (
 		<>
 			{/* published report or live inspection status */}
 			{snapshot.card ? (
-				<ReportView report={snapshot.card} url={url} />
+				<ReportView report={snapshot.card} url={url} investigationPrompt={snapshot.investigationPrompt} />
 			) : (
-				<>
-					<h1>
-						{live
-							? "Inspecting repository"
-							: snapshot.state === "interrupted"
-								? "Inspection interrupted"
-								: "Inspection failed"}
-					</h1>
-					<p className="mono">{snapshot.repositoryUrl}</p>
-					<p role="status">
-						{snapshot.message ??
-							(position
-								? `Queue position: ${position}`
-								: events.length === 0
-									? "Queued for inspection"
-									: "Inspection in progress")}
+				<header className="inspection-heading">
+					<h1>{toInspectionHeading(snapshot, live)}</h1>
+					<p className="mono">
+						<Link href={snapshot.repositoryUrl}>{snapshot.repositoryUrl}</Link>
+						{snapshot.selectedDependencyUpgrade &&
+							` · ${snapshot.selectedDependencyUpgrade.dependency} ${toVersionChange(snapshot.selectedDependencyUpgrade)}`}
 					</p>
-				</>
+					{status && <p role="status">{status}</p>}
+					{snapshot.investigationPrompt && <CopyInvestigationPrompt text={snapshot.investigationPrompt} />}
+				</header>
 			)}
 
 			{/* connection status and event timeline */}
@@ -273,12 +286,13 @@ export function Page(props: PageProps): ReactElement {
 			{/* home link and inspection mode */}
 			<div className="mast">
 				<Link href="/">
-					<span className="mark" aria-hidden="true">
-						✳
-					</span>{" "}
-					Health Code
+					<img className="mark" src="/assets/healthcode.png" width="40" height="40" alt="" />
+					<span>
+						<span className="wordmark-accent">Health</span>Code
+					</span>
 				</Link>
-				<small>{siteModes[props.siteMode].label}</small>
+				{props.siteMode === "replay" && <small>Recorded example</small>}
+				{props.siteMode === "hosted" && <small>Hosted demo</small>}
 			</div>
 
 			{/* repository form or inspection view */}

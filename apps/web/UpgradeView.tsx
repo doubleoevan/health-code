@@ -1,6 +1,6 @@
 import type { ReactElement } from "react"
-import { Copy, Link } from "./ReportControls.tsx"
-import type { Citation, UpgradeCard } from "./report.ts"
+import { Link } from "./ReportControls.tsx"
+import { type Citation, toOrderedPatches, toPatchPath, type UpgradeCard } from "./report.ts"
 
 function Citations({ links }: { links: Citation[] }): ReactElement {
 	// deduplicate citations by label and destination
@@ -16,9 +16,6 @@ function Citations({ links }: { links: Citation[] }): ReactElement {
 				: "None recorded"}
 		</>
 	)
-}
-function toPatchPath(digest: string): string {
-	return `/patches/${digest}.patch`
 }
 export function TestFileErrors({ errors }: { errors?: UpgradeCard["testFileErrors"] }): ReactElement | null {
 	if (!errors) {
@@ -85,13 +82,9 @@ function CodeFeatureMatches({ matches }: { matches: UpgradeCard["matches"] }): R
 function PatchDetails({
 	patch,
 	upgrade,
-	origin,
-	commit,
 }: {
 	patch: UpgradeCard["patches"][number]
 	upgrade: UpgradeCard
-	origin: string
-	commit: string
 }): ReactElement {
 	// Number only the patches with a recorded application order for this target.
 	let heading = patch.role === "upgrade" ? "Upgrade patch" : "Optional feature patch"
@@ -100,19 +93,6 @@ function PatchDetails({
 	} else if (upgrade.patches.some((other) => other.prerequisite === patch.digest)) {
 		heading = `1. ${heading}`
 	}
-
-	// Identify the selected target and its prerequisite in the copied instructions.
-	const prerequisite = patch.prerequisite
-		? `Required upgrade patch: ${origin}${toPatchPath(patch.prerequisite)} (SHA-256: ${patch.prerequisite}). Verify and apply it first if needed.
-`
-		: ""
-	const prompt = `${patch.prompt}
-Dependency upgrade: ${upgrade.dependency}@${upgrade.to}
-Inspected commit: ${commit}
-Applies to commit: ${patch.base}${patch.testedTip ? `\nTested commit: ${patch.testedTip}` : ""}
-${prerequisite}${patch.role} patch: ${origin}${toPatchPath(patch.digest)}
-SHA-256: ${patch.digest}
-If your Health Code MCP has this patch, fetch it with get_tested_patch using its inspectionId and sha256. Follow nextOffset and concatenate the pages verbatim. Otherwise use the patch URL. Verify the SHA-256 of each mailbox before applying it. Use a branch for this upgrade. If other upgrades have changed the checkout, check compatibility and rerun typecheck and tests on the combined tree.`
 
 	return (
 		<section id={`patch-${patch.digest}`}>
@@ -155,7 +135,6 @@ If your Health Code MCP has this patch, fetch it with get_tested_patch using its
 
 			{/* verified patch download */}
 			<Link href={toPatchPath(patch.digest)}>Download patch</Link>
-			<Copy label="Copy patch instructions" text={prompt} />
 		</section>
 	)
 }
@@ -207,17 +186,9 @@ function UpgradeCoverage({ upgrade }: { upgrade: UpgradeCard }): ReactElement {
 	)
 }
 
-export function UpgradeView({
-	upgrade,
-	origin,
-	commit,
-}: {
-	upgrade: UpgradeCard
-	origin: string
-	commit: string
-}): ReactElement {
+export function UpgradeView({ upgrade }: { upgrade: UpgradeCard }): ReactElement {
 	// Preserve the dependency order in both the links and the application prompt.
-	const patches = upgrade.patches.toSorted((a, b) => Number(a.role === "feature") - Number(b.role === "feature"))
+	const patches = toOrderedPatches(upgrade.patches)
 
 	return (
 		<article>
@@ -332,7 +303,7 @@ export function UpgradeView({
 
 			{/* tested patches and application instructions */}
 			{patches.map((patch) => (
-				<PatchDetails key={patch.digest} patch={patch} upgrade={upgrade} origin={origin} commit={commit} />
+				<PatchDetails key={patch.digest} patch={patch} upgrade={upgrade} />
 			))}
 		</article>
 	)

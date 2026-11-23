@@ -18,16 +18,17 @@ test("browse a pinned upgrade menu, choose one release and reopen its licensed p
 	try {
 		// Publish the discovery-only fixture through the durable submission path.
 		const upgradeMenu = await (await submit({ action: "discover" })).json()
+		expect(await (await app.request(`/r/${upgradeMenu.id}`)).text()).toContain("Finding upgrades...")
 		expect(store.choice(upgradeMenu.id)).toEqual({ mode: "listUpgrades" })
 		const discovery = await replay.inspect(repositoryUrl, () => {}, { mode: "listUpgrades" })
 		store.finish(upgradeMenu.id, publishReport(discovery, "MIT"))
 		const html = await (await app.request(`/r/${upgradeMenu.id}`)).text()
 		for (const label of [
-			"Choose a dependency upgrade",
+			"Upgrade a dependency",
 			"Search dependencies",
 			"Most workspaces first",
-			"Patch ready",
-			"Get upgrade",
+			"Tested patch available",
+			"Test upgrade",
 		]) {
 			expect(html).toContain(label)
 		}
@@ -42,6 +43,9 @@ test("browse a pinned upgrade menu, choose one release and reopen its licensed p
 		const choice = { action: "select", upgradeMenuId: upgradeMenu.id, dependency: "widget", to: "1.3.0" }
 		expect((await submit({ ...choice, to: "9.9.9" })).status).toBe(400)
 		const result = await (await submit({ ...choice, repositoryUrl: repositoryUrl + ".git/" })).json()
+		const selectedPage = await (await app.request(`/r/${result.id}`)).text()
+		expect(selectedPage).toContain("Inspecting upgrade...")
+		expect(selectedPage).toContain(" · widget 1.2.0 → 1.3.0")
 		expect(store.choice(result.id)?.upgrade).toEqual({ dependency: "widget", to: "1.3.0", from: { ".": "1.2.0" } })
 		expect(store.choice(result.id)?.revision).toBe(discovery.report.repository.commit)
 
@@ -69,24 +73,26 @@ test("dependency pages sort and filter the whole upgrade menu before loading vis
 		const id = store.enqueue(repositoryUrl, { mode: "listUpgrades" })
 		const discovery = await replay.inspect(repositoryUrl, () => {}, { mode: "listUpgrades" })
 		const example = discovery.report.selection.eligible[0]!
-		discovery.report.selection.eligible = ["echo", "alpha", "delta", "charlie", "bravo"].map((dependency) => ({
-			...example,
-			dependency,
-		}))
+		discovery.report.selection.eligible = ["echo", "alpha", "delta", "charlie", "bravo", "foxtrot"].map(
+			(dependency) => ({
+				...example,
+				dependency,
+			}),
+		)
 		store.finish(id, publishReport(discovery, "MIT"))
 
 		// Check both the rendered choices and the hydrated upgrade menu.
 		const app = createTestSite(store)
 		const page = async (query: string): Promise<string> => (await app.request(`/r/${id}?${query}`)).text()
 		const first = await page("order=alphabetical")
-		expect(first).toContain("Next dependencies")
+		expect(first).toContain("Dependencies 1–5 of 6")
 		expect(first).toContain("<h2>alpha</h2>")
-		expect(first).not.toContain("echo")
+		expect(first).not.toContain("foxtrot")
 
 		// Out-of-range pages stay within the filtered result set.
 		const last = await page("order=alphabetical&page=2")
-		expect(last).toContain("<h2>echo</h2>")
-		expect(last).toContain("Previous dependencies")
+		expect(last).toContain("<h2>foxtrot</h2>")
+		expect(last).toContain("Dependencies 6–6 of 6")
 		expect(last).not.toContain("<h2>alpha</h2>")
 
 		// Clamp the requested page after applying the search.
@@ -116,7 +122,7 @@ test("saved upgrade menus and queued jobs retain their meaning across the field 
 
 		// Exercise both the shared page and its feature endpoint.
 		const app = createTestSite(store)
-		expect(await (await app.request(`/r/${id}`)).text()).toContain("Choose a dependency upgrade")
+		expect(await (await app.request(`/r/${id}`)).text()).toContain("Upgrade a dependency")
 		expect((await app.request(`/api/inspections/${id}/features?dependency=widget&to=1.3.0`)).status).toBe(200)
 	} finally {
 		store.database.close()

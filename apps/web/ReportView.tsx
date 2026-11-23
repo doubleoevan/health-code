@@ -1,19 +1,28 @@
 import type { ReactElement } from "react"
 import { PromptVersions } from "./PromptVersions.tsx"
-import { Copy, Link } from "./ReportControls.tsx"
+import { ReportActions } from "./ReportActions.tsx"
+import { Link } from "./ReportControls.tsx"
 import { mcpSetupUrl, type PublishedReport, toSummary } from "./report.ts"
 import { TestFileErrors, UpgradeView } from "./UpgradeView.tsx"
 
-export function ReportView({ report, url }: { report: PublishedReport; url: string }): ReactElement {
+export function ReportView({
+	report,
+	url,
+	investigationPrompt,
+}: {
+	report: PublishedReport
+	url: string
+	investigationPrompt?: string
+}): ReactElement {
 	return (
 		<>
 			{/* inspection summary and sharing controls */}
-			<h1>{toSummary(report)}</h1>
+			<header className="inspection-heading">
+				<h1>Inspection complete</h1>
+				<p>{toSummary(report)}</p>
+				<ReportActions report={report} url={url} investigationPrompt={investigationPrompt} />
+			</header>
 			{report.stoppedReason && <p>{report.stoppedReason}</p>}
-			<div className="buttons">
-				<Copy label="Copy link" text={url} />
-				<Copy label="Share" text={url} share />
-			</div>
 
 			{/* inspected revision and project type */}
 			<p>
@@ -29,10 +38,15 @@ export function ReportView({ report, url }: { report: PublishedReport; url: stri
 
 			{/* runtime usage cutoff */}
 			{report.usageAsOf && (
-				<p>
-					Usage as of{" "}
-					<time dateTime={report.usageAsOf}>{report.usageAsOf.replace("T", " ").replace(/(?:\.\d+)?Z$/, " UTC")}</time>
-				</p>
+				<details>
+					<summary>Usage details</summary>
+					<p>
+						Usage measured through{" "}
+						<time dateTime={report.usageAsOf}>
+							{report.usageAsOf.replace("T", " ").replace(/(?:\.\d+)?Z$/, " UTC")}
+						</time>
+					</p>
+				</details>
 			)}
 
 			{/* baseline checks */}
@@ -76,12 +90,7 @@ export function ReportView({ report, url }: { report: PublishedReport; url: stri
 				)}
 				{report.registryLookupIssue && report.upgrades.length > 0 && <p>{report.registryLookupIssue}</p>}
 				{report.upgrades.map((upgrade) => (
-					<UpgradeView
-						key={upgrade.dependency + upgrade.to}
-						upgrade={upgrade}
-						origin={new URL(url).origin}
-						commit={report.repository.commit}
-					/>
+					<UpgradeView key={upgrade.dependency + upgrade.to} upgrade={upgrade} />
 				))}
 				{report.upgrades.length === 0 && !report.registryLookupIssue && !report.stoppedReason && (
 					<p>No upgrades inspected.</p>

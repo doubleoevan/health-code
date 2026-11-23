@@ -175,7 +175,7 @@ export function Timeline({ events, live, id }: { events: SiteEvent[]; live: bool
 			)}
 
 			{/* chronological inspection log */}
-			<h2>{live ? "Inspection log" : "Full timeline"}</h2>
+			<h2>Inspection log</h2>
 			<ol
 				className={live ? "timeline rolling" : "timeline history"}
 				ref={list}

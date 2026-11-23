@@ -49,6 +49,7 @@ export type {
 	UpgradeReportV2,
 	Verdict,
 } from "./agentContracts.ts"
+export { buildInvestigationPrompt } from "./buildPrompt.ts"
 export type {
 	Baseline,
 	CheckResult,

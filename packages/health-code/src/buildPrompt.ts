@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import type { ModelRole } from "./agentContracts.ts"
 import { redactEvidence } from "./collectEvents.ts"
-import { InspectionPrompts } from "./readPrompt.ts"
+import { InspectionPrompts, readInvestigationPromptTemplate } from "./readPrompt.ts"
 
 export async function buildPrompt(
 	role: ModelRole,
@@ -9,8 +9,17 @@ export async function buildPrompt(
 	prompts = new InspectionPrompts(),
 ): Promise<string> {
 	// Resolve the effective source for this inspection.
-	const content = prompts.template(role).body
+	return toEvidencePrompt(prompts.template(role).body, evidence)
+}
 
+/**
+ * Builds downstream investigation instructions with bounded, fenced inspection evidence.
+ */
+export function buildInvestigationPrompt(evidence: unknown): string {
+	return toEvidencePrompt(readInvestigationPromptTemplate(), evidence)
+}
+
+function toEvidencePrompt(content: string, evidence: unknown): string {
 	// remove embedded fence markers before serializing redacted evidence
 	const nonce = randomUUID()
 	const serialized = JSON.stringify(redactEvidence(evidence), (_key, value: unknown) =>

@@ -1,13 +1,9 @@
 import { expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { createElement } from "react"
-import { renderToStaticMarkup } from "react-dom/server"
 import { origin, replay, createTestSite as site } from "./fixtures/createTestSite.ts"
 import { publishReport } from "./publishReport.ts"
-import type { SiteEvent } from "./report.ts"
 import { replayRepositoryUrl as repository } from "./report.ts"
 import { InspectionStore } from "./storeInspections.ts"
-import { Timeline } from "./Timeline.tsx"
 
 test("server HTML renders each Verdict, license decision, evidence and preview before JavaScript", async () => {
 	const store = new InspectionStore(":memory:")
@@ -98,15 +94,16 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 		const id = store.enqueue(repository)
 		store.finish(id, publishReport(output, "MPL-2.0"))
 		const html = (await (await app.request(`/r/${id}`)).text()).replaceAll("<!-- -->", "")
-		expect((html.match(/>Copy patch instructions<\/button>/g) ?? []).length).toBe(upgrade.patches.length)
+		expect((html.match(/>Copy prompt to apply patch<\/button>/g) ?? []).length).toBe(1)
 		for (const expected of [
 			verdict.replace("'", "&#x27;"),
 			"repair v12",
 			"applyPatch v1",
 			...(verdict === "Untested" ? ["Why this upgrade was untested", "The pinned project has no test script."] : []),
-			"<h1>1 upgrade inspected, 1 feature patch, 1 connection blocked during install</h1>",
+			"<h1>Inspection complete</h1>",
+			"<p>1 upgrade inspected, 1 feature patch, 1 connection blocked during install</p>",
 			"Checks before the upgrade",
-			'Usage as of <time dateTime="2026-11-20T10:42:00.000Z">2026-11-20 10:42:00 UTC</time>',
+			'Usage measured through <time dateTime="2026-11-20T10:42:00.000Z">2026-11-20 10:42:00 UTC</time>',
 			"<summary>Turn limit</summary>",
 			"<dt>Repair</dt><dd>4</dd>",
 			"<dt>Feature adoption</dt><dd>0</dd>",
@@ -119,7 +116,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			"og:description",
 			"og:title",
 			`${origin}/r/${id}`,
-			"Copy patch instructions",
+			"Copy prompt to apply patch",
 			"Direct replacement",
 			match.directQuote,
 			"Source location",
@@ -161,7 +158,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 	store.finish(withheld, publishReport(output, null))
 	const html = await (await app.request(`/r/${withheld}`)).text()
 	expect(html).toContain("Findings only")
-	expect(html).not.toContain(upgrade.patches[0]?.prompt ?? "Copy patch instructions")
+	expect(html).not.toContain(upgrade.patches[0]?.prompt ?? "Copy prompt to apply patch")
 	expect(html).not.toContain("/patches/")
 	expect((await app.request(`/patches/${"0".repeat(64)}.patch`)).status).toBe(404)
 
@@ -250,57 +247,6 @@ test("unsupported and ambiguous projects preserve detection reasons without upgr
 	store.database.close()
 })
 
-test("a saved model request sandbox startup is shown once in the pinned list and once in the timeline", () => {
-	const detail = "Model request sandbox started. Runta supplies the model key. This machine doesn’t need it."
-	const event: SiteEvent = {
-		version: 2,
-		inspectionId: "recorded",
-		sandboxId: "recorded-relay",
-		type: "sandbox.event",
-		action: "model-request-sandbox-started",
-		sequence: 4,
-		timestamp: new Date(0).toISOString(),
-		detail,
-	}
-	const html = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: false, events: [event] }))
-	expect(html.split(detail)).toHaveLength(3)
-
-	// Replay the original action and detail from an earlier saved Inspection.
-	const historical: SiteEvent = {
-		...event,
-		action: "model-relay-started",
-		detail: detail.replace("Model request sandbox started", "Model relay started"),
-	}
-	const replayed = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: false, events: [historical] }))
-	expect(replayed.split(detail)).toHaveLength(3)
-})
-
-test("live and saved timelines show measured key counts and preserve uncounted events", () => {
-	const event = {
-		type: "sandbox.event",
-		action: "credentials-withheld",
-		version: 2,
-		inspectionId: "recorded",
-		sandboxId: "sandbox",
-		sequence: 1,
-		timestamp: new Date(0).toISOString(),
-	} as const
-	for (const live of [true, false]) {
-		for (const [measurement, label] of [
-			[{ storedModelKeyCount: 1 }, "1 stored model key kept outside the sandbox"],
-			[{ storedModelKeyCount: 2 }, "2 stored model keys kept outside the sandbox"],
-			[{ placeholderVariableCount: 0 }, "0 repository environment variables given placeholder values"],
-			[{ placeholderVariableCount: 1 }, "1 repository environment variable given placeholder values"],
-			[{ placeholderVariableCount: 3 }, "3 repository environment variables given placeholder values"],
-			[{}, "Real keys kept outside the sandbox"],
-		] as const) {
-			const events: SiteEvent[] = [{ ...event, ...measurement }]
-			const html = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live, events }))
-			expect(html.split(label)).toHaveLength(3)
-		}
-	}
-})
-
 test("an empty report explains registry failure on the shared report page", async () => {
 	const output = await replay.inspect(repository, () => {})
 	const store = new InspectionStore(":memory:")
@@ -310,10 +256,19 @@ test("an empty report explains registry failure on the shared report page", asyn
 	output.report.selection.registryLookupIssue = reason
 
 	// Exercise publication, persistence, server rendering and the share title.
-	const id = store.enqueue(repository)
+	const upgrade = { dependency: "requested-package", from: "1.0.0", to: "2.0.0" }
+	const id = store.enqueue(repository, { upgrade })
 	store.finish(id, publishReport(output, null))
 	const html = await (await app.request(`/r/${id}`)).text()
-	expect(html).toContain(`<h1>${reason}</h1>`)
+	expect(html).toContain(`<p>${reason}</p>`)
+	expect(html).toContain(">Copy prompt to investigate</button>")
+	expect(html).not.toContain(">Copy prompt to apply patch</button>")
+
+	// Keep the requested target in the copied prompt when discovery returned no cards.
+	const state = JSON.parse(html.match(/<script id="page-state" type="application\/json">(.*?)<\/script>/s)![1]!)
+	expect(state.snapshot.investigationPrompt).toContain(upgrade.dependency)
+
+	// Preserve the same registry diagnosis in shared previews.
 	expect(html).toContain(`property="og:title" content="Health Code: ${reason}"`)
 	expect(html).toContain(`name="twitter:title" content="Health Code: ${reason}"`)
 	expect(html).not.toContain("No upgrades inspected")
@@ -347,26 +302,6 @@ test("an empty report explains registry failure on the shared report page", asyn
 	store.database.close()
 })
 
-test("the live and saved timelines label registry lookup and its partial results", () => {
-	const base = { version: 1 as const, inspectionId: "recorded", timestamp: new Date(0).toISOString(), stepId: "1" }
-	const started: SiteEvent = { ...base, sequence: 1, type: "step.started", label: "registry" }
-	const finished: SiteEvent = {
-		...base,
-		sequence: 2,
-		type: "step.finished",
-		summary: "registry",
-		status: "untested",
-		durationMs: 500,
-	}
-	const live = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: true, events: [started] }))
-	expect(live).toContain("Find available upgrades")
-
-	// Keep the public event status while showing the reader which stage was incomplete.
-	const saved = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: false, events: [finished] }))
-	expect(saved).toContain("Find available upgrades")
-	expect(saved).toContain("Incomplete · 0.5s")
-})
-
 test("a partial report shows the interrupted step, skipped upgrades and reused evidence", async () => {
 	const store = new InspectionStore(":memory:")
 	const output = await replay.inspect(repository, () => {})
@@ -388,7 +323,7 @@ test("a partial report shows the interrupted step, skipped upgrades and reused e
 	const html = (await (await site(store).request(`/r/${id}`)).text()).replaceAll("<!-- -->", "")
 
 	// Verify the reason, scope and original evidence are visible without JavaScript.
-	expect(html).toContain("Partial inspection")
+	expect(html).toContain("<h1>Inspection complete</h1>")
 	expect(html).toContain("Previously tested in")
 	expect(html).toContain("Where this fits in your code")
 

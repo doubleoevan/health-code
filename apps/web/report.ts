@@ -1,6 +1,7 @@
 import type {
 	CheckResult,
 	InspectionEvent,
+	InspectionOptionsV2,
 	InspectionReport,
 	ModelRequestSandboxEvent,
 	Patch,
@@ -82,6 +83,11 @@ type InspectionState = "queued" | "running" | "interrupted" | "failed" | "comple
 export type Snapshot = {
 	id: string
 	repositoryUrl: string
+
+	// Restore the requested work and its downstream handoff on reload.
+	investigationPrompt?: string
+	mode?: InspectionOptionsV2["mode"]
+	selectedDependencyUpgrade?: InspectionOptionsV2["upgrade"]
 	position?: number | null
 	state: InspectionState
 	message: string | null
@@ -89,6 +95,11 @@ export type Snapshot = {
 	// Resume the stream after the last event in this snapshot.
 	events: SiteEvent[]
 	card: PublishedReport | null
+}
+
+export function toVersionChange({ from, to }: NonNullable<Snapshot["selectedDependencyUpgrade"]>): string {
+	const versions = typeof from === "string" ? from : [...new Set(Object.values(from))].join(", ")
+	return `${versions} → ${to}`
 }
 
 export function readPublishedReport(json: string): PublishedReport {
@@ -128,7 +139,7 @@ export function toCheckText(check: CheckResult): string {
 
 export function toSummary(report: PublishedReport): string {
 	if (report.upgradeMenu) {
-		return "Choose a dependency upgrade"
+		return "Upgrade a dependency"
 	}
 	const count = report.upgrades.length
 	if (!count && report.registryLookupIssue) {
@@ -139,7 +150,7 @@ export function toSummary(report: PublishedReport): string {
 	const partial = report.upgrades.filter((upgrade) => upgrade.coverage === "partial").length
 	const skipped = report.upgrades.filter((upgrade) => upgrade.coverage === "skipped").length
 	if (report.stoppedReason || partial || skipped) {
-		return `Partial inspection · ${count - partial - skipped} upgrades completed, ${partial} partial, ${skipped} skipped`
+		return `${count - partial - skipped} upgrades completed · ${partial} partial · ${skipped} skipped`
 	}
 
 	// count blocked installation connections across upgrades
@@ -147,4 +158,11 @@ export function toSummary(report: PublishedReport): string {
 		.flatMap((upgrade) => upgrade.observation.findings)
 		.filter((finding) => finding.kind === "connection" && finding.outcome === "blocked").length
 	return `${count} upgrade${count === 1 ? "" : "s"} inspected, ${report.featureCount} feature patch${report.featureCount === 1 ? "" : "es"}, ${blocked} connection${blocked === 1 ? "" : "s"} blocked during install`
+}
+
+export function toPatchPath(digest: string): string {
+	return `/patches/${digest}.patch`
+}
+export function toOrderedPatches(patches: PatchLink[]): PatchLink[] {
+	return patches.toSorted((a, b) => Number(a.role === "feature") - Number(b.role === "feature"))
 }

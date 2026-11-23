@@ -48,7 +48,7 @@ export class LaunchService {
 		if (choice?.revision && choice.revision !== head.revision) {
 			throw new AdmissionError(
 				400,
-				"The repository has changed. Find upgrades again to choose from its current commit.",
+				"The repository has changed. Click New features to see upgrades for its current commit.",
 			)
 		}
 

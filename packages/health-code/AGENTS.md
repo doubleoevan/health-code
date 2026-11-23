@@ -12,6 +12,8 @@ The public ESM package `health-code` owns Repository inspections. Its single ent
 
 Run `bun run --cwd packages/health-code build` from the root. The package emits JavaScript and declarations into `dist/` and builds the standalone guest modules. Verify the published shape with `bun run check:package` and verify production operations with `bun run test:provider`. Each module maintains its own AGENTS.md alongside the root README. The npm prepack hook also builds the MCP server into `dist/mcp/`. The `health-code` bin points to its Node CLI. Pack the release from the repository root with `npm pack ./packages/health-code`.
 
+The web report calls `buildInvestigationPrompt` to hand incomplete checks to a coding agent with bounded, fenced evidence.
+
 The Node adapter supports npm, pnpm, Yarn, and Bun. Recognized Bun, Vitest, and Jest scripts produce per-test evidence. Other scripts report their exit status. The optional live suite requires `RUNTA_TOKEN` and verifies registry access, installation observation, timeouts, and deletion. See the root README for the public call, event delivery, partial Inspection Reports, and typed errors.
 
 A hosted consumer passes a stable deployment name to the provider factory and calls the public `reconcileSandboxes` operation before starting workers. The provider paginates runtime inventory, matches its reserved prefix and Inspection UUID, and reclaims abandoned allocations by runtime ID. Ordinary CLI allocations retain their existing names.

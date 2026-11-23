@@ -40,15 +40,15 @@ async function submit(
 	repository: string,
 ): Promise<{ path: string; reused: boolean; upgradeMenuPath: string }> {
 	await page.getByLabel("Public GitHub repository").fill(`https://github.com/${repository}`)
-	const upgradeMenu = await admit(page, page.getByRole("button", { name: "Find upgrades" }))
+	const upgradeMenu = await admit(page, page.getByRole("button", { name: "New features" }))
 	await page.waitForURL((url) => url.pathname === upgradeMenu.path)
-	await page.getByRole("heading", { name: "Choose a dependency upgrade" }).waitFor({ timeout: 2400000 })
+	await page.getByRole("heading", { name: "Upgrade a dependency" }).waitFor({ timeout: 2400000 })
 
 	// Select the first displayed target through the same controls as a visitor.
 	const group = page
 		.locator("article")
 		.filter({
-			has: page.getByRole("button", { name: "Get upgrade" }).or(page.getByRole("link", { name: "View tested patch" })),
+			has: page.getByRole("button", { name: "Test upgrade" }).or(page.getByRole("link", { name: "View tested patch" })),
 		})
 		.first()
 
@@ -63,7 +63,7 @@ async function submit(
 		return { path: new URL(link, page.url()).pathname, reused: true, upgradeMenuPath: upgradeMenu.path }
 	}
 	return {
-		...(await admit(page, target.getByRole("button", { name: "Get upgrade" }))),
+		...(await admit(page, target.getByRole("button", { name: "Test upgrade" }))),
 		upgradeMenuPath: upgradeMenu.path,
 	}
 }
@@ -169,7 +169,7 @@ async function inspect(
 
 	// Wait for terminal SSR and retain rendered verdict coverage only.
 	await page
-		.getByRole("heading", { level: 1, name: /upgrades? inspected|Inspection failed|Inspection interrupted/ })
+		.getByRole("heading", { level: 1, name: /Inspection complete|Inspection failed|Inspection interrupted/ })
 		.waitFor({ timeout: 2400000 })
 	const snapshot: Snapshot = JSON.parse((await page.locator("#page-state").textContent()) ?? "{}").snapshot
 	assert.equal(snapshot.state, "complete")

@@ -1,16 +1,31 @@
+@import "./upgradeMenu.css";
+
+@font-face {
+	font-family: "JetBrains Mono";
+	src: url("/assets/jetbrains-mono-bold.woff2") format("woff2");
+	font-weight: 700;
+	font-display: swap;
+}
+@font-face {
+	font-family: "JetBrains Mono";
+	src: url("/assets/jetbrains-mono-regular.woff2") format("woff2");
+	font-weight: 400;
+	font-display: swap;
+}
 :root {
 	color-scheme: light dark;
-	--paper: #f7f7f1;
-	--ink: #20291e;
-	--muted: #545f52;
-	--rule: #c4cbbe;
+	--paper: #faf9f7;
+	--ink: #201f20;
+	--muted: #565458;
+	--rule: #ccc8c8;
 	--panel: #fff;
-	--accent: #245637;
-	--wash: #e1eadf;
+	--brand-red: #e23a31;
+	--accent: color-mix(in srgb, var(--brand-red) 78%, black);
+	--wash: #f5e8e9;
 	font:
-		16px / 1.55 "Inter",
-		system-ui,
-		sans-serif;
+		16px / 1.55 "JetBrains Mono",
+		ui-monospace,
+		monospace;
 	background: var(--paper);
 	color: var(--ink);
 }
@@ -22,7 +37,7 @@ body {
 }
 main {
 	overflow-wrap: anywhere;
-	max-width: 66rem;
+	max-width: 69rem;
 	margin: auto;
 	padding: 0 clamp(1.25rem, 5vw, 5rem) 5rem;
 }
@@ -32,7 +47,6 @@ main {
 	align-items: center;
 	justify-content: space-between;
 	gap: 1rem;
-	border-bottom: 1px solid var(--rule);
 }
 :where(.mast) a {
 	font-weight: 750;
@@ -41,15 +55,70 @@ main {
 	color: var(--ink);
 	letter-spacing: -0.045em;
 }
+.mast a {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.65rem;
+	font-family: "JetBrains Mono", monospace;
+}
 .mark {
-	font-size: 1.5rem;
-	color: var(--accent);
-	vertical-align: middle;
+	filter: url("/assets/logo-filter.svg#dark-logo");
+}
+.wordmark-accent,
+.steps li::marker {
+	color: var(--brand-red);
+}
+@media (prefers-color-scheme: light) {
+	.mast a {
+		color: #000;
+	}
+	.mark {
+		filter: url("/assets/logo-filter.svg#light-logo");
+	}
+}
+
+.steps {
+	padding-left: 1.65rem;
+	margin: 1.6rem 0;
+}
+.steps li {
+	padding: 0.23rem 0 0.23rem 0.35rem;
+}
+.steps li::marker {
+	font:
+		700 0.95rem "JetBrains Mono",
+		monospace;
 }
 .home {
-	padding: clamp(3rem, 10vh, 8rem) 0;
+	padding-bottom: clamp(3rem, 10vh, 8rem);
+}
+.landing,
+.inspection-heading {
+	padding-top: clamp(3rem, 10vh, 8rem);
+}
+.landing h1,
+.inspection-heading h1 {
+	margin-top: 0;
+}
+.landing {
+	max-width: 52rem;
+	margin-inline: auto;
+	text-align: center;
+}
+.landing :is(h1, .intro, form) {
+	margin-inline: auto;
+}
+.landing h1 > span {
+	display: block;
+}
+.landing .steps {
+	width: fit-content;
+	max-width: 40rem;
+	margin-inline: auto;
+	text-align: start;
 }
 .intro {
+	text-align: start;
 	font-size: 1.18rem;
 	max-width: 38rem;
 	color: var(--muted);
@@ -61,15 +130,27 @@ h3 {
 	text-wrap: balance;
 }
 h1 {
-	font-family: "Instrument Serif", Georgia, serif;
-	font-weight: 400;
+	font-family: "JetBrains Mono", ui-monospace, monospace;
+	font-weight: 700;
 	font-size: clamp(2.5rem, 6vw, 4.6rem);
 	letter-spacing: -0.055em;
 	margin: 2.75rem 0 1.2rem;
 }
-.home h1 {
-	margin-top: 0;
-	font-size: clamp(3.2rem, 8vw, 6.5rem);
+.inspection-heading {
+	width: fit-content;
+	max-width: 100%;
+	margin-inline: auto;
+}
+.inspection-heading h1,
+.inspection-heading h1::selection {
+	background: transparent;
+}
+.inspection-heading h1::selection {
+	color: var(--brand-red);
+}
+.landing h1 {
+	max-width: 19ch;
+	font-size: clamp(2.3rem, 5.3vw, 4.4rem);
 }
 h2 {
 	font-size: 1.3rem;
@@ -93,6 +174,7 @@ label {
 }
 .field,
 .buttons,
+.pager,
 article header {
 	display: flex;
 	align-items: center;
@@ -123,20 +205,22 @@ button {
 	cursor: pointer;
 	border: 0;
 	border-radius: 0.4rem;
-	background: var(--accent);
-	color: var(--panel);
+	background: var(--brand-red);
+	color: #fff;
 	font-weight: 650;
+}
+button:enabled:hover,
+button:focus-visible {
+	box-shadow: 0 0 1rem color-mix(in srgb, var(--accent) 38%, transparent);
 }
 button:disabled {
 	opacity: 0.7;
 }
 .secondary {
-	background: var(--wash);
-	color: var(--accent);
 	padding: 0.5rem 0.85rem;
 }
 a {
-	color: var(--accent);
+	color: var(--brand-red);
 	text-underline-offset: 0.18em;
 }
 small,
@@ -148,7 +232,7 @@ dt {
 .mono,
 .elapsed,
 pre {
-	font-family: "IBM Plex Mono", ui-monospace, monospace;
+	font-family: "JetBrains Mono", ui-monospace, monospace;
 }
 .elapsed {
 	margin-left: auto;
@@ -214,6 +298,9 @@ dt {
 dd {
 	margin: 0;
 }
+details > :not(summary) {
+	margin-inline-start: 1.25rem;
+}
 summary {
 	cursor: pointer;
 	padding: 0.3rem 0;
@@ -225,8 +312,26 @@ pre {
 	white-space: pre-wrap;
 }
 :focus-visible {
-	outline: 3px solid var(--accent);
+	outline: 3px solid var(--brand-red);
 	outline-offset: 3px;
+}
+@media (min-width: 75rem) {
+	main {
+		max-width: 90rem;
+	}
+	.landing {
+		max-width: 80rem;
+	}
+	.landing h1 {
+		max-width: 100%;
+	}
+	.landing .intro {
+		max-width: 70ch;
+	}
+	.landing .steps,
+	.landing form {
+		max-width: 52rem;
+	}
 }
 @media (max-width: 40rem) {
 	.field {
@@ -239,14 +344,17 @@ pre {
 	}
 }
 @media (prefers-color-scheme: dark) {
+	.mast a {
+		color: #fff;
+	}
 	:root {
-		--ink: #edf1e8;
-		--muted: #bbc5b7;
-		--rule: #485247;
-		--paper: #171d18;
-		--panel: #212823;
-		--accent: #a9dec0;
-		--wash: #303d32;
+		--ink: #f7f4f4;
+		--muted: #c1bbbc;
+		--rule: #494449;
+		--paper: #151416;
+		--panel: #201e21;
+		--accent: color-mix(in srgb, var(--brand-red) 70%, white);
+		--wash: #322427;
 	}
 }
 
@@ -255,25 +363,4 @@ pre {
 	max-height: 55vh;
 	overflow-y: auto;
 	scrollbar-gutter: stable;
-}
-
-.upgrade-menu-filters {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: end;
-	gap: 0.75rem 1rem;
-	margin: 1.5rem 0;
-}
-.upgrade-menu-filters label {
-	margin: 0;
-}
-.upgrade-menu-filters :is(input[type="search"], select) {
-	display: block;
-	max-width: 100%;
-	background: var(--panel);
-	color: var(--ink);
-	border: 1px solid var(--rule);
-	border-radius: 0.5rem;
-	font: inherit;
-	padding: 0.55rem 0.75rem;
 }

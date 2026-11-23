@@ -134,7 +134,7 @@ An Inspection using a Model Request Sandbox SHALL emit exactly one version 2 San
 
 ### Requirement: Account for model request sandbox lifetime in the Inspection
 
-An Inspection SHALL budget for both sandboxes, model requests and cleanup. Its version 2 Inspection Report SHALL include both runtime costs once, show the Model Request Sandbox lifetime and cost basis, and distinguish measured charges from reservations. It SHALL record the measurement cutoff in `runtimeUsage.usageAsOf` and display it as **Usage as of**.
+An Inspection SHALL budget for both sandboxes, model requests and cleanup. Its version 2 Inspection Report SHALL include both runtime costs once, show the Model Request Sandbox lifetime and cost basis, and distinguish measured charges from reservations. It SHALL record the measurement cutoff in `runtimeUsage.usageAsOf` and display it as **Usage measured through**.
 
 #### Scenario: Insufficient budget before allocation
 

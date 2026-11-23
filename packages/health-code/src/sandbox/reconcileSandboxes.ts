@@ -2,7 +2,14 @@ import { z } from "zod"
 import { InspectionError } from "../contracts.ts"
 
 const runtimePage = z.object({
-	data: z.array(z.object({ id: z.uuid(), display_name: z.string(), created_at: z.string().optional() })),
+	data: z.array(
+		z.object({
+			id: z.uuid(),
+			display_name: z.string(),
+			revision: z.int().nonnegative(),
+			created_at: z.string().optional(),
+		}),
+	),
 	pagination: z.object({ has_more: z.boolean(), next_cursor: z.string().nullable() }),
 })
 
@@ -36,10 +43,10 @@ export async function reconcileSandboxes(options: {
 	const headers = { Authorization: `Bearer ${options.token}` }
 	const url = new URL(origin)
 
-	// request bounded pages and retain ids for deferred deletion
+	// Retain each orphan’s observed revision for conditional deletion after pagination.
 	url.searchParams.set("limit", "100")
 	const cursors = new Set<string>()
-	const orphanIds = new Set<string>()
+	const revisionByOrphanRuntimeId = new Map<string, number>()
 	const observed = new Map<string, number>()
 
 	// Finish inventory before deletions alter page boundaries.
@@ -52,8 +59,8 @@ export async function reconcileSandboxes(options: {
 
 		// separate abandoned deployment runtimes from live inspections
 		const page = runtimePage.parse(await response.json())
-		for (const id of orphanedRuntimeIds(page.data, { prefix, observed, ...options })) {
-			orphanIds.add(id)
+		for (const runtime of orphanedRuntimes(page.data, { prefix, observed, ...options })) {
+			revisionByOrphanRuntimeId.set(runtime.id, runtime.revision)
 		}
 		if (!page.pagination.has_more) {
 			break
@@ -69,10 +76,10 @@ export async function reconcileSandboxes(options: {
 	}
 
 	updateObservedTimes(options.firstSeen, observed)
-	await deleteOrphans({ orphanIds, request, headers, origin })
+	await deleteOrphans({ revisionByOrphanRuntimeId, request, headers, origin })
 
 	// Remove allocations only after deletion has been confirmed.
-	for (const id of orphanIds) {
+	for (const id of revisionByOrphanRuntimeId.keys()) {
 		options.firstSeen?.delete(id)
 	}
 }
@@ -88,21 +95,21 @@ function updateObservedTimes(firstSeen: Map<string, number> | undefined, observe
 }
 
 async function deleteOrphans({
-	orphanIds,
+	revisionByOrphanRuntimeId,
 	request,
 	headers,
 	origin,
 }: {
-	orphanIds: Set<string>
+	revisionByOrphanRuntimeId: Map<string, number>
 	request: typeof fetch
 	headers: { Authorization: string }
 	origin: string
 }): Promise<void> {
 	// attempt every orphan deletion before reporting incomplete cleanup
 	let incomplete = false
-	for (const id of orphanIds) {
+	for (const [id, revision] of revisionByOrphanRuntimeId) {
 		try {
-			const response = await request(`${origin}/${id}`, {
+			const response = await request(`${origin}/${id}?expected_revision=${revision}`, {
 				method: "DELETE",
 				headers,
 				redirect: "error",
@@ -125,7 +132,7 @@ async function deleteOrphans({
 	}
 }
 
-function* orphanedRuntimeIds(
+function* orphanedRuntimes(
 	runtimes: z.infer<typeof runtimePage>["data"],
 	options: {
 		prefix: string
@@ -134,7 +141,7 @@ function* orphanedRuntimeIds(
 		firstSeen?: Map<string, number>
 		observed: Map<string, number>
 	},
-): Generator<string> {
+): Generator<{ id: string; revision: number }> {
 	for (const runtime of runtimes) {
 		const suffix = runtime.display_name.slice(options.prefix.length).replace(/-relay$/, "")
 		if (!runtime.display_name.startsWith(options.prefix) || !z.uuid().safeParse(suffix).success) {
@@ -156,6 +163,6 @@ function* orphanedRuntimeIds(
 		if (options.createdBefore !== undefined && observed >= options.createdBefore) {
 			continue
 		}
-		yield runtime.id
+		yield runtime
 	}
 }

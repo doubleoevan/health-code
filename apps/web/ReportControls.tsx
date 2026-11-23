@@ -43,3 +43,7 @@ export function Copy({ text, label, share = false }: { text: string; label: stri
 		</span>
 	)
 }
+
+export function CopyInvestigationPrompt({ text }: { text: string }): ReactElement {
+	return <Copy label="Copy prompt to investigate" text={text} />
+}

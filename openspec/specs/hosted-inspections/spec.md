@@ -173,7 +173,7 @@ The hosted deployment SHALL periodically reconcile all its runtime inventory pag
 
 ### Requirement: Browse before testing
 
-The site SHALL discover eligible upgrade targets at a pinned commit before installing dependencies or invoking an agent. The upgrade menu SHALL show one row per dependency, searchable by name, with minor upgrades first by default. Visitors may choose alphabetical order or descending declaring workspace count. The Patch ready filter SHALL show only targets with published upgrade patches.
+The site SHALL discover eligible upgrade targets at a pinned commit before installing dependencies or invoking an agent. The upgrade menu SHALL show one row per dependency, searchable by name, with the most declaring workspaces first by default. Visitors may choose alphabetical order or minor upgrades first. The Tested patch available filter SHALL show only targets with published upgrade patches.
 
 #### Scenario: Choose one target
 

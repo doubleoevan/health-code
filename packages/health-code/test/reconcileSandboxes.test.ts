@@ -9,7 +9,11 @@ test("recovery deletes only orphaned deployment allocations across all inventory
 	const deleted: string[] = []
 
 	// mix orphaned, live and unrelated runtimes across two pages
-	const makeRuntime = (name: string): { id: string; display_name: string } => ({ id: randomUUID(), display_name: name })
+	const makeRuntime = (name: string): { id: string; revision: number; display_name: string } => ({
+		id: randomUUID(),
+		revision: 3,
+		display_name: name,
+	})
 	const abandoned = makeRuntime(`hc-site-demo-${orphan}`)
 	const absent = makeRuntime(`hc-site-demo-${randomUUID()}`)
 	const sibling = makeRuntime(`hc-site-demo-${orphan}-relay`)
@@ -27,6 +31,7 @@ test("recovery deletes only orphaned deployment allocations across all inventory
 	const request = async (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
 		const url = new URL(String(input))
 		if (init?.method === "DELETE") {
+			assert.equal(url.searchParams.get("expected_revision"), "3")
 			deleted.push(url.pathname.split("/").at(-1) ?? "")
 			return new Response(null, { status: url.pathname.endsWith(absent.id) ? 404 : 204 })
 		}
@@ -55,7 +60,7 @@ test("recovery deletes only orphaned deployment allocations across all inventory
 test("a failed deletion still allows cleanup of later orphans", async () => {
 	const victims = [randomUUID(), randomUUID()]
 	const removed: string[] = []
-	const runtimes = victims.map((id) => ({ id, display_name: `hc-site-demo-${randomUUID()}` }))
+	const runtimes = victims.map((id) => ({ id, revision: 3, display_name: `hc-site-demo-${randomUUID()}` }))
 	await assert.rejects(
 		reconcileSandboxes({
 			deployment: "demo",
@@ -85,8 +90,9 @@ test("scheduled cleanup preserves live, young and undated runtimes", async () =>
 	const runtime = (
 		inspection: string,
 		created_at?: string,
-	): { id: string; display_name: string; created_at?: string } => ({
+	): { id: string; revision: number; display_name: string; created_at?: string } => ({
 		id: randomUUID(),
+		revision: 3,
 		display_name: `hc-site-demo-${inspection}`,
 		created_at,
 	})
@@ -113,7 +119,7 @@ test("scheduled cleanup preserves live, young and undated runtimes", async () =>
 })
 
 test("successive sweeps reclaim an undated orphan after a full lifetime of observation", async () => {
-	const runtime = { id: randomUUID(), display_name: "hc-site-demo-" + randomUUID() }
+	const runtime = { id: randomUUID(), revision: 3, display_name: "hc-site-demo-" + randomUUID() }
 	const firstSeen = new Map<string, number>()
 	let deleted = false
 	const options = {

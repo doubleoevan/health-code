@@ -1,14 +1,17 @@
 import type { DependencyChoice, ReleaseFeaturePage, UpgradeMenuOrder, UpgradeMenuTarget } from "health-code"
-import { type ReactElement, useEffect, useRef, useState } from "react"
+import { type ChangeEvent, type ReactElement, useEffect, useRef, useState } from "react"
 import { Link } from "./ReportControls.tsx"
+import { toVersionChange } from "./report.ts"
 
 export type UpgradeMenuView = {
-	choices: DependencyChoice[]
+	dependenciesOnPage: DependencyChoice[]
 	order: UpgradeMenuOrder
 	search: string
 	readyOnly: boolean
 	available: boolean
 	page: number
+	totalDependencies: number
+	firstDependencyNumber: number
 	pages: number
 }
 
@@ -25,18 +28,14 @@ export function UpgradeMenu({
 	pending: boolean
 	onSelect: (target: UpgradeMenuTarget) => void
 }): ReactElement {
-	const { choices, order, search, readyOnly, available } = view
-	function pageUrl(page: number): string {
-		const query = new URLSearchParams({ page: String(page), order, search })
-		if (readyOnly) {
-			query.set("ready", "on")
-		}
-		return `/r/${upgradeMenuId}?${query}`
+	const { dependenciesOnPage, order, search, readyOnly, available } = view
+
+	// Apply sort and patch availability as soon as either control changes.
+	function handleFilterChange(event: ChangeEvent<HTMLInputElement | HTMLSelectElement>): void {
+		event.currentTarget.form?.requestSubmit()
 	}
 	return (
 		<section>
-			{issue && <p role="status">{issue}</p>}
-
 			{/* dependency filters */}
 			<form method="get" className="upgrade-menu-filters">
 				<label>
@@ -44,23 +43,31 @@ export function UpgradeMenu({
 				</label>
 				<label>
 					Sort by{" "}
-					<select name="order" defaultValue={order}>
-						<option value="minor">Minor upgrades first</option>
-						<option value="alphabetical">Alphabetical</option>
-						<option value="workspaces">Most workspaces first</option>
-					</select>
+					<span className="sort-select">
+						<select name="order" defaultValue={order} onChange={handleFilterChange}>
+							<option value="workspaces">Most workspaces first</option>
+							<option value="minor">Minor upgrades first</option>
+							<option value="alphabetical">Alphabetical</option>
+						</select>
+					</span>
 				</label>
 				<label>
-					<input type="checkbox" name="ready" defaultChecked={readyOnly} /> Patch ready
+					<input type="checkbox" name="ready" defaultChecked={readyOnly} onChange={handleFilterChange} /> Tested patch
+					available
 				</label>
 
 				<button type="submit" className="secondary">
-					Filter
+					Search
 				</button>
 			</form>
+			{issue && (
+				<p className="upgrade-menu-warning" role="status">
+					{issue}
+				</p>
+			)}
 
 			{/* one choice per dependency with each available target version */}
-			{choices.map((group) => (
+			{dependenciesOnPage.map((group) => (
 				<DependencyVersions
 					key={group.dependency}
 					group={group}
@@ -69,16 +76,31 @@ export function UpgradeMenu({
 					onSelect={onSelect}
 				/>
 			))}
-			{choices.length === 0 && (available || !issue) && (
+			{dependenciesOnPage.length === 0 && (available || !issue) && (
 				<p role="status">{available ? "No upgrades match these filters." : "No eligible upgrades were found."}</p>
 			)}
-			{view.pages > 1 && (
-				<nav className="buttons" aria-label="Dependency pages">
-					{view.page > 1 && <Link href={pageUrl(view.page - 1)}>Previous dependencies</Link>}
-					<span>
-						Page {view.page} of {view.pages}
-					</span>
-					{view.page < view.pages && <Link href={pageUrl(view.page + 1)}>Next dependencies</Link>}
+
+			{/* dependency pagination */}
+			{view.totalDependencies > 0 && (
+				<nav aria-label="Dependency pages">
+					<form method="get" className="pager">
+						<input type="hidden" name="search" value={search} />
+						<input type="hidden" name="order" value={order} />
+						{readyOnly && <input type="hidden" name="ready" value="on" />}
+						<button className="secondary" type="submit" name="page" value={view.page - 1} disabled={view.page === 1}>
+							Previous
+						</button>
+						<span>{`Dependencies ${view.firstDependencyNumber}–${view.firstDependencyNumber + dependenciesOnPage.length - 1} of ${view.totalDependencies}`}</span>
+						<button
+							className="secondary"
+							type="submit"
+							name="page"
+							value={view.page + 1}
+							disabled={view.page === view.pages}
+						>
+							Next
+						</button>
+					</form>
 				</nav>
 			)}
 		</section>
@@ -105,12 +127,12 @@ function DependencyVersions({
 			<ul>
 				{group.targets.map((target) => (
 					<li key={target.to}>
-						{[...new Set(Object.values(target.from))].join(", ")} → {target.to} · {target.kind}{" "}
+						{toVersionChange(target)} · {target.kind}{" "}
 						{target.patch ? (
 							<Link href={`/r/${target.patch.inspectionId}#patch-${target.patch.sha256}`}>View tested patch</Link>
 						) : (
 							<button type="button" disabled={pending} onClick={() => onSelect(target)}>
-								Get upgrade
+								Test upgrade
 							</button>
 						)}
 						<ReleaseFeatures upgradeMenuId={upgradeMenuId} target={target} />
@@ -120,6 +142,9 @@ function DependencyVersions({
 		</article>
 	)
 }
+
+// Give other visitors room in the server's eight concurrent release lookups.
+const releaseLookups = Array.from({ length: 4 }, () => Promise.resolve())
 
 function ReleaseFeatures({
 	upgradeMenuId,
@@ -143,14 +168,18 @@ function ReleaseFeatures({
 		let timer: ReturnType<typeof setTimeout> | undefined
 		let retries = 0
 		function start(): void {
-			void load().catch(() => {
-				if (!controller.signal.aborted) {
-					setError(true)
-				}
-			})
+			const available = releaseLookups.shift()!
+			releaseLookups.push(
+				available.then(load).catch(() => {
+					if (!controller.signal.aborted) {
+						setError(true)
+					}
+				}),
+			)
 		}
 
 		async function load(): Promise<void> {
+			controller.signal.throwIfAborted()
 			setError(false)
 			const response = await fetch(`/api/inspections/${upgradeMenuId}/features?${parameters}`, {
 				signal: controller.signal,
@@ -228,7 +257,7 @@ function ReleaseFeatures({
 
 			{/* navigation for this version's release features */}
 			{(loadedOffset > 0 || preview.nextOffset !== null) && (
-				<nav className="buttons" aria-label={`Features for ${target.dependency} ${target.to}`}>
+				<nav className="pager" aria-label={`Features for ${target.dependency} ${target.to}`}>
 					<button
 						type="button"
 						className="secondary"

@@ -31,7 +31,7 @@ Each stable Inspection Report URL SHALL show a summary, Repository, pinned commi
 
 ### Requirement: Shareable report HTML
 
-The server SHALL deliver the report content, canonical URL, Open Graph title, URL and description, and Twitter summary card metadata in the first HTML response. The summary SHALL expose Copy link and Share.
+The server SHALL deliver the report content, canonical URL, Open Graph title, URL and description, and Twitter summary card metadata in the first HTML response. The summary SHALL offer Copy link and Share under the secondary “Share report” control.
 
 #### Scenario: A crawler opens the shared link
 
@@ -45,7 +45,7 @@ The server SHALL deliver the report content, canonical URL, Open Graph title, UR
 
 ### Requirement: Immutable Patch delivery
 
-The site SHALL publish tested Patches for public Repositories when GitHub detects any OSI-approved license at the inspected commit, including copyleft licenses. Each published Patch SHALL have a permanent URL containing the SHA-256 digest of its exact bytes. The “Copy patch instructions” button SHALL compose the library’s agent prompt with the Patch URL, digest, base commit, application order and directions to verify each digest before applying.
+The site SHALL publish tested Patches for public Repositories when GitHub detects any OSI-approved license at the inspected commit, including copyleft licenses. Each published Patch SHALL have a permanent URL containing the SHA-256 digest of its exact bytes. When a published Patch is available, the primary “Copy prompt to apply patch” button SHALL compose the library’s agent prompt with the Patch URL, digest, base commit, application order and directions to verify each digest before applying.
 
 #### Scenario: Download and verify
 
@@ -55,12 +55,17 @@ The site SHALL publish tested Patches for public Repositories when GitHub detect
 #### Scenario: Copyleft at the inspected commit
 
 - **WHEN** GitHub detects an OSI-approved AGPL, GPL or MPL license at the inspected commit and a tested Patch exists
-- **THEN** the report publishes the Patch and offers “Copy patch instructions” even if the default branch now has a different license
+- **THEN** the report publishes the Patch and offers “Copy prompt to apply patch” even if the default branch now has a different license
 
 #### Scenario: Findings-only publication
 
 - **WHEN** GitHub detects no OSI-approved license or its detection is ambiguous or unavailable at the inspected commit
 - **THEN** the report explains why only findings are published and exposes no Patch bytes, Patch URLs or application prompts through any public surface
+
+#### Scenario: An inspection stops early without a tested patch
+
+- **WHEN** checks stop early and the report contains no published Patch
+- **THEN** the primary “Copy prompt to investigate” action includes available check results and the Inspection Report URL for the downstream agent
 
 ### Requirement: Continue in a coding agent
 
@@ -69,7 +74,7 @@ The report SHALL provide a next step for Claude Code or Codex, with links to Hea
 #### Scenario: Continue with or without MCP
 
 - **WHEN** a visitor opens the next step
-- **THEN** they see setup and signup destinations, and “Copy patch instructions” supports direct Patch retrieval with an MCP alternative when its retrieval tool is available
+- **THEN** they see setup and signup destinations, and “Copy prompt to apply patch” supports direct Patch retrieval with an MCP alternative when its retrieval tool is available
 
 ### Requirement: Display the prompts used
 

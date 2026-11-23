@@ -163,7 +163,7 @@ test("stored version 1 and version 2 reports show agent startup only with explic
 		// check the visible startup and patch controls for each version
 		const html = await (await app.request(`/r/${id}`)).text()
 		expect(html.includes("Agent started with its real key withheld")).toBe(report.version === 2)
-		expect(html.includes("Copy patch instructions")).toBe(report.version === 2)
+		expect(html.includes("Copy prompt to apply patch")).toBe(report.version === 2)
 	}
 
 	// require an attributed sandbox event for feature adoption
@@ -209,7 +209,7 @@ test("reports distinguish empty findings from incomplete recordings and share th
 
 			// compare the page and share titles with the observed counts
 			const summary = `1 upgrade inspected, 1 feature patch, ${findings.length} connections blocked during install`
-			expect(html).toContain(`<h1>${summary}</h1>`)
+			expect(html).toContain(`<p>${summary}</p>`)
 			expect(html).toContain(`property="og:title" content="Health Code: ${summary}"`)
 			expect(html).toContain(`name="twitter:title" content="Health Code: ${summary}"`)
 		}

@@ -1,16 +1,10 @@
-import {
-	dependenciesPerPage,
-	InspectionError,
-	toFeaturePage,
-	toRepositoryUrl,
-	toUpgradeMenu,
-	type UpgradeMenuTarget,
-} from "health-code"
+import { InspectionError, toFeaturePage, toRepositoryUrl, toUpgradeMenu, type UpgradeMenuTarget } from "health-code"
 import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { HTTPException } from "hono/http-exception"
 import { renderToStaticMarkup, renderToString } from "react-dom/server"
 import { adminPage } from "./adminPage.tsx"
+import { buildReportInvestigationPrompt } from "./buildReportInvestigationPrompt.ts"
 import type { Inspections } from "./executeInspection.ts"
 import type { InspectionChoice } from "./inspectionSource.ts"
 import { SiteError } from "./inspectionSource.ts"
@@ -25,7 +19,7 @@ function render(props: PageProps, assets: Assets): string {
 	// describe the inspected revision in the page metadata
 	const report = props.snapshot?.card
 	const title = props.upgradeMenu
-		? "Health Code · Choose a dependency upgrade"
+		? "Health Code · Upgrade a dependency"
 		: report
 			? `Health Code: ${toSummary(report)}`
 			: "Health Code · Dependency inspections"
@@ -36,6 +30,7 @@ function render(props: PageProps, assets: Assets): string {
 		<head>
 			{/* document metadata and canonical address */}
 			<meta charSet="utf-8" />
+			<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
 			<meta name="viewport" content="width=device-width,initial-scale=1" />
 			<title>{title}</title>
 			<link rel="canonical" href={props.url} />
@@ -125,14 +120,14 @@ function toUpgradeMenuView(
 	}
 
 	// Keep search and sorting in the upgrade menu URL across reloads and browser navigation.
-	const order = query.order === "alphabetical" || query.order === "workspaces" ? query.order : "minor"
+	const order = query.order === "alphabetical" || query.order === "minor" ? query.order : "workspaces"
 	const search = query.search?.slice(0, 256) ?? ""
 	const readyOnly = query.ready === "on"
 	const groups = toUpgradeMenu(targets, { order, search, readyOnly })
 
-	// Load release evidence only for the dependencies on this page.
-	const size = dependenciesPerPage
-	const pages = Math.max(1, Math.ceil(groups.length / size))
+	// Paginate after sorting and filtering the full dependency list.
+	const dependenciesPerPage = 5
+	const pages = Math.max(1, Math.ceil(groups.length / dependenciesPerPage))
 	const requested = Number(query.page)
 	const page = Number.isSafeInteger(requested) ? Math.min(pages, Math.max(1, requested)) : 1
 	return {
@@ -140,7 +135,9 @@ function toUpgradeMenuView(
 		search,
 		readyOnly,
 		available: targets.length > 0,
-		choices: groups.slice((page - 1) * size, page * size),
+		totalDependencies: groups.length,
+		firstDependencyNumber: (page - 1) * dependenciesPerPage + 1,
+		dependenciesOnPage: groups.slice((page - 1) * dependenciesPerPage, page * dependenciesPerPage),
 		page,
 		pages,
 	}
@@ -308,23 +305,20 @@ export function createSite(options: {
 			}
 		}
 		const report = snapshot.card
-		const choices = toUpgradeMenuView(report?.upgradeMenu, context.req.query())
+		const upgradeMenuView = toUpgradeMenuView(report?.upgradeMenu, context.req.query())
 		const upgradeMenu =
-			report && choices
+			report && upgradeMenuView
 				? {
 						id,
-						view: choices,
+						view: upgradeMenuView,
 						commit: report.repository.commit,
 						repositoryUrl: report.repository.url,
 						issue: report.registryLookupIssue ?? report.stoppedReason ?? report.detection,
 					}
 				: undefined
-		return context.html(
-			render(
-				{ snapshot: upgradeMenu ? null : snapshot, upgradeMenu, siteMode, url: `${options.origin}/r/${id}` },
-				assets,
-			),
-		)
+		const url = `${options.origin}/r/${id}`
+		snapshot.investigationPrompt = buildReportInvestigationPrompt(snapshot, url)
+		return context.html(render({ snapshot: upgradeMenu ? null : snapshot, upgradeMenu, siteMode, url }, assets))
 	})
 
 	// Load version-specific upstream features for each visible target on the dependency page.

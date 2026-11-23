@@ -17,7 +17,7 @@ const metadata = z.strictObject({
 	updated: z.iso.date(),
 })
 
-function bundledSource(name: PromptName): string {
+function bundledSource(name: PromptName | "investigateInspection"): string {
 	return readFileSync(new URL(`../prompts/${name}.md`, import.meta.url), "utf8")
 }
 
@@ -25,7 +25,20 @@ export function credentialProbePrompt(): string {
 	return readTemplate("verifyCredential", bundledSource("verifyCredential")).body
 }
 
-function readTemplate(name: PromptName, source: string | undefined): Template {
+let investigationTemplateBody: string | undefined
+
+/**
+ * Reads and caches the bundled investigation instructions.
+ */
+export function readInvestigationPromptTemplate(): string {
+	investigationTemplateBody ??= readTemplate("investigateInspection", bundledSource("investigateInspection")).body
+	return investigationTemplateBody
+}
+
+function readTemplate<Name extends PromptName | "investigateInspection">(
+	name: Name,
+	source: string | undefined,
+): { body: string; reference: { name: Name; version: number; sha256: string } } {
 	// Reject malformed templates before any paid operation.
 	if (typeof source !== "string" || Buffer.byteLength(source) > 128000) {
 		throw new Error(`Invalid prompt source for ${name}`)

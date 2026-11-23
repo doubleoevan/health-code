@@ -248,10 +248,13 @@ export class InspectionStore {
 				report.registryLookupIssue = "Couldn’t list available upgrades: registry lookup failed."
 			}
 
+			const choice = this.choice(id)
 			return {
 				id: row.id,
 				state: row.state,
 				position: this.position(id),
+				mode: choice?.mode,
+				selectedDependencyUpgrade: choice?.upgrade,
 				message: row.message,
 				repositoryUrl: row.repositoryUrl,
 				events,

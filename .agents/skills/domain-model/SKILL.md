@@ -39,7 +39,7 @@ Use **Direct replacement** or **Inferred replacement** for a Code Feature Match.
 
 The **Final patch check** produces **Patch verification**. Label the artifact **Download patch** and identify **Applies to commit**, **Tested commit** and **Required upgrade patch**. Report **Added dependencies**, **Installed size change** and **Why no tested patch is available** when recorded.
 
-Use **Usage as of** (`usageAsOf`) for the timestamp through which the Inspection Report measures runtime usage. An unconfirmed deletion can accrue additional cost after that time.
+Use **Usage measured through** (`usageAsOf`) for the timestamp through which the Inspection Report measures runtime usage. An unconfirmed deletion can accrue additional cost after that time.
 
 Separate **Model cost** from **Reserved upper bound** and label measured reply tokens **Output tokens**.
 
