@@ -294,6 +294,12 @@ article header {
 .button-row {
 	margin-block: var(--inline-gap);
 }
+
+/* match the gap between the stacked input and button */
+.challenge {
+	margin-top: var(--inline-gap);
+	text-align: center;
+}
 :where(.field) input {
 	min-width: 0;
 	flex: 1;

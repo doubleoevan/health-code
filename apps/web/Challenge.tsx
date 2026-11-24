@@ -50,5 +50,5 @@ export function Challenge({
 			script.remove()
 		}
 	}, [siteKey, onToken, onFailure])
-	return <div ref={element} />
+	return <div className="challenge" ref={element} />
 }
