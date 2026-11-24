@@ -1,6 +1,10 @@
 import assert from "node:assert/strict"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { test } from "node:test"
 import { fetchRegistryVersions } from "../guest/fetchRegistryVersions.ts"
+import { readReleaseAge } from "../guest/readReleaseAge.ts"
 
 import { type CommandResult, createFakeSandboxProvider, inspectRepository } from "../src/index.ts"
 import { buildTestCommand } from "../src/sandbox/executeTests.ts"
@@ -39,6 +43,66 @@ test("a 200-package registry lookup keeps sixteen workers busy and retains every
 	assert.deepEqual(requested.toSorted(), names.toSorted())
 	for (const name of names) {
 		assert.deepEqual(result[name], ["1.1.0"])
+	}
+})
+
+test("a minimum release age selects the newest release the repository would install", async () => {
+	const time = { "1.0.0": "2026-01-01", "1.1.0": "2026-02-01", "1.2.0": "2026-03-01" }
+	const versions = { "1.0.0": {}, "1.1.0": {}, "1.2.0": {}, "1.3.0": {} }
+	const accepted: Record<string, string | null> = {}
+	const result = await fetchRegistryVersions(["aged", "@scope/exempt"], {
+		releaseAge: { publishedBefore: Date.parse("2026-02-15"), excluded: ["@scope/*"] },
+		request: async (url, options) => {
+			const name = decodeURIComponent(new URL(url).pathname.slice(1))
+			accepted[name] = new Headers(options.headers).get("accept")
+			return Response.json({ versions, time })
+		},
+	})
+
+	// Missing publish dates stay ineligible, and exempt packages keep the smaller request.
+	assert.deepEqual({ ...result }, { aged: ["1.1.0"], "@scope/exempt": ["1.3.0"] })
+	assert.equal(accepted.aged, "application/json")
+	assert.equal(accepted["@scope/exempt"], "application/vnd.npm.install-v1+json")
+})
+
+test("release age reads each package manager's effective setting", () => {
+	const read = (
+		manager: "npm" | "pnpm" | "yarn",
+		settings: Record<string, string>,
+	): ReturnType<typeof readReleaseAge> => readReleaseAge(manager, ([name]) => settings[name ?? ""] ?? "undefined\n")
+	assert.equal(read("npm", { before: "null\n" }), undefined)
+	assert.equal(read("npm", { before: "2026-11-20T00:00:00.000Z\n" })?.publishedBefore, Date.parse("2026-11-20"))
+	assert.equal(read("pnpm", {}), undefined)
+	assert.equal(read("yarn", { npmMinimalAgeGate: "0\n" }), undefined)
+
+	// pnpm and yarn measure the age in minutes
+	for (const [manager, age, exclusions] of [
+		["pnpm", "minimumReleaseAge", "minimumReleaseAgeExclude"],
+		["yarn", "npmMinimalAgeGate", "npmPreapprovedPackages"],
+	] as const) {
+		const policy = read(manager, { [age]: "4320\n", [exclusions]: '["foo"]\n' })
+		assert.ok(Math.abs(Date.now() - 3 * 86_400_000 - (policy?.publishedBefore ?? 0)) < 5000)
+		assert.deepEqual(policy?.excluded, ["foo"])
+	}
+	assert.throws(() => read("pnpm", { minimumReleaseAge: "soon" }), /Unsupported minimum release age/)
+})
+
+test("release age reads Bun's project configuration in seconds", () => {
+	const root = mkdtempSync(join(tmpdir(), "health-code-"))
+	const directory = process.cwd()
+	try {
+		process.chdir(root)
+		assert.equal(readReleaseAge("bun"), undefined)
+
+		// Add a three-day policy with one exempt package.
+		writeFileSync("bunfig.toml", '[install]\nminimumReleaseAge = 259200\nminimumReleaseAgeExcludes = ["foo"]\n')
+		const policy = readReleaseAge("bun")
+		assert.ok(Math.abs(Date.now() - 259_200_000 - (policy?.publishedBefore ?? 0)) < 5000)
+		assert.deepEqual(policy?.excluded, ["foo"])
+	} finally {
+		// return to the test runner's directory before removing the fixture
+		process.chdir(directory)
+		rmSync(root, { recursive: true, force: true })
 	}
 })
 

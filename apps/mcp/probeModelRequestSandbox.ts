@@ -51,7 +51,7 @@ export async function probeModelRequestSandbox({
 	} catch {
 		// Keep credential errors and upstream response bodies private.
 		failure = new UserError(
-			"Model Request Sandbox verification failed. Check the model and its pricing. Register the key for this origin with ANTHROPIC_API_KEY during setup.",
+			"Model Request Sandbox verification failed. Check the model and its pricing. Register the key for this origin with MODEL_API_KEY during setup.",
 		)
 	} finally {
 		try {

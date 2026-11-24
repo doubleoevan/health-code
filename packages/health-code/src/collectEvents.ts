@@ -6,6 +6,7 @@ import {
 	type InspectionOptions,
 	type Operation,
 	type Stage,
+	type WithSandboxProvider,
 } from "./contracts.ts"
 import { InspectionPrompts } from "./readPrompt.ts"
 
@@ -118,7 +119,7 @@ export class InspectionContext {
 	setupComplete = false
 	upgradeId?: string
 	constructor(
-		readonly options: InspectionOptions,
+		readonly options: InspectionOptions & WithSandboxProvider,
 		private readonly observe?: (event: InspectionEvent) => () => Promise<void>,
 		reserveCleanupGrace = false,
 	) {

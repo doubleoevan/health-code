@@ -20,7 +20,7 @@ The engine SHALL capture install, applicable typecheck, and test results at the 
 
 #### Scenario: Broken Baseline install
 
-- **WHEN** frozen install fails
+- **WHEN** frozen install fails and any retry without install scripts also fails
 - **THEN** the report lists each selected upgrade as skipped and explains why
 
 #### Scenario: Broken Baseline build
@@ -78,7 +78,7 @@ An Upgrade Check SHALL bump, install, typecheck, and test a single candidate fro
 
 ### Requirement: Assign one evidence-backed Verdict
 
-Each version 2 Upgrade SHALL receive one of Passes as is, Fixed, Fixed with test changes, Can't fix or Untested. The Verdict SHALL retain the named test failures already present in the Baseline, the original Check Result, and the final evidence. Both fixed outcomes SHALL identify each added dependency, version, rationale and commit. An unsuccessful adoption SHALL preserve the verified upgrade outcome.
+Each version 2 Upgrade SHALL receive one of Passes as is, Fixed, Fixed with test changes, Can't fix or Untested. The Verdict SHALL retain the named test failures already present in the Baseline, the original Check Result, and the final evidence. Both fixed outcomes SHALL identify each added or jointly upgraded dependency, version, rationale and commit. An unsuccessful adoption SHALL preserve the verified upgrade outcome.
 
 #### Scenario: Green upgrade plus accepted feature
 

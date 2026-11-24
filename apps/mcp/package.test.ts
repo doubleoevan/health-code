@@ -8,6 +8,7 @@ import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { Client } from "@modelcontextprotocol/client"
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio"
+import { modelSettings } from "./fixtures/inspectionSettings.ts"
 import { toHash } from "./storeInspection.ts"
 
 const expectedTools = [
@@ -57,7 +58,8 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		USERPROFILE: home,
 		npm_config_offline: "true",
 		npm_config_cache: join(scratch, "cache"),
-		ANTHROPIC_API_KEY: modelKey,
+		...modelSettings,
+		MODEL_API_KEY: modelKey,
 		RUNTA_TOKEN: "fixture-token",
 	}
 	const fixture = new URL("./fixtures/modelRequestSandboxInspection.ts", import.meta.url).href
@@ -79,7 +81,9 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			command,
 			args,
 			cwd,
-			env: tokenOnly ? { HOME: home, PATH: settings.PATH, RUNTA_TOKEN: token } : { ...settings, RUNTA_TOKEN: token },
+			env: tokenOnly
+				? { ...modelSettings, HOME: home, PATH: settings.PATH, RUNTA_TOKEN: token }
+				: { ...settings, RUNTA_TOKEN: token },
 			stderr: "pipe",
 		})
 
@@ -264,9 +268,9 @@ test("packed Node MCP tools support offline inspection and durable results", { t
    // verify registration against the account's named secret endpoint
    assert.match(url.pathname,/^\\/v2\\/secrets\\/health-code-model-/)
    assert.equal(options.method,"PUT")
-   assert.equal(JSON.parse(options.body).value,process.env.ANTHROPIC_API_KEY)
+   assert.equal(JSON.parse(options.body).value,process.env.MODEL_API_KEY)
    const failure=process.env.FIXTURE_DENIED==="yes"
-   return Response.json(failure?{message:process.env.ANTHROPIC_API_KEY}:{data:{name:"registered"}},{status:failure?403:200})
+   return Response.json(failure?{message:process.env.MODEL_API_KEY}:{data:{name:"registered"}},{status:failure?403:200})
  }
  `,
 		)

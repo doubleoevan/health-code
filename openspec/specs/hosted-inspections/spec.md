@@ -31,7 +31,7 @@ The site SHALL return a durable ID before starting an admitted cache miss and en
 #### Scenario: Worker dispatches a selected upgrade
 
 - **WHEN** the worker calls the public library API
-- **THEN** it passes configured limits, the Runta secret name for the model key and an optional GitHub token. Opus 5.5 handles summaries and matching. Fable 5.2 handles selected upgrade repair and adoption.
+- **THEN** it passes configured limits, the Runta secret name for the model key and an optional GitHub token. It reads the same model settings as the MCP and chooses no model itself. A missing model setting keeps the worker from starting. A directly configured site names the setting. A site that loads settings at runtime keeps serving reports and retries.
 
 #### Scenario: Concurrent submissions
 
@@ -173,7 +173,7 @@ The hosted deployment SHALL periodically reconcile all its runtime inventory pag
 
 ### Requirement: Browse before testing
 
-The site SHALL discover eligible upgrade targets at a pinned commit before installing dependencies or invoking an agent. The upgrade menu SHALL show one row per dependency, searchable by name, with the most declaring workspaces first by default. Visitors may choose alphabetical order or minor upgrades first. The Tested patch available filter SHALL show only targets with published upgrade patches.
+The site SHALL discover eligible upgrade targets at a pinned commit before installing dependencies or invoking an agent. The upgrade menu SHALL show one row per dependency, searchable by name, with the most declaring workspaces first by default. Visitors may choose alphabetical order or minor upgrades first. The Tested patch available filter SHALL appear when the menu has a published upgrade patch and SHALL show only targets with one.
 
 #### Scenario: Choose one target
 

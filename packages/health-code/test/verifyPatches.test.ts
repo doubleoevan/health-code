@@ -6,6 +6,9 @@ import { type PatchReplay, replayPatch } from "./replayPatch.ts"
 
 const verdicts: Record<PatchReplay, Verdict> = {
 	dependency: "Fixed",
+	linked: "Fixed",
+	"linked-downgrade": "Can't fix",
+	"linked-duplicate": "Can't fix",
 	"install-break": "Fixed",
 	"unresolved-lock": "Can't fix",
 	"new-test": "Fixed",
@@ -25,7 +28,7 @@ for (const [mode, verdict] of Object.entries(verdicts)) {
 		assert.equal(report.verdict, verdict, report.diagnosis?.stopReason ?? "")
 		assert.equal(
 			report.patches.length,
-			["passes", "repair", "test", "new-test", "dependency", "install-break"].includes(mode) ? 1 : 0,
+			["passes", "repair", "test", "new-test", "dependency", "linked", "install-break"].includes(mode) ? 1 : 0,
 		)
 
 		// verify the stop reason when lockfile recovery fails
@@ -47,6 +50,22 @@ for (const [mode, verdict] of Object.entries(verdicts)) {
 			assert.equal(report.patches[0]?.commits[1]?.flag, "dependency")
 			assert.equal(report.newDependencies[0]?.commit, report.patches[0]?.commits[1]?.sha)
 			assert.equal(report.newDependencies[0]?.reason, "Replace the removed module")
+		}
+
+		// verify that linked dependencies share one commit and refuse older versions
+		if (mode === "linked") {
+			const commit = report.patches[0]?.commits[1]
+			assert.equal(commit?.subject, "build: upgrade linked-a 2.0.0, linked-b 2.0.0")
+			assert.deepEqual(
+				report.newDependencies.map((entry) => [entry.name, entry.from, entry.commit]),
+				["linked-a", "linked-b"].map((name) => [name, { ".": "1.0.0" }, commit?.sha]),
+			)
+		}
+		if (mode === "linked-downgrade") {
+			assert.match(report.diagnosis?.actions.join() ?? "", /must be newer than its installed version/)
+		}
+		if (mode === "linked-duplicate") {
+			assert.match(report.diagnosis?.actions.join() ?? "", /can be requested once per turn/)
 		}
 
 		// check that unexpected egress and unverified credentials limit the attempt
@@ -73,11 +92,11 @@ for (const adoption of ["simplify", "decline", "no-benefit"] as const) {
 			assert.equal(report.patches[1]?.prerequisite, report.patches[0]?.id)
 			assert.match(
 				report.patches[1]?.prompt ?? "",
-				/keep your current branch if the prerequisite upgrade patch is already applied/,
+				/keep your current branch if the required upgrade patch is already applied/,
 			)
 			assert.match(
 				report.patches[1]?.prompt ?? "",
-				/create a branch at the inspected commit and apply the prerequisite upgrade patch first/,
+				/create a branch at the inspected commit and apply the required upgrade patch first/,
 			)
 			assert.equal(match?.disposition, "adopted")
 		}

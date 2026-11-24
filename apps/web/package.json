@@ -3,9 +3,9 @@
 	"private": true,
 	"type": "module",
 	"dependencies": {
-		"@ai-sdk/anthropic": "4.0.105",
 		"health-code": "workspace:*",
 		"hono": "4.13.19",
+		"prism-react-renderer": "2.4.1",
 		"react": "19.3.1",
 		"react-dom": "19.3.1",
 		"spdx-license-list": "6.12.0",

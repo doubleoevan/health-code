@@ -5,10 +5,11 @@ import { buildPrompt, parseAnswer } from "./buildPrompt.ts"
 import { sections } from "./bumpManifest.ts"
 import { redact, rethrowInspectionFailure } from "./collectEvents.ts"
 import { SandboxUnavailableError } from "./contracts.ts"
+import { fitAgentPrompt } from "./fitAgentPrompt.ts"
 import type { ModelInspection } from "./inspectModels.ts"
 import { measureFeature } from "./measureFeature.ts"
-import { attemptBudget } from "./modelBudget.ts"
-import { type decision, readDecision } from "./proposeEdits.ts"
+import { attemptBudget, requestOverheadBytes } from "./modelBudget.ts"
+import { type decision, editToolBytes, readDecision } from "./proposeEdits.ts"
 import { requestAgentTurn } from "./requestAgentTurn.ts"
 import {
 	cleanInstall,
@@ -29,7 +30,10 @@ export async function attemptUpgrade(
 	// choose the role and its budget from the upgrade evidence
 	const { report } = evidence
 	const manifest = JSON.parse(await workspace(evidence, { kind: "read", file: "package.json", revision: state.tip }))
-	const declaredDependencies = Object.assign({}, ...sections.map((section) => manifest[section] ?? {}))
+	const declaredDependencies = {
+		...Object.assign({}, ...sections.map((section) => manifest[section] ?? {})),
+		...toInstalledVersions(evidence),
+	}
 	const role = match ? "featureAdoption" : "repair"
 	const budget = attemptBudget(role, engine.options.limits)
 	evidence.context.attemptEnd = budget.end
@@ -57,9 +61,10 @@ export async function attemptUpgrade(
 		turn++
 
 		// include prior attempts and pinned source evidence in the request
-		const prompt = await buildPrompt(
-			role,
-			{
+		const prompt = await fitAgentPrompt({
+			build: (material) => buildPrompt(role, material, evidence.context.prompts),
+			maxBytes: engine.options.models[role].pricing.maxInputTokens - editToolBytes - requestOverheadBytes,
+			evidence: {
 				requestedTests: state.requestedTests,
 				diagnostics,
 				lastEvidence,
@@ -75,8 +80,7 @@ export async function attemptUpgrade(
 				match,
 				files: Object.fromEntries([...state.files].filter(([file]) => !testFiles.has(file))),
 			},
-			evidence.context.prompts,
-		)
+		})
 
 		// request the next bounded model turn
 		const answer = await requestAgentTurn({ engine, evidence, role, prompt, started, budget })
@@ -119,6 +123,15 @@ export async function attemptUpgrade(
 	throw new Error("No verified repair within the attempt limits")
 }
 
+// list installed versions for direct dependencies in every workspace
+function toInstalledVersions({ adapter }: PatchEvidence): Record<string, string> {
+	return Object.fromEntries(
+		Object.entries(adapter.project?.sources ?? {}).map(([name, versions]) => [
+			name,
+			[...new Set(Object.values(versions))].join(", "),
+		]),
+	)
+}
 function discoveredTests(verificationInputs?: PatchVerificationInputs): Set<string> {
 	return new Set(verificationInputs?.discoveredTestFiles ?? verificationInputs?.cases.map((entry) => entry[0]))
 }
@@ -186,8 +199,8 @@ async function readRequestedEvidence({
 
 	// restrict requested test reads to the baseline inventory
 	if (edit.readTests) {
-		if (!edit.readTests.every((file) => testFiles.has(file))) {
-			throw new Error("Read requires a discovered Baseline test path")
+		if (!edit.readTests.every((file) => testFiles.has(file) || state.files.has(file))) {
+			throw new Error("Read requires a discovered Baseline test path or an omitted source file")
 		}
 		await loadAllowedFiles({ evidence, state, files: new Set(edit.readTests) })
 		state.requestedTests = Object.fromEntries(

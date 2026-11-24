@@ -132,7 +132,7 @@ function renderEvent(event: SiteEvent, id: string): ReactElement {
 		case "detail":
 			return <Output event={event} id={id} />
 		case "inspection.started":
-			return <span>Inspection started</span>
+			return <span>Health inspection started</span>
 		case "inspection.finished":
 			return <span>Inspection finished</span>
 		case "inspection.failed":

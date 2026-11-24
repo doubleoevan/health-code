@@ -35,6 +35,11 @@ export type PatchReplay =
 	| "unresolved-lock"
 	| "new-test"
 	| "dependency"
+	| "linked"
+	| "linked-downgrade"
+	| "linked-duplicate"
+
+	// select unsafe dependency changes
 	| "undeclared"
 	| "new-hook"
 
@@ -45,6 +50,43 @@ export type PatchReplay =
 	| "decline"
 	| "binding"
 	| "new-host"
+
+// identify replays that upgrade dependencies alongside the target
+function isLinkedReplay(mode: PatchReplay): boolean {
+	return mode.startsWith("linked")
+}
+
+// list the dependencies the fixture reply asks to change
+function toRequestedDependencies(mode: PatchReplay): { name: string; version: string; reason: string }[] {
+	if (isLinkedReplay(mode)) {
+		const version = mode === "linked-downgrade" ? "0.9.0" : "2.0.0"
+		const names = mode === "linked-duplicate" ? ["linked-a", "linked-a"] : ["linked-a", "linked-b"]
+		return names.map((name) => ({ name, version, reason: "Move with widget" }))
+	}
+
+	// add a dependency the project does not declare
+	return ["dependency", "undeclared", "new-hook"].includes(mode)
+		? [{ name: "replacement", version: "2.0.0", reason: "Replace the removed module" }]
+		: []
+}
+
+// declare the linked dependencies only for their replays
+function toOriginalTree(mode: PatchReplay): typeof origin {
+	const linked = '{"dependencies":{"widget":"1.0.0","linked-a":"^1.0.0","linked-b":"^1.0.0"}}'
+	return isLinkedReplay(mode) ? { ...origin, "package.json": linked } : { ...origin }
+}
+
+// list versions after the requested dependency change
+function toRefreshedVersions(mode: PatchReplay): Record<string, string> {
+	return isLinkedReplay(mode) ? { "linked-a": "2.0.0", "linked-b": "2.0.0" } : { replacement: "2.0.0" }
+}
+
+// list versions before the linked upgrade
+function toLinkedSources(mode: PatchReplay): Record<string, Record<string, string>> {
+	return isLinkedReplay(mode) ? { "linked-a": { ".": "1.0.0" }, "linked-b": { ".": "1.0.0" } } : {}
+}
+
+// build the fixture model reply
 function repairReply(mode: PatchReplay): { text: string; modelId: string; inputTokens: number; outputTokens: number } {
 	// choose a production edit or a change to the test expectation
 	const change =
@@ -60,9 +102,7 @@ function repairReply(mode: PatchReplay): { text: string; modelId: string; inputT
 				mode === "test"
 					? { source: "https://example.org/notes", quote: "api now returns new instead of old", symbol: "api" }
 					: undefined,
-			dependencies: ["dependency", "undeclared", "new-hook"].includes(mode)
-				? [{ name: "replacement", version: "2.0.0", reason: "Replace the removed module" }]
-				: [],
+			dependencies: toRequestedDependencies(mode),
 
 			// vary the proposed edit set to cover a declined repair and added coverage
 			edits:
@@ -126,7 +166,8 @@ export async function replayPatch(
 	const sandbox = await provider.createSandbox("fixture", { timeoutMs: 1000 })
 	await provider.setNetworkPolicy(sandbox, registryHosts, { timeoutMs: 1000 })
 	let restoredTip: string | undefined
-	let tree: Record<string, string> = { ...origin }
+	const start = toOriginalTree(mode)
+	let tree: Record<string, string> = { ...start }
 	const history = new Map([[base, { ...tree }]])
 
 	// track edits separately from committed file snapshots
@@ -210,7 +251,8 @@ export async function replayPatch(
 	const context = new InspectionContext(options)
 	const engine = new ModelInspection({ ...options, models })
 	const adapter = new NodeAdapter(context, sandbox)
-	adapter.project = { manager: "npm", version: "1", sources: {}, skipped: [], typecheck: "check", environment: [] }
+	const sources = toLinkedSources(mode)
+	adapter.project = { manager: "npm", version: "1", sources, skipped: [], typecheck: "check", environment: [] }
 
 	// seed the upgrade report with the chosen initial failure
 	const installBreak = mode === "install-break" || mode === "unresolved-lock"
@@ -261,12 +303,12 @@ export async function replayPatch(
 
 	// restore the original tree for each clean trial
 	adapter.resetProject = async (): Promise<void> => {
-		tree = { ...origin }
+		tree = { ...start }
 	}
 
 	// replay the upgrade install and its observed network scope
 	adapter.bumpDependency = async () => {
-		tree["package.json"] = '{"dependencies":{"widget":"2.0.0"}}'
+		tree["package.json"] = (tree["package.json"] ?? "").replace('"widget":"1.0.0"', '"widget":"2.0.0"')
 		return { check: installBreak ? failed : green, observation: scope }
 	}
 
@@ -281,7 +323,7 @@ export async function replayPatch(
 		assert.ok(restoredTip, "Dependency refresh requires a restored candidate")
 		const expected = { ...history.get(restoredTip) }
 		const manifest = JSON.parse(expected["package.json"] ?? "{}")
-		manifest.dependencies.replacement = "2.0.0"
+		Object.assign(manifest.dependencies, toRefreshedVersions(mode))
 		assert.deepEqual(JSON.parse(tree["package.json"] ?? "{}"), manifest)
 		assert.deepEqual(tree, { ...expected, "package.json": tree["package.json"] })
 

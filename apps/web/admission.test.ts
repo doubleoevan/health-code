@@ -247,6 +247,52 @@ test("a budget refusal links to MCP and explains the UTC reset on the home page"
 	store.database.close()
 })
 
+test("the hosted header counts the demo calls left for the visitor and network", async () => {
+	const store = new InspectionStore(":memory:")
+	const launch = new LaunchService(
+		{
+			HEALTH_CODE_DAILY_DEMO_LIMIT: "2",
+			HEALTH_CODE_LIMITS_TOKEN: "fixture",
+			HEALTH_CODE_VISITOR_KEY: "k".repeat(32),
+			TURNSTILE_SITE_KEY: "fixture",
+			TURNSTILE_SECRET_KEY: "fixture",
+		},
+		false,
+	)
+	let available = true
+	Object.defineProperty(launch.settings, "available", { get: () => available })
+
+	// Render the hosted home page for one network address.
+	const worker = new Inspections(store, createReplaySource(), 2, launch)
+	const origin = "https://example.test"
+	const app = createSite({ inspections: worker, origin, replay: false, assets: { script: "/client.js", styles: [] } })
+	const headers = { "x-envoy-external-address": "203.0.113.1" }
+	const readHeader = async (init?: RequestInit): Promise<string | undefined> =>
+		/<small>(.*?)<\/small>/.exec(await (await app.request(origin, init)).text())?.[1]?.replaceAll("<!-- -->", "")
+	assert.equal(await readHeader({ headers }), "2 demo calls left")
+
+	// Spend the allowance from the same network and check each label.
+	const { identity } = identifyVisitor(new Request(origin, { headers }), launch.visitorKey, false)
+	for (const expected of ["1 demo call left", "0 demo calls left"]) {
+		store.admission.admit({
+			key: expected,
+			head: { repositoryId: "1", sizeKiB: 1, revision: "a".repeat(40) },
+			limits: launch.settings.current,
+			identity,
+			now: Date.now(),
+			enqueue: () => store.enqueue(replayRepositoryUrl),
+		})
+		assert.equal(await readHeader({ headers }), expected)
+	}
+	assert.equal(await readHeader({ headers: { "x-envoy-external-address": "203.0.113.2" } }), "2 demo calls left")
+
+	// Hide the label when the visitor or the limits are unknown.
+	assert.equal(await readHeader(), undefined)
+	available = false
+	assert.equal(await readHeader({ headers }), undefined)
+	store.database.close()
+})
+
 test("a challenge must belong to the site and the inspection action", async () => {
 	const verify = (success: boolean, hostname: string, action: string): Promise<void> =>
 		verifyChallenge("test", "test", "runhealthcode.dev", async () => Response.json({ success, hostname, action }))

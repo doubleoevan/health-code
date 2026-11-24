@@ -4,6 +4,7 @@ import { InspectionError } from "health-code"
 import { createLocalSiteRuntime } from "./createLocalSiteRuntime.ts"
 import { createSite } from "./createSite.tsx"
 import { Inspections } from "./executeInspection.ts"
+import { modelSettings } from "./fixtures/modelSettings.ts"
 import { toLaunchLimits } from "./launchLimits.ts"
 import { LaunchService } from "./launchService.ts"
 import { AdmissionError, toUtcDay } from "./recordAdmissions.ts"
@@ -14,8 +15,8 @@ import { InspectionStore } from "./storeInspections.ts"
 test("local live submissions use their own queue even when the hosted allowances are zero", async () => {
 	const environment = {
 		RUNTA_TOKEN: "fixture",
-		ANTHROPIC_API_KEY: "fixture",
-		HEALTH_CODE_STORED_CREDENTIAL: "fixture",
+		MODEL_API_KEY: "fixture",
+		...modelSettings,
 		HEALTH_CODE_DATABASE: ":memory:",
 		HEALTH_CODE_DAILY_DEMO_LIMIT: "0",
 		HEALTH_CODE_DAILY_COST_USD: "0",

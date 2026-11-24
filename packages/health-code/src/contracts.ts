@@ -48,6 +48,7 @@ export type CheckResult = (
 	| { status: "failed"; evidence: Evidence[]; failingTests: TestFailure[] }
 	| { status: "untested"; reason: string; detail?: string; evidence: Evidence[] }
 ) & {
+	installScriptsSkipped?: true
 	inventory?: Omit<TestInventory, "cases">
 	inventoryUnavailable?: string
 
@@ -119,6 +120,7 @@ export type Command = {
 	timeoutMs: number
 	observe?: boolean | "network"
 	environment?: string[]
+	environmentValues?: Readonly<Record<string, string>>
 	signal?: AbortSignal
 }
 
@@ -167,19 +169,21 @@ export type InspectionOptions = InspectionModeOptions & {
 	revision?: string
 	prompts?: import("./readPrompt.ts").PromptOverrides
 	telemetry?: import("@opentelemetry/api").Tracer
-	sandboxProvider: SandboxProvider
+	sandboxProvider?: SandboxProvider
 
 	// Caller-supplied presentation and execution settings.
 	limits?: InspectionLimits
 	onEvent?: (event: InspectionEvent) => void | Promise<void>
 	includeTestInventory?: boolean
-	applicationEnvironment?: "empty" | "placeholders"
+	applicationEnvironment?: "empty" | "placeholders" | Readonly<Record<string, string>>
 
 	// optionally pin an upgrade and supply role configuration
 	upgrade?: { dependency: string; from: string | Record<string, string>; to: string }
 	models?: Readonly<Record<string, string>>
 	signal?: AbortSignal
 }
+
+export type WithSandboxProvider = { sandboxProvider: SandboxProvider }
 
 export type Baseline = { install: CheckResult; typecheck: CheckResult; tests: CheckResult }
 

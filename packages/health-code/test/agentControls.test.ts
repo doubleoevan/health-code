@@ -104,7 +104,12 @@ test("Bun counts case failures separately from files which failed to load", () =
 })
 
 test("test edits preserve existing assertions and identify a single changed expectation", async () => {
-	const { reviewTestEdit } = await import("../src/reviewTestEdit.ts")
+	const { reviewTestEdit: reviewEdit } = await import("../src/reviewTestEdit.ts")
+	const reviewTestEdit = (
+		before: string,
+		after: string,
+		citation?: { symbol: string; quote: string },
+	): ReturnType<typeof reviewEdit> => reviewEdit({ before, after, citation })
 	const before = 'test("existing", () => { expect(read()).toEqual("old") })'
 
 	// distinguish a changed expectation from additional coverage
@@ -162,6 +167,28 @@ test("test edits preserve existing assertions and identify a single changed expe
 	// reject skipped cases and empty test bodies
 	assert.throws(() => reviewTestEdit(before, before.replace("test(", "test.skip(")))
 	assert.throws(() => reviewTestEdit(before, before + '\ntest("empty",()=>{})'))
+})
+
+test("a repair can move a mocked path within the upgraded package", async () => {
+	const { reviewTestEdit } = await import("../src/reviewTestEdit.ts")
+	const before = `vi.mock("@novnc/novnc/lib/rfb.js", () => ({ default: class {} }))
+test("existing", () => { expect(read()).toEqual("old") })`
+	const review = (search: string, replacement: string, mockDependency?: string): string =>
+		reviewTestEdit({ before, after: before.replace(search, () => replacement), mockDependency }).kind
+
+	// accept the new entry point of the same package
+	assert.equal(review("novnc/lib/rfb.js", "novnc", "@novnc/novnc"), "mock")
+
+	// keep other modules, factories, assertions and adoptions locked
+	assert.throws(() => review("@novnc/novnc/lib/rfb.js", "@novnc/novnc-other", "@novnc/novnc"), /structure|literal/)
+	assert.throws(() => review("@novnc/novnc/lib/rfb.js", "./local", "@novnc/novnc"))
+	assert.throws(() => review("class {}", "null", "@novnc/novnc"))
+	assert.throws(() => review("vi.mock", "vi.unmock", "@novnc/novnc"))
+	assert.throws(() => review("novnc/lib/rfb.js", "novnc"))
+
+	// reject a moved path submitted with a changed expectation
+	const both = before.replace("novnc/lib/rfb.js", "novnc").replace('"old"', '"new"')
+	assert.throws(() => reviewTestEdit({ before, after: both, mockDependency: "@novnc/novnc" }), /structure/)
 })
 
 test("release intervals and host credentials stay scoped across pages and the package fallback", async () => {

@@ -7,6 +7,9 @@ import { sandboxModelCallTimeoutMs } from "./modelRequestSandbox.ts"
 import { type GenerationTelemetry, traceGeneration } from "./traceGeneration.ts"
 
 export const agentOutputTokens = 8192
+
+// reserve room for the protocol around each prompt
+export const requestOverheadBytes = 512
 const defaults = {
 	repair: { maxTurns: 40, maxDurationMs: 1_200_000, maxCostUsd: 4 },
 	featureAdoption: { maxTurns: 25, maxDurationMs: 600_000, maxCostUsd: 2 },
@@ -221,7 +224,7 @@ export function reserveCost(request: Pick<Request, "pricing" | "prompt" | "toolB
 
 	// Reserve the caller's bound for the entire encoded request, including protocol overhead.
 	// reject prompts that exceed the configured input ceiling
-	if (Buffer.byteLength(request.prompt) + 512 + (request.toolBytes ?? 0) > pricing.maxInputTokens) {
+	if (Buffer.byteLength(request.prompt) + requestOverheadBytes + (request.toolBytes ?? 0) > pricing.maxInputTokens) {
 		throw new InspectionError("input-limit", "Model input exceeds the route bound")
 	}
 	return Math.ceil(

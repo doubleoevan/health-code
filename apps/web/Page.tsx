@@ -1,9 +1,19 @@
 import type { UpgradeMenuTarget } from "health-code"
 import { type FormEvent, type KeyboardEvent, type ReactElement, useCallback, useEffect, useState } from "react"
 import { Challenge } from "./Challenge.tsx"
-import { CopyInvestigationPrompt, Link } from "./ReportControls.tsx"
+import { InspectionDetails } from "./InspectionDetails.tsx"
+import { TroubleshootingPrompt } from "./PromptBox.tsx"
+import { Copy, Link } from "./ReportControls.tsx"
 import { ReportView } from "./ReportView.tsx"
-import { mcpSetupUrl, replayRepositoryUrl, type SiteEvent, type Snapshot, toVersionChange } from "./report.ts"
+import {
+	mcpSetupUrl,
+	readmeUrl,
+	replayRepositoryUrl,
+	runtaSignupUrl,
+	type SiteEvent,
+	type Snapshot,
+	toVersionChange,
+} from "./report.ts"
 import { Timeline } from "./Timeline.tsx"
 import { UpgradeMenu, type UpgradeMenuView } from "./UpgradeMenu.tsx"
 
@@ -13,6 +23,7 @@ export type PageProps = {
 	snapshot: Snapshot | null
 	url: string
 	siteMode: "local" | "hosted" | "replay"
+	demoCallsLeft?: number
 }
 function handleRepositoryKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
 	const input = event.currentTarget
@@ -68,7 +79,7 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 			{upgradeMenu ? (
 				<>
 					<header className="inspection-heading">
-						<h1>Upgrade a dependency</h1>
+						<h1>Test an upgrade</h1>
 						<p className="mono">
 							<Link href={upgradeMenu.repositoryUrl}>{upgradeMenu.repositoryUrl.slice(19)}</Link> ·{" "}
 							{upgradeMenu.commit.slice(0, 8)}
@@ -89,8 +100,8 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 						<span>for new features</span>
 					</h1>
 					<p className="intro">
-						AI agents show you new dependency features. Test an upgrade on your codebase inside a Runta sandbox. The
-						network is locked, real keys stay outside, and successful upgrades return tested patches.
+						AI health inspectors show you new dependency features. Test an upgrade on your codebase inside a Runta
+						sandbox. The network is locked, real keys stay outside and successful upgrades return tested patches.
 					</p>
 
 					{/* repository inspection steps */}
@@ -197,10 +208,15 @@ function useSubmit(
 		[upgradeMenuId, setPending, setError, setOfferMcp, setVerification],
 	)
 }
+// omit the npm scope
+function toShortName(dependency: string): string {
+	return dependency.slice(dependency.indexOf("/") + 1)
+}
+
 function toInspectionHeading(snapshot: Snapshot, live: boolean): string {
 	if (live) {
 		if (snapshot.selectedDependencyUpgrade) {
-			return "Inspecting upgrade..."
+			return `Testing ${toShortName(snapshot.selectedDependencyUpgrade.dependency)} upgrade...`
 		}
 		return snapshot.mode === "listUpgrades" ? "Finding upgrades..." : "Inspecting repository..."
 	}
@@ -245,6 +261,7 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 	const status =
 		snapshot.message ??
 		(position ? `Queue position: ${position}` : live && !events.length ? "Queued for inspection" : null)
+	const isShimmering = live && (snapshot.selectedDependencyUpgrade || snapshot.mode === "listUpgrades")
 	return (
 		<>
 			{/* published report or live inspection status */}
@@ -252,14 +269,17 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 				<ReportView report={snapshot.card} url={url} investigationPrompt={snapshot.investigationPrompt} />
 			) : (
 				<header className="inspection-heading">
-					<h1>{toInspectionHeading(snapshot, live)}</h1>
+					{/* inspection title and repository */}
+					<h1 className={isShimmering ? "shimmer" : undefined}>{toInspectionHeading(snapshot, live)}</h1>
 					<p className="mono">
 						<Link href={snapshot.repositoryUrl}>{snapshot.repositoryUrl}</Link>
 						{snapshot.selectedDependencyUpgrade &&
 							` · ${snapshot.selectedDependencyUpgrade.dependency} ${toVersionChange(snapshot.selectedDependencyUpgrade)}`}
 					</p>
+
+					{/* queue status and troubleshooting prompt */}
 					{status && <p role="status">{status}</p>}
-					{snapshot.investigationPrompt && <CopyInvestigationPrompt text={snapshot.investigationPrompt} />}
+					{snapshot.investigationPrompt && <TroubleshootingPrompt text={snapshot.investigationPrompt} />}
 				</header>
 			)}
 
@@ -275,15 +295,38 @@ function Content(props: PageProps): ReactElement {
 		return <Home siteMode={props.siteMode} upgradeMenu={props.upgradeMenu} />
 	}
 	return snapshot ? (
-		<Inspection snapshot={snapshot} url={props.url} />
+		<>
+			<Inspection snapshot={snapshot} url={props.url} />
+
+			{/* supporting inspection details */}
+			{snapshot.card && <InspectionDetails report={snapshot.card} />}
+		</>
 	) : (
 		<Home siteMode={props.siteMode} paused={props.paused} />
+	)
+}
+function HeaderLink({ href, children }: { href: string; children: string }): ReactElement {
+	return (
+		<Link href={href}>
+			{children}
+			<svg
+				width="10"
+				height="10"
+				viewBox="0 0 10 10"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.5"
+				aria-hidden="true"
+			>
+				<path d="M1 9 9 1M2.5 1H9v6.5" />
+			</svg>
+		</Link>
 	)
 }
 export function Page(props: PageProps): ReactElement {
 	return (
 		<main>
-			{/* home link and inspection mode */}
+			{/* home link, inspection mode, project links and report link */}
 			<div className="mast">
 				<Link href="/">
 					<img className="mark" src="/assets/healthcode.png" width="40" height="40" alt="" />
@@ -292,7 +335,17 @@ export function Page(props: PageProps): ReactElement {
 					</span>
 				</Link>
 				{props.siteMode === "replay" && <small>Recorded example</small>}
-				{props.siteMode === "hosted" && <small>Hosted demo</small>}
+				{props.demoCallsLeft !== undefined && (
+					<small>
+						{props.demoCallsLeft} demo {props.demoCallsLeft === 1 ? "call" : "calls"} left
+					</small>
+				)}
+				<nav aria-label="Project">
+					<HeaderLink href={runtaSignupUrl}>Runta</HeaderLink>
+					<HeaderLink href={mcpSetupUrl}>MCP</HeaderLink>
+					<HeaderLink href={readmeUrl}>GitHub</HeaderLink>
+				</nav>
+				{props.snapshot?.card && !props.upgradeMenu && <Copy label="Copy report link" text={props.url} />}
 			</div>
 
 			{/* repository form or inspection view */}

@@ -2,9 +2,10 @@ import { createHash } from "node:crypto"
 import { z } from "zod"
 import type { CodeFeatureMatch, Patch } from "./agentContracts.ts"
 import { attemptUpgrade } from "./attemptUpgrade.ts"
-import { bumpManifest } from "./bumpManifest.ts"
+import { bumpManifest, toManifestPath } from "./bumpManifest.ts"
 import { redact, rethrowInspectionFailure } from "./collectEvents.ts"
 import { InspectionError, SandboxUnavailableError } from "./contracts.ts"
+import { formatManifest } from "./formatManifest.ts"
 import type { ModelInspection } from "./inspectModels.ts"
 import {
 	cleanInstall,
@@ -115,8 +116,9 @@ function acceptPatch({
 async function preparePatch(evidence: PatchEvidence, state: State, match?: CodeFeatureMatch): Promise<Patch> {
 	const { report } = evidence
 
-	// require an independently resolved initial lockfile
-	if (state.unresolvedBump) {
+	// require a lockfile resolved by the bump or a committed dependency change
+	const isResolved = !state.unresolvedBump || (state.dependencies.length > 0 && (await hasUpgradedVersions(evidence)))
+	if (!isResolved) {
 		throw new Error("The initial upgrade lockfile could not be independently resolved")
 	}
 	await orderCommits(evidence, state)
@@ -162,16 +164,17 @@ async function commitUpgrade(evidence: PatchEvidence, state: State): Promise<voi
 	}
 
 	// determine the workspace manifests and lockfile affected by the bump
-	const manifests = Object.keys(report.from).map((dir) => (dir === "." ? "package.json" : `${dir}/package.json`))
+	const manifests = Object.keys(report.from).map(toManifestPath)
 	const lock = trackedLockfile(evidence)
 	if (failedInstall) {
 		await adapter.resetProject()
 	}
-	const expected = new Map<string, unknown>()
+	const expected = new Map<string, object>()
 
 	// reconstruct the allowed manifest edits from each committed original
 	for (const file of manifests) {
-		const original = JSON.parse(await workspace(evidence, { kind: "read", file, revision: state.base }))
+		const text = await workspace(evidence, { kind: "read", file, revision: state.base })
+		const original = JSON.parse(text)
 		bumpManifest({
 			dir: file === "package.json" ? "." : file.slice(0, -13),
 			manifest: original,
@@ -182,7 +185,7 @@ async function commitUpgrade(evidence: PatchEvidence, state: State): Promise<voi
 
 		// write the expected manifest when the initial install failed
 		if (failedInstall) {
-			await workspace(evidence, { kind: "edit", file, contents: JSON.stringify(original, null, 2) + "\n" })
+			await workspace(evidence, { kind: "edit", file, contents: formatManifest(text, original) })
 		}
 	}
 	if (failedInstall) {
@@ -199,18 +202,19 @@ async function commitUpgrade(evidence: PatchEvidence, state: State): Promise<voi
 async function resolvedUpgradeLock(evidence: PatchEvidence): Promise<boolean> {
 	// resolve the lockfile independently under baseline observation rules
 	requireBaseline(evidence)
-	const { adapter, report } = evidence
+	const { adapter } = evidence
 	const resolved = await adapter.resolveLock()
 	if (!cleanInstall(resolved.observation, evidence.baseInstall)) {
 		throw new Error("Lockfile resolution observation failed")
 	}
 
-	// require the intended version in every declaring workspace
-	if (resolved.check.status !== "passed") {
-		return false
-	}
+	return resolved.check.status === "passed" && (await hasUpgradedVersions(evidence))
+}
+
+// require the intended version in every declaring workspace
+async function hasUpgradedVersions({ adapter, context, report }: PatchEvidence): Promise<boolean> {
 	const project = await adapter.data(["detect"]).catch((error: unknown) => {
-		rethrowInspectionFailure(error, evidence.context)
+		rethrowInspectionFailure(error, context)
 		return undefined
 	})
 
@@ -296,9 +300,9 @@ async function orderCommits(evidence: PatchEvidence, state: State): Promise<void
 	}
 	for (const [i, commit] of ordered.entries()) {
 		// update dependency evidence to reference each rewritten commit
-		const dependency = state.dependencies.find((entry) => entry.commit === commit.sha)
+		const dependencies = state.dependencies.filter((entry) => entry.commit === commit.sha)
 		commit.sha = answer[i]
-		if (dependency) {
+		for (const dependency of dependencies) {
 			dependency.commit = commit.sha
 		}
 	}

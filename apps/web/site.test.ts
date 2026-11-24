@@ -312,7 +312,7 @@ test("unlicensed reports withhold patch bytes and raw details through HTTP and S
 
 	// require both public responses to withhold the private patch evidence
 	for (const body of [html, stream]) {
-		expect(body).toContain("Output withheld")
+		expect(body).toContain("Output withheld because no open source license was verified.")
 		expect(body).not.toContain(patch.mailbox)
 		expect(body).not.toContain(patch.prompt)
 		expect(body).not.toContain(patch.digest)

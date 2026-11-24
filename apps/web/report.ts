@@ -10,11 +10,20 @@ import type {
 	Verdict,
 } from "health-code"
 
+// link the project pages and the recorded example
+export const readmeUrl = "https://github.com/doubleoevan/health-code#readme"
 export const mcpSetupUrl = "https://github.com/doubleoevan/health-code#mcp-setup"
+export const runtaSignupUrl = "https://dashboard.runta.com/"
 export const replayRepositoryUrl = "https://github.com/example/project"
+
+// include events saved under the previous action name
 type StoredSandboxEvent = Omit<Extract<ModelRequestSandboxEvent, { type: "sandbox.event" }>, "action"> & {
 	action: "model-relay-started"
 }
+
+// replace repository output in a report without a verified license
+export const withheldReason = "Output withheld because no open source license was verified."
+
 export type SiteEvent = InspectionEvent | ModelRequestSandboxEvent | StoredSandboxEvent
 export type Citation = { label: string; url?: string }
 
@@ -48,7 +57,16 @@ export type UpgradeCard = Pick<UpgradeReport, "coverage" | "dependency" | "from"
 	})[]
 
 	// associate new dependencies with the commits that introduced them
-	addedDependencies?: { name: string; version: string; reason: string; commit: string; patch?: string }[]
+	addedDependencies?: {
+		name: string
+		version: string
+		reason: string
+		commit: string
+		patch?: string
+
+		// list the earlier versions of a dependency upgraded with the target
+		from?: Record<string, string>
+	}[]
 	usage?: { modelCost?: number; reserved?: number; outputTokens?: number; partialTokens?: boolean }
 	diagnostics: Citation[]
 	sizeBytes?: number
@@ -61,20 +79,17 @@ export type PublishedReport = {
 	stoppedReason?: string
 	omitted?: string[]
 	promptVersions?: InspectionReport["promptVersions"]
-	usageAsOf?: string
 
 	version: 1
 	repository: InspectionReport["repository"]
 	baseline: UpgradeCard["checks"]
 	baselineTestFileErrors?: UpgradeCard["testFileErrors"]
-	turnLimits?: { repair: number; featureAdoption: number }
 	detection?: string
 	registryLookupIssue?: string
 
 	// retain the publication license alongside the measured upgrade results
 	license: string | null
 	upgrades: UpgradeCard[]
-	featureCount: number
 }
 
 type InspectionState = "queued" | "running" | "interrupted" | "failed" | "complete"
@@ -125,6 +140,9 @@ export function toCheckText(check: CheckResult): string {
 	}
 
 	let text: string = check.status
+	if (check.installScriptsSkipped) {
+		text += " · Install scripts were skipped because the locked network blocked a download."
+	}
 	if (check.inventory) {
 		const { passed, failed, skipped, todo } = check.inventory.counts
 		text += ` · ${passed} passed, ${failed} failed, ${skipped} skipped, ${todo} todo`
@@ -139,25 +157,67 @@ export function toCheckText(check: CheckResult): string {
 
 export function toSummary(report: PublishedReport): string {
 	if (report.upgradeMenu) {
-		return "Upgrade a dependency"
+		return "Test an upgrade"
 	}
 	const count = report.upgrades.length
 	if (!count && report.registryLookupIssue) {
 		return report.registryLookupIssue
 	}
 
-	// Count the work actually reached before an interruption.
-	const partial = report.upgrades.filter((upgrade) => upgrade.coverage === "partial").length
-	const skipped = report.upgrades.filter((upgrade) => upgrade.coverage === "skipped").length
-	if (report.stoppedReason || partial || skipped) {
-		return `${count - partial - skipped} upgrades completed · ${partial} partial · ${skipped} skipped`
-	}
-
 	// count blocked installation connections across upgrades
 	const blocked = report.upgrades
 		.flatMap((upgrade) => upgrade.observation.findings)
 		.filter((finding) => finding.kind === "connection" && finding.outcome === "blocked").length
-	return `${count} upgrade${count === 1 ? "" : "s"} inspected, ${report.featureCount} feature patch${report.featureCount === 1 ? "" : "es"}, ${blocked} connection${blocked === 1 ? "" : "s"} blocked during install`
+	const blockedText = blocked ? ` ${blocked} connection${blocked === 1 ? "" : "s"} blocked during install.` : ""
+	return toOutcome(report) + blockedText
+}
+
+export function toReportHeading({ upgrades }: PublishedReport): string {
+	if (upgrades.length && upgrades.every((upgrade) => upgrade.coverage === "skipped")) {
+		return upgrades.length === 1 ? "Upgrade not tested" : "Upgrades not tested"
+	}
+	return "Inspection complete"
+}
+
+function toOutcome(report: PublishedReport): string {
+	const { upgrades } = report
+	const patchCount = upgrades.flatMap((upgrade) => upgrade.patches).length
+	if (!patchCount) {
+		return upgrades.length ? toMissingPatchReason(report) : "No patch. No upgrades were tested."
+	}
+
+	// Count the upgrades that still lack a patch.
+	const missingCount = upgrades.filter((upgrade) => !upgrade.patches.length).length
+	const ready = patchCount === 1 ? "Your tested patch is ready." : `Your ${patchCount} tested patches are ready.`
+	return missingCount ? `${ready} No patch for ${missingCount} of ${upgrades.length} upgrades.` : ready
+}
+
+function toMissingPatchReason({ upgrades, license, baseline, stoppedReason }: PublishedReport): string {
+	const isSingle = upgrades.length === 1
+	const target = isSingle ? "this upgrade" : "these upgrades"
+	const verdicts = upgrades.map((upgrade) => upgrade.verdict)
+
+	// Distinguish a withheld patch from an upgrade without one.
+	const successes: (Verdict | undefined)[] = ["Passes as is", "Fixed", "Fixed with test changes"]
+	if (!license && verdicts.some((verdict) => successes.includes(verdict))) {
+		return "The upgrade was tested, but its patch can’t be published without a confirmed open-source license."
+	}
+
+	// Explain the check that kept the upgrades from a tested patch.
+	if (baseline.install.startsWith("failed")) {
+		return `No patch. Your project’s dependencies failed to install so the health inspector couldn’t test ${target}.`
+	}
+	if (verdicts.every((verdict) => verdict === "Can't fix")) {
+		return isSingle
+			? "No patch. The upgrade broke your checks and the health inspector couldn’t fix it."
+			: "No patch. The upgrades broke your checks and the health inspector couldn’t fix them."
+	}
+
+	// Recognize older reports recorded without verdicts or patches.
+	if (!stoppedReason && verdicts.every((verdict) => !verdict)) {
+		return `${upgrades.length} upgrade${isSingle ? "" : "s"} inspected.`
+	}
+	return `No patch. The health inspector couldn’t finish testing ${target}.`
 }
 
 export function toPatchPath(digest: string): string {

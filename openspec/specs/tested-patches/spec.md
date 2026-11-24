@@ -17,7 +17,7 @@ Before retaining a Patch the engine SHALL reconcile Baseline and final test inve
 #### Scenario: Test setup lives outside a test directory
 
 - **WHEN** a proposed source edit targets a configured setup module or a helper used only by tests
-- **THEN** the engine rejects the edit using the pinned repository’s test configuration and imports. Unresolved setup leaves the source edit unverified.
+- **THEN** the engine rejects the edit using the pinned repository’s test configuration and imports. Unresolved setup leaves the source edit unverified. A Vite or Vitest configuration may compute settings that cannot name setup modules, such as plugins. Its local imports stay protected and its path aliases must be readable without running them.
 
 ### Requirement: Review edits to existing tests
 
@@ -27,6 +27,11 @@ The engine SHALL allow added cases and reject weakened assertions. A changed exi
 
 - **WHEN** an existing case retains its identity, independently supported old/new behavior explains its changed expectation and all required checks pass
 - **THEN** the Patch flags that change for review and the upgrade receives Fixed with test changes.
+
+#### Scenario: A repair moves a mocked module path
+
+- **WHEN** a repair changes only the mocked path in an existing test and both paths belong to the upgraded package
+- **THEN** the engine keeps the rest of the test unchanged, flags the commit for review and reports Fixed with test changes once all required checks pass.
 
 #### Scenario: Additional coverage in an existing file
 
@@ -55,12 +60,17 @@ The engine SHALL reconstruct the proposed tree from the tested base and recheck 
 #### Scenario: A confirmed install failure needs a repair
 
 - **WHEN** an Install Check fails twice with complete, comparable installation observations
-- **THEN** the supervisor restores the pinned tree, writes the intended version to each declaring manifest, and tries to resolve the lockfile without lifecycle scripts before starting the repair. An unresolved lockfile permits diagnosis but prevents Patch publication. An incomplete observation prevents the attempt.
+- **THEN** the supervisor restores the pinned tree, writes the intended version to each declaring manifest, and tries to resolve the lockfile without lifecycle scripts before starting the repair. An unresolved lockfile permits diagnosis and prevents Patch publication until a committed dependency change resolves the lockfile with the target version in every declaring workspace. An incomplete observation prevents the attempt. Manifest edits change only the affected values and keep the file’s formatting. Project reads during patch verification use the verification deadline.
+
+#### Scenario: Declared dependencies must move with the target
+
+- **WHEN** a repair requests newer versions of dependencies the repository already declares
+- **THEN** the supervisor updates every declaring workspace, installs the whole set under the Baseline observation rules and records one flagged commit. The report lists each earlier version. An older version, a change to the target or a new lifecycle script rejects the set.
 
 #### Scenario: An installed package gains another lifecycle hook instance
 
 - **WHEN** a candidate adds a second installed copy of a package with an existing hook, or the installed layout cannot be inventoried
-- **THEN** the engine withholds the Patch. Each hook is compared by installed location and occurrence as well as package, script and content.
+- **THEN** the engine withholds the Patch. Each hook is compared by installed location and occurrence as well as package, script and content. Installed packages are compared by the scripts that package managers run for registry packages (`preinstall`, `install` and `postinstall`). The root package and workspaces also include preparation scripts.
 
 #### Scenario: Verification exceeds its deadline
 

@@ -7,13 +7,13 @@ Give coding agents a local interface for inspecting public Repositories on the d
 
 ### Requirement: Connect personal accounts once
 
-The unscoped `health-code` npm package SHALL start the Node stdio server with `npx health-code mcp`. The command `npx health-code mcp setup` SHALL check account access, register or reuse the origin-bound stored secret, verify it with one bounded authenticated model request sandbox request, and confirm cleanup before printing Claude Code and Codex configuration. The default client configuration SHALL forward only `RUNTA_TOKEN` by name.
+The unscoped `health-code` npm package SHALL start the Node stdio server with `npx health-code mcp`. The command `npx health-code mcp setup` SHALL check account access, register or reuse the origin-bound stored secret, verify it with one bounded authenticated model request sandbox request, and confirm cleanup before printing Claude Code and Codex configuration. The client configuration SHALL forward `RUNTA_TOKEN` and each configured model setting by name.
 
 #### Scenario: Install one release
 
 - **WHEN** a developer installs the packed release in a fresh Node project
 - **THEN** the public entry exports the library, the MCP serves its inspection tools, and both printed client entries launch the installed version using the existing pinned command from the user’s home.
-- **AND** the default Claude Code environment and Codex environment list each contain only the token reference.
+- **AND** the Claude Code environment and Codex environment list each reference the token and the configured model settings by name.
 
 #### Scenario: First setup and key rotation
 
@@ -27,16 +27,16 @@ The unscoped `health-code` npm package SHALL start the Node stdio server with `n
 
 #### Scenario: Existing registration
 
-- **WHEN** setup has only the sandbox token and that origin already has the expected secret
+- **WHEN** setup has the sandbox token and model settings without a key and that origin already has the expected secret
 - **THEN** it verifies the stored key through the model request sandbox without downloading, replacing or requesting the key again. A missing secret produces registration instructions for that origin.
 
 ### Requirement: Route personally funded inspections
 
-The caller SHALL fund sandbox, model request sandbox and model use. All four roles SHALL default to Claude Opus 5.5 on Anthropic and accept configured model ID and host overrides. The MCP SHALL select model request sandbox execution for summaries and Code Feature Matches and use the existing sandbox binding for Repair and Feature adoption. Live MCP Inspections SHALL require only `RUNTA_TOKEN` at default settings. An optional GitHub credential SHALL serve release retrieval only.
+The caller SHALL fund sandbox, model request sandbox and model use. The caller SHALL configure the model host and a model ID, with optional price bounds and an optional model ID per role. Unset price bounds SHALL default to $10 per million input tokens and $50 per million output tokens. The MCP SHALL name any missing setting and choose no model itself. It SHALL support Anthropic and OpenAI-compatible hosts. The MCP SHALL select model request sandbox execution for summaries and Code Feature Matches and use the existing sandbox binding for Repair and Feature adoption. Live MCP Inspections SHALL require `RUNTA_TOKEN` and the model settings, with the key stored in Runta. An optional GitHub credential SHALL serve release retrieval only.
 
 #### Scenario: First Inspection after setup
 
-- **WHEN** the client supplies only the sandbox token after a successful default setup
+- **WHEN** the client supplies the sandbox token and model settings after a successful setup
 - **THEN** it can complete and save an Inspection, including summaries and Code Feature Matches from the Model Request Sandbox and eligible Agent Attempts. No local authenticated model client is constructed. Tool payloads, logs and saved evidence contain no raw key.
 
 #### Scenario: Host key missing
@@ -136,3 +136,17 @@ The MCP SHALL accept a repository URL in `list_upgrades` and return release feat
 - **THEN** the server SHALL return the verified patch from the existing inspection or inspect only that dependency and target version at the upgrade menu's commit.
 
 The MCP SHALL offer `get_upgrade_features` for a version listed in the upgrade menu. Each feature SHALL cite upstream release evidence and identify the workspaces crossing that release. A preview SHALL use no sandbox or model call.
+
+### Requirement: Check one upgrade in CI
+
+The `health-code check` command SHALL test one eligible upgrade with the caller's account, write the Inspection Report and each verified mailbox to the output folder and print step progress. A partial report or a failed inspection SHALL exit nonzero. Delivery of a pull request belongs to the caller's pipeline.
+
+#### Scenario: A pipeline tests a chosen version
+
+- **WHEN** the caller names a dependency and version
+- **THEN** the command confirms it is eligible, pins the commit that lists it and tests that version there.
+
+#### Scenario: A pipeline is cancelled
+
+- **WHEN** the process receives SIGTERM or SIGINT
+- **THEN** the inspection stops and deletes its sandboxes before the process exits.

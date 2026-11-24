@@ -20,6 +20,13 @@ export const lockfiles = {
 
 export const sections = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"] as const
 
+/**
+ * Returns the manifest path of a workspace directory.
+ */
+export function toManifestPath(dir: string): string {
+	return dir === "." ? "package.json" : `${dir}/package.json`
+}
+
 export function bumpManifest({
 	dir,
 	manifest,

@@ -25,8 +25,11 @@ jobs:
         env:
           CASE_ID: ${{ inputs.case }}
           RUNTA_TOKEN: ${{ secrets.RUNTA_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          HEALTH_CODE_STORED_CREDENTIAL: ${{ vars.HEALTH_CODE_STORED_CREDENTIAL }}
+          MODEL_API_KEY: ${{ secrets.MODEL_API_KEY }}
+          HEALTH_CODE_MODEL_HOST: https://api.anthropic.com
+          HEALTH_CODE_MODEL: claude-opus-5-5
+          HEALTH_CODE_INPUT_USD_PER_MILLION: "4"
+          HEALTH_CODE_OUTPUT_USD_PER_MILLION: "20"
         run: bun run eval --case "$CASE_ID"
       - name: Publish evaluation result
         if: always()

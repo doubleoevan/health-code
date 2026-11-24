@@ -9,7 +9,7 @@ import type { Inspections } from "./executeInspection.ts"
 import type { InspectionChoice } from "./inspectionSource.ts"
 import { SiteError } from "./inspectionSource.ts"
 import { Page, type PageProps } from "./Page.tsx"
-import { AdmissionError, type Visitor } from "./recordAdmissions.ts"
+import { AdmissionError, toUtcDay, type Visitor } from "./recordAdmissions.ts"
 import { mcpSetupUrl, toSummary } from "./report.ts"
 import { streamInspection } from "./streamInspection.ts"
 import { identifyVisitor, isSecureRequest, verifyAdmin } from "./verifyVisitor.ts"
@@ -19,7 +19,7 @@ function render(props: PageProps, assets: Assets): string {
 	// describe the inspected revision in the page metadata
 	const report = props.snapshot?.card
 	const title = props.upgradeMenu
-		? "Health Code · Upgrade a dependency"
+		? "Health Code · Test an upgrade"
 		: report
 			? `Health Code: ${toSummary(report)}`
 			: "Health Code · Dependency inspections"
@@ -122,7 +122,8 @@ function toUpgradeMenuView(
 	// Keep search and sorting in the upgrade menu URL across reloads and browser navigation.
 	const order = query.order === "alphabetical" || query.order === "minor" ? query.order : "workspaces"
 	const search = query.search?.slice(0, 256) ?? ""
-	const readyOnly = query.ready === "on"
+	const hasTestedPatch = targets.some((target) => target.patch)
+	const readyOnly = hasTestedPatch && query.ready === "on"
 	const groups = toUpgradeMenu(targets, { order, search, readyOnly })
 
 	// Paginate after sorting and filtering the full dependency list.
@@ -133,6 +134,7 @@ function toUpgradeMenuView(
 	return {
 		order,
 		search,
+		hasTestedPatch,
 		readyOnly,
 		available: targets.length > 0,
 		totalDependencies: groups.length,
@@ -205,6 +207,20 @@ export function createSite(options: {
 		)
 		return identity
 	}
+	function readDemoCallsLeft(context: Context): number | undefined {
+		if (siteMode !== "hosted" || !launch?.configured || !launch.settings.available) {
+			return undefined
+		}
+
+		// Read the allowance without assigning a visitor cookie.
+		try {
+			const { identity } = identifyVisitor(context.req.raw, launch.visitorKey, replay)
+			return inspections.store.admission.countRemainingInspections(identity, launch.settings.current, toUtcDay())
+		} catch {
+			// Keep pages available when visitor identity is unavailable.
+			return undefined
+		}
+	}
 	app.get("/health/live", (context) => context.json({ live: true }))
 	app.get("/health/ready", (context) => {
 		try {
@@ -243,7 +259,10 @@ export function createSite(options: {
 	})
 	app.get("/", (context) => {
 		context.header("Cache-Control", "no-store")
-		return context.html(render({ url: options.origin, siteMode, snapshot: null, paused: inspections.paused }, assets))
+		const demoCallsLeft = readDemoCallsLeft(context)
+		return context.html(
+			render({ url: options.origin, siteMode, demoCallsLeft, snapshot: null, paused: inspections.paused }, assets),
+		)
 	})
 
 	// accept bounded repository submissions
@@ -318,7 +337,10 @@ export function createSite(options: {
 				: undefined
 		const url = `${options.origin}/r/${id}`
 		snapshot.investigationPrompt = buildReportInvestigationPrompt(snapshot, url)
-		return context.html(render({ snapshot: upgradeMenu ? null : snapshot, upgradeMenu, siteMode, url }, assets))
+		const demoCallsLeft = readDemoCallsLeft(context)
+		return context.html(
+			render({ snapshot: upgradeMenu ? null : snapshot, upgradeMenu, siteMode, demoCallsLeft, url }, assets),
+		)
 	})
 
 	// Load version-specific upstream features for each visible target on the dependency page.

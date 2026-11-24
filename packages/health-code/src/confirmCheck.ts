@@ -46,8 +46,9 @@ function toFailureSignature(result: CheckResult): string {
 		.filter((line) => /error|failed/i.test(line))
 		.join("\n")
 
-	// strip elapsed times before comparing diagnostics
-	return `${String(evidence?.exitCode)}:${(diagnostics || output).replace(/\d+ms|\d+\.\d+s/g, "")}`
+	// strip elapsed times and log timestamps before comparing diagnostics
+	const stable = (diagnostics || output).replace(/\d{4}-\d\d-\d\dT[\d_:.]+Z|\d+ms|\d+\.\d+s/g, "")
+	return `${String(evidence?.exitCode)}:${stable}`
 }
 export async function confirm(
 	first: CheckResult,

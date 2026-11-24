@@ -7,6 +7,7 @@ export type UpgradeMenuView = {
 	dependenciesOnPage: DependencyChoice[]
 	order: UpgradeMenuOrder
 	search: string
+	hasTestedPatch: boolean
 	readyOnly: boolean
 	available: boolean
 	page: number
@@ -28,7 +29,7 @@ export function UpgradeMenu({
 	pending: boolean
 	onSelect: (target: UpgradeMenuTarget) => void
 }): ReactElement {
-	const { dependenciesOnPage, order, search, readyOnly, available } = view
+	const { dependenciesOnPage, order, search, hasTestedPatch, readyOnly, available } = view
 
 	// Apply sort and patch availability as soon as either control changes.
 	function handleFilterChange(event: ChangeEvent<HTMLInputElement | HTMLSelectElement>): void {
@@ -51,10 +52,12 @@ export function UpgradeMenu({
 						</select>
 					</span>
 				</label>
-				<label>
-					<input type="checkbox" name="ready" defaultChecked={readyOnly} onChange={handleFilterChange} /> Tested patch
-					available
-				</label>
+				{hasTestedPatch && (
+					<label>
+						<input type="checkbox" name="ready" defaultChecked={readyOnly} onChange={handleFilterChange} /> Tested patch
+						available
+					</label>
+				)}
 
 				<button type="submit" className="secondary">
 					Search
@@ -127,9 +130,11 @@ function DependencyVersions({
 			<ul>
 				{group.targets.map((target) => (
 					<li key={target.to}>
-						{toVersionChange(target)} · {target.kind}{" "}
+						<code>{toVersionChange(target)}</code> · {target.kind}{" "}
 						{target.patch ? (
-							<Link href={`/r/${target.patch.inspectionId}#patch-${target.patch.sha256}`}>View tested patch</Link>
+							<span className="button-link">
+								<Link href={`/r/${target.patch.inspectionId}#patch-${target.patch.sha256}`}>View tested patch</Link>
+							</span>
 						) : (
 							<button type="button" disabled={pending} onClick={() => onSelect(target)}>
 								Test upgrade

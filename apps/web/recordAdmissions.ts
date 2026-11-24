@@ -117,14 +117,19 @@ export class AdmissionLedger {
 		)
 	}
 
-	// Apply the quota independently to the browser and its network.
-	checkAllowance({ visitor, network }: Visitor, limits: LaunchLimits, day: string): void {
+	// Count the stricter of the browser and network quotas.
+	countRemainingInspections({ visitor, network }: Visitor, limits: LaunchLimits, day: string): number {
 		const counts = this.database
 			.query<{ v: number; n: number }, [string, string, string]>(
 				"SELECT count(*) FILTER (WHERE visitor=?) v,count(*) FILTER (WHERE network=?) n FROM admissions WHERE day=?",
 			)
 			.get(visitor, network, day)
-		if (Math.max(counts?.v ?? 0, counts?.n ?? 0) >= limits.dailyVisitorInspections) {
+		return Math.max(0, limits.dailyVisitorInspections - Math.max(counts?.v ?? 0, counts?.n ?? 0))
+	}
+
+	// Enforce the visitor quota and the shared daily budget.
+	checkAllowance(identity: Visitor, limits: LaunchLimits, day: string): void {
+		if (this.countRemainingInspections(identity, limits, day) === 0) {
 			throw new AdmissionError(429, "Your daily inspection allowance is used. It resets at 00:00 UTC.", "visitorHits")
 		}
 

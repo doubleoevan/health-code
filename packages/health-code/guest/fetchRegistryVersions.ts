@@ -1,18 +1,33 @@
 import { readBoundedJson } from "../src/readBoundedJson.ts"
+import { isExcluded, type ReleaseAge } from "./readReleaseAge.ts"
 import { selectRegistryVersions } from "./selectRegistryVersions.ts"
 
 type RegistryRequest = (url: string, options: RequestInit) => Promise<Response>
 type RegistryResult = string[] | "timed-out" | "unavailable" | "stage-timed-out"
 
-type RegistryOptions = { includePrevious?: boolean; request?: RegistryRequest; signal?: AbortSignal }
+type RegistryOptions = {
+	includePrevious?: boolean
+	releaseAge?: ReleaseAge
+	request?: RegistryRequest
+	signal?: AbortSignal
+}
+
+// publish dates need the larger metadata response
+const summaryLookup = { accept: "application/vnd.npm.install-v1+json", timeoutMs: 8000, maxBytes: 8 * 1024 * 1024 }
+const datedLookup = { accept: "application/json", timeoutMs: 20000, maxBytes: 48 * 1024 * 1024 }
+
+type RegistryRecord = { versions?: unknown; time?: Record<string, unknown> }
 
 async function fetchPackage(name: string, options: RegistryOptions): Promise<RegistryResult> {
-	const timeout = AbortSignal.timeout(8000)
+	// request publish dates only for packages subject to a release age
+	const releaseAge = options.releaseAge && !isExcluded(name, options.releaseAge) ? options.releaseAge : undefined
+	const lookup = releaseAge ? datedLookup : summaryLookup
+	const timeout = AbortSignal.timeout(lookup.timeoutMs)
 	const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
 	const request = options.request ?? fetch
 	try {
 		const response = await request(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
-			headers: { accept: "application/vnd.npm.install-v1+json" },
+			headers: { accept: lookup.accept },
 			redirect: "error",
 			signal,
 		})
@@ -23,13 +38,18 @@ async function fetchPackage(name: string, options: RegistryOptions): Promise<Reg
 			return "unavailable"
 		}
 
-		const record = (await readBoundedJson(response, 8 * 1024 * 1024)) as { versions?: unknown } | null
+		const record = (await readBoundedJson(response, lookup.maxBytes)) as RegistryRecord | null
 		const versions = record?.versions
 		if (!versions || typeof versions !== "object" || Array.isArray(versions)) {
 			return "unavailable"
 		}
 
-		return selectRegistryVersions(Object.keys(versions), options.includePrevious ?? false)
+		// Drop releases that are too new before choosing the latest of each major.
+		const published = record?.time
+		const names = Object.keys(versions).filter(
+			(version) => !releaseAge || Date.parse(String(published?.[version])) <= releaseAge.publishedBefore,
+		)
+		return selectRegistryVersions(names, options.includePrevious ?? false)
 	} catch {
 		return options.signal?.aborted ? "stage-timed-out" : timeout.aborted ? "timed-out" : "unavailable"
 	}
@@ -43,7 +63,7 @@ export function isPackageName(name: string): boolean {
 }
 
 /**
- * Fetches registry versions with at most sixteen requests in flight.
+ * Fetches registry versions with at most sixteen requests in flight, or four when publish dates are needed.
  */
 export async function fetchRegistryVersions(
 	names: string[],
@@ -58,6 +78,6 @@ export async function fetchRegistryVersions(
 			output[name] = options.signal?.aborted ? "stage-timed-out" : await fetchPackage(name, options)
 		}
 	}
-	await Promise.all(Array.from({ length: Math.min(names.length, 16) }, worker))
+	await Promise.all(Array.from({ length: Math.min(names.length, options.releaseAge ? 4 : 16) }, worker))
 	return output
 }

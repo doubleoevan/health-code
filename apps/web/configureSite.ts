@@ -1,9 +1,10 @@
-import { createAnthropic } from "@ai-sdk/anthropic"
 import {
+	createHostModel,
 	createSandboxProvider,
 	type InspectionOptionsV2,
 	type InspectionReportV2,
 	inspectRepository,
+	readModelRoutes,
 	readUpgradeFeatures,
 	reconcileSandboxes,
 } from "health-code"
@@ -33,50 +34,19 @@ export function createLiveSource(
 ): InspectionSource<{ report: InspectionReportV2 }> {
 	// require live credentials and a deployment namespace before accepting work
 	const token = environment.RUNTA_TOKEN
-	const key = environment.ANTHROPIC_API_KEY
-	const name = environment.HEALTH_CODE_STORED_CREDENTIAL
+	const key = environment.MODEL_API_KEY
 	const deployment = environment.HEALTH_CODE_DEPLOYMENT
-	if (!deployment || !token || !key || !name?.trim()) {
-		throw new Error(
-			"Configure HEALTH_CODE_DEPLOYMENT, RUNTA_TOKEN, ANTHROPIC_API_KEY and HEALTH_CODE_STORED_CREDENTIAL before starting the live site",
-		)
+	if (!deployment || !token || !key) {
+		throw new Error("Configure HEALTH_CODE_DEPLOYMENT, RUNTA_TOKEN and MODEL_API_KEY before starting the live site")
 	}
 
-	// restrict the hosted service to its budgeted model
-	const hostedModel = "claude-opus-5-5"
-	const modelId = environment.HEALTH_CODE_MODEL ?? hostedModel
-	if (modelId !== hostedModel) {
-		throw new Error("HEALTH_CODE_MODEL must be claude-opus-5-5 for hosted release summaries and feature matching")
-	}
-
-	// bind host requests to the fixed endpoint and reject redirects
-	const baseUrl = "https://api.anthropic.com/v1"
-	const provider = createAnthropic({
-		baseURL: baseUrl,
-		apiKey: key,
-		fetch: Object.assign(
-			(url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
-				fetch(url, { ...init, redirect: "error" }),
-			{ preconnect: fetch.preconnect },
-		),
-	})
-
-	// Price host analysis and credential-bound batch requests at the Opus rate.
-	const pricing = { inputUsdPerMillion: 4, outputUsdPerMillion: 20, maxInputTokens: 65536 }
-	const host = { model: provider(modelId), pricing }
-	const guest = {
-		modelId,
-		protocol: "anthropic" as const,
-		baseUrl,
-		credential: { name, header: "x-api-key", valueTemplate: `\${credential}` },
-		pricing,
-	}
-
-	// Price selected patch attempts at the pinned Fable rate.
-	const patchAgent = {
-		...guest,
-		modelId: "claude-fable-5-2",
-		pricing: { ...pricing, inputUsdPerMillion: 8, outputUsdPerMillion: 40 },
+	// bind each role to the configured models and stored credential
+	const { releaseSummary, featureMatch, repair, featureAdoption } = readModelRoutes(environment)
+	const models = {
+		releaseSummary: { model: createHostModel(releaseSummary, key), pricing: releaseSummary.pricing },
+		featureMatch: { model: createHostModel(featureMatch, key), pricing: featureMatch.pricing },
+		repair,
+		featureAdoption,
 	}
 
 	// configure per-inspection spend, duration and upgrade limits
@@ -107,7 +77,6 @@ export function createLiveSource(
 			onEvent,
 			{ revision, settings, signal, reuseUpgrade, mode, upgrade } = {},
 		): Promise<{ report: InspectionReportV2 }> {
-			const agent = upgrade ? patchAgent : guest
 			const report = await inspect({
 				repositoryUrl,
 				sandboxProvider,
@@ -129,7 +98,7 @@ export function createLiveSource(
 						}
 					: limits,
 				onEvent,
-				models: { releaseSummary: host, featureMatch: host, repair: agent, featureAdoption: agent },
+				models,
 			})
 			return { report }
 		},

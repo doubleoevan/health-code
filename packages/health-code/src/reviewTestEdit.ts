@@ -1,7 +1,8 @@
 import { parse } from "@babel/parser"
+import { isPackagePath } from "./isPackagePath.ts"
 
 type Node = { type: string; [key: string]: unknown }
-type Review = { kind: "coverage"; names: string[] } | { kind: "expectation"; name: string }
+type Review = { kind: "mock" } | { kind: "coverage"; names: string[] } | { kind: "expectation"; name: string }
 function isNode(value: unknown): value is Node {
 	return !!value && typeof value === "object" && "type" in value && typeof value.type === "string"
 }
@@ -271,10 +272,64 @@ function reviewAddedCases(previous: Node[], next: Node[]): Review {
 	return { kind: "coverage", names }
 }
 
+// recognize the module registration calls of vitest, jest and bun
+function mockedModule(statement: Node): Node | undefined {
+	const call = statement.expression
+	if (statement.type !== "ExpressionStatement" || !isNode(call) || call.type !== "CallExpression") {
+		return
+	}
+
+	// require a plain method call
+	const { callee } = call
+	if (!isNode(callee) || callee.computed || !isNode(callee.object) || !isNode(callee.property)) {
+		return
+	}
+
+	// require a literal module name as the first argument
+	const name = `${callee.object.name}.${callee.property.name}`
+	const module: unknown = Array.isArray(call.arguments) ? call.arguments[0] : undefined
+	if (["vi.mock", "vi.doMock", "jest.mock", "jest.doMock", "mock.module"].includes(name) && isNode(module)) {
+		return module.type === "StringLiteral" ? module : undefined
+	}
+}
+
+// accept a moved mock only when both paths belong to the upgraded package
+function isMockMove(previous: Node, next: Node, dependency: string): boolean {
+	const old = mockedModule(previous)
+	const proposed = mockedModule(next)
+
+	// match the package root and its subpaths
+	const isOwned = (module: Node): boolean => isPackagePath({ path: String(module.value), dependency })
+	if (!old || !proposed || !isOwned(old) || !isOwned(proposed)) {
+		return false
+	}
+
+	// require the rest of the statement to match
+	return JSON.stringify(next) === JSON.stringify(previous, (_, value) => (value === old ? proposed : value))
+}
+
+// reject merged mocks and comments that change how a test runs
+function requireDistinctMocks(review: { previous: Node[]; next: Node[]; before: string; after: string }): void {
+	const toNames = (statements: Node[]): unknown[] => statements.flatMap((item) => mockedModule(item)?.value ?? [])
+	const toDirectives = (text: string): string =>
+		(text.match(/@(?:vitest|jest)-environment\b.*|@ts-\w+/g) ?? []).join("\n")
+
+	// compare the number of distinct mocks and the directives
+	const countUnique = (names: unknown[]): number => new Set(names).size
+	if (
+		countUnique(toNames(review.previous)) !== countUnique(toNames(review.next)) ||
+		toDirectives(review.before) !== toDirectives(review.after)
+	) {
+		throw new Error("Existing test structure changed")
+	}
+}
+
+type ReviewTestEditOptions = { before: string; after: string; citation?: Citation; mockDependency?: string }
+
 /**
- * Accepts added test cases or one expected literal in an otherwise identical named test.
+ * Accepts added test cases, one expected literal in an otherwise identical named test, or moved mock paths.
  */
-export function reviewTestEdit(before: string, after: string, citation?: Citation): Review {
+export function reviewTestEdit({ before, after, citation, mockDependency }: ReviewTestEditOptions): Review {
 	const previous = toTree(before)
 	const next = toTree(after)
 	if (next.length > previous.length) {
@@ -282,9 +337,23 @@ export function reviewTestEdit(before: string, after: string, citation?: Citatio
 	}
 
 	const changed = next.filter((item, index) => JSON.stringify(item) !== JSON.stringify(previous[index]))
+
+	// accept a set of changes made only of moved mock paths
+	const isMoved = (item: Node): boolean => {
+		const original = previous[next.indexOf(item)]
+		return !!mockDependency && !!original && isMockMove(original, item, mockDependency)
+	}
+	if (next.length === previous.length && changed.length && changed.every(isMoved)) {
+		requireDistinctMocks({ previous, next, before, after })
+		return { kind: "mock" }
+	}
+
+	// reject any other change to several statements
 	if (next.length !== previous.length || changed.length !== 1 || !changed[0]) {
 		throw new Error("Existing test structure changed")
 	}
+
+	// require one changed literal in the same named test
 	const index = next.indexOf(changed[0])
 	const old = previous[index],
 		proposed = next[index]

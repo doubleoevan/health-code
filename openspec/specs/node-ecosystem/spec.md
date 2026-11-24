@@ -21,12 +21,17 @@ The Node Ecosystem Adapter SHALL detect Bun, pnpm, Yarn, or npm from the root lo
 
 ### Requirement: Install and change one direct dependency
 
-The Baseline SHALL use frozen installation and the selected manager's normal lifecycle policy. For an Upgrade the adapter SHALL update the target in every declaring workspace, preserve dependency sections, and regenerate the lockfile with that manager.
+The Baseline SHALL use frozen installation and the selected manager's normal lifecycle policy. When that install fails after attempting an off-registry connection, the adapter SHALL retry without install scripts, use the same policy for every later install and record that scripts were skipped. The final Baseline install result SHALL decide whether upgrade checks run. For an Upgrade the adapter SHALL update the target in every declaring workspace, preserve dependency sections, and regenerate the lockfile with that manager.
 
 #### Scenario: Shared dependency
 
 - **WHEN** two workspaces declare the same registry dependency at different versions
 - **THEN** the Upgrade records both original resolutions, the common target and declaring workspaces, and leaves unrelated direct declarations intact
+
+#### Scenario: Install script download
+
+- **WHEN** a postinstall script fails because the locked network blocks its download
+- **THEN** the Baseline retries without install scripts, the Upgrade uses the same policy and the report discloses the skipped scripts
 
 #### Scenario: Inconsistent Baseline lockfile
 
@@ -35,12 +40,17 @@ The Baseline SHALL use frozen installation and the selected manager's normal lif
 
 ### Requirement: Discover stable registry targets
 
-The adapter SHALL query the public npm registry for direct dependencies and return the latest eligible minor and major targets. It SHALL record unsupported dependency sources or missing version evidence in discovery.
+The adapter SHALL query the public npm registry for direct dependencies and return the latest eligible minor and major targets. It SHALL record unsupported dependency sources or missing version evidence in discovery. When the repository's package manager applies a minimum release age, the adapter SHALL return only targets old enough to install, honoring the repository's exempt package names without caller configuration.
 
 #### Scenario: Stable targets
 
 - **WHEN** the highest locked version is 1.2.0 and the registry contains 1.2.1, 1.4.2, 2.1.0, and 3.0.0-beta.1
 - **THEN** the adapter returns 1.4.2 and 2.1.0, each once for the dependency
+
+#### Scenario: Minimum release age
+
+- **WHEN** the repository requires releases to be three days old and the latest minor release was published today
+- **THEN** the adapter returns the newest eligible release that is at least three days old
 
 #### Scenario: Workspace link
 
@@ -68,7 +78,7 @@ The adapter SHALL invoke the project's own TypeScript compiler when a project co
 
 ### Requirement: Locate dependency usage and diagnostics
 
-The adapter SHALL derive a usage map in the sandbox identifying importing files, workspaces, exports and call sites. Diagnostic locators for typecheck errors, failed tests and deprecation warnings SHALL link to validated file and line ranges at the original tested commit. Unresolved symbols and unmappable lines SHALL retain their evidence and uncertainty.
+The adapter SHALL derive a usage map in the sandbox identifying importing files, workspaces, exports and call sites. Imports of a dependency subpath and ambient module declarations SHALL count as usage. Diagnostic locators for typecheck errors, failed tests and deprecation warnings SHALL link to validated file and line ranges at the original tested commit. Unresolved symbols and unmappable lines SHALL retain their evidence and uncertainty.
 
 #### Scenario: Renamed import in a workspace
 

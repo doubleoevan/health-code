@@ -21,8 +21,8 @@ that is a folder, an entry point, or a `package.json` script, confirm the
 module's own AGENTS.md says so, and that the root module map and routing table
 still read true. A new file inside a folder those docs already describe
 generically needs nothing; a new folder, a moved or renamed entry point, and a
-deleted script always do. A changed script also updates the README's
-Development section.
+deleted script always do. A changed script also updates
+DEVELOPMENT.md.
 
 Backward, from the docs: every path named in an AGENTS.md still has to exist.
 

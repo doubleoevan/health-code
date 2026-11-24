@@ -48,7 +48,7 @@ export function toHash(text: string): string {
 	return createHash("sha256").update(text, "utf8").digest("hex")
 }
 export function protect(environment: NodeJS.ProcessEnv): (text: string) => void {
-	const secrets = [environment.ANTHROPIC_API_KEY, environment.RUNTA_TOKEN, environment.GITHUB_TOKEN].filter(
+	const secrets = [environment.MODEL_API_KEY, environment.RUNTA_TOKEN, environment.GITHUB_TOKEN].filter(
 		(key): key is string => Boolean(key),
 	)
 

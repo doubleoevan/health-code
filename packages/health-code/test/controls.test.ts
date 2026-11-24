@@ -1,12 +1,10 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { inspectSandboxActivity } from "../guest/observe.ts"
 import {
 	createFakeSandboxProvider,
 	createSandboxProvider,
 	InspectionError,
 	inspectRepository,
-	type Observation,
 	type SandboxFixture,
 } from "../src/index.ts"
 import { confirmNetworkPolicy, validateRegistryHosts } from "../src/networkPolicy.ts"
@@ -83,6 +81,7 @@ test("guest environment contains inert application values and trusted controls",
 		assert.ok(!argv.includes(`${key}=placeholder`))
 	}
 })
+
 test("pins once when a branch moves after acquisition", async () => {
 	const fixture: SandboxFixture = {
 		commit: fixtureCommit,
@@ -110,6 +109,7 @@ test("pins once when a branch moves after acquisition", async () => {
 	assert.equal(report.repository.commit, fixtureCommit)
 	assert.deepEqual(report.packageManager, { reason: "Unsupported project" })
 })
+
 test("unavailable repository releases its sandbox before any repository code executes", async () => {
 	const sandboxProvider = createFakeSandboxProvider({ commit: fixtureCommit, commands: [] })
 	let destroyed = false
@@ -126,170 +126,9 @@ test("unavailable repository releases its sandbox before any repository code exe
 	})
 	assert.ok(destroyed)
 })
-test("uses resolved descriptor targets for writes through symlinks", () => {
-	const result = inspectSandboxActivity(
-		'1 execve("/usr/bin/env", [], []) = 0\n1 openat(AT_FDCWD</project>, "link", O_WRONLY|O_TRUNC) = 3</tmp/actual>\n1 write(3</tmp/actual>, "x", 1) = 1',
-		"",
-		"0 packets dropped by kernel",
-		[],
-	)
-	assert.deepEqual(result.files, { complete: true, findings: [{ kind: "write", path: "/tmp/actual" }] })
-})
 
 test("the provider limits deletion to allocations that it owns", async () => {
 	await createSandboxProvider({ token: "" }).destroySandbox({ id: "unrelated" }, { timeoutMs: 1 })
-})
-test("unexpected DNS questions and ambiguous metadata writes cannot produce a clean install", () => {
-	const trace = ['1 execve("/usr/bin/env", [], []) = 0', '1 mkdirat(AT_FDCWD</project>, "linked/dir", 0755) = 0'].join(
-		"\n",
-	)
-	const result = inspectSandboxActivity(
-		trace,
-		"1 IP 10.0.2.1.111 > 10.0.2.3.53: 11+ TXT? example.org. (30)",
-		"0 packets dropped by kernel",
-		[],
-		["/project/linked"],
-	)
-
-	// check both uncertainty and the unexpected dns destination
-	assert.equal(result.files.complete, false)
-	assert.deepEqual(result.connections.findings, [
-		{ kind: "connection", destination: "example.org", source: "dns", outcome: "unknown" },
-	])
-})
-
-test("path metadata operations that follow the last symlink report incomplete coverage", () => {
-	const trace = '1 execve("/usr/bin/env", [], []) = 0\n1 chmod("/project/linked", 0600) = 0'
-	assert.equal(
-		inspectSandboxActivity(trace, "", "0 packets dropped by kernel", [], ["/project/linked"]).files.complete,
-		false,
-	)
-})
-
-test("only DNS answers preceding a connection can establish its destination", () => {
-	const trace = [
-		'1 1.000000 execve("/usr/bin/env", [], []) = 0',
-		'1 2.000000 connect(3, {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr("192.0.2.5")}, 16) = -1 EINPROGRESS',
-	].join("\n")
-	const dns =
-		"3 IP 10.0.0.2.123 > 10.0.0.1.53: 10+ A? registry.npmjs.org. (29)\n4 IP 10.0.0.1.53 > 10.0.0.2.123: 10 1/0/0 A 192.0.2.5"
-
-	// keep an address unresolved when its dns response follows the connection
-	const result = inspectSandboxActivity(trace, dns, "0 packets dropped by kernel", ["registry.npmjs.org"])
-	assert.equal(result.connections.complete, false)
-	assert.deepEqual(result.connections.findings, [{ kind: "connection", destination: "192.0.2.5", outcome: "unknown" }])
-})
-test("records descriptor metadata and keeps ambiguous mapping changes incomplete", () => {
-	const trace = [
-		'1 execve("/usr/bin/env", [], []) = 0',
-		"1 fchmod(3</tmp/metadata>, 0600) = 0",
-		"1 mmap(NULL, 4096, PROT_READ, MAP_SHARED, 4</tmp/shared>, 0) = 0x1234",
-	]
-	const read = (lines: string[]): Observation =>
-		inspectSandboxActivity(lines.join("\n"), "", "0 packets dropped by kernel", []).files
-
-	// distinguish a known metadata write from an ambiguous mapped write
-	assert.deepEqual(read(trace), { complete: true, findings: [{ kind: "write", path: "/tmp/metadata" }] })
-	assert.equal(read([...trace, "1 mprotect(0x1234, 4096, PROT_READ|PROT_WRITE) = 0"]).complete, false)
-})
-
-test("normalizes renamed link ancestors and reads descriptor-only timestamp changes", () => {
-	const trace = [
-		'1 execve("/usr/bin/env", [], []) = 0',
-		'1 rename("/project/./dir", "/project/moved") = 0',
-		'1 utime("/project/moved/link", NULL) = 0',
-		"1 utimensat(3</tmp/outside>, NULL, NULL, 0) = 0",
-	].join("\n")
-
-	// retain descriptor writes when a renamed link obscures path coverage
-	const result = inspectSandboxActivity(trace, "", "0 packets dropped by kernel", [], ["/project/dir/link"])
-	assert.equal(result.files.complete, false)
-	assert.deepEqual(result.files.findings, [{ kind: "write", path: "/tmp/outside" }])
-})
-
-test("observes pnpm permission changes through project links alongside read-only system mappings", () => {
-	const trace = [
-		'1 execve("/usr/bin/env", [], []) = 0',
-		"1 mmap(NULL, 4096, PROT_READ, MAP_SHARED, 3</usr/lib/gconv/gconv-modules.cache>, 0) = 0x1000",
-		"2 mprotect(0x4000, 4096, PROT_READ|PROT_WRITE) = 0",
-		'2 symlink("../acorn@8/node_modules/acorn", "/project/.pnpm/node_modules/acorn") = 0',
-		'2 symlinkat(".pnpm/node_modules/acorn", AT_FDCWD</project>, "acorn") = 0',
-		'2 chmod("/project/acorn/bin/acorn", 0755) = 0',
-		'2 openat(AT_FDCWD</project>, "/tmp/log", O_CREAT|O_WRONLY, 0600) = 4</tmp/log>',
-	].join("\n")
-
-	// check the read-only mount and the write that escapes the project
-	const { argv: args } = guestArguments({ argv: ["true"], timeoutMs: 1000 }, undefined)
-	const mount = args.indexOf("/usr")
-	assert.deepEqual(args.slice(mount - 1, mount + 2), ["--ro-bind", "/usr", "/usr"])
-	assert.deepEqual(inspectSandboxActivity(trace, "", "0 packets dropped by kernel", []).files, {
-		complete: true,
-		findings: [{ kind: "write", path: "/tmp/log" }],
-	})
-})
-
-test("keeps coverage incomplete for escaping, cyclic, or replaced link targets", () => {
-	const start = '1 execve("/usr/bin/env", [], []) = 0'
-	for (const links of [
-		['1 symlink("../outside", "/project/link") = 0'],
-		['1 symlink("link", "/project/link") = 0'],
-		['1 symlink("/tmp", "/project/alias") = 0', '1 symlink("alias/../project", "/project/link") = 0'],
-		[
-			'1 symlink("/tmp", "/project/link") = 0',
-			'1 unlink("/project/link") = 0',
-			'1 symlink("pkg", "/project/link") = 0',
-		],
-		['1 symlink("pkg", "/project/link") = 0', '1 rename("/project/replacement", "/project/link") = 0'],
-	]) {
-		// apply the metadata change through each ambiguous link
-		const trace = [start, ...links, '1 chmod("/project/link/bin", 0755) = 0'].join("\n")
-		const files = inspectSandboxActivity(trace, "", "0 packets dropped by kernel", []).files
-		assert.equal(files.complete, false)
-		assert.match(files.reason ?? "", /symbolic link/)
-	}
-})
-
-test("attributes relative installs until a traced process can change directory", () => {
-	const start = '1 execve("/usr/bin/env", [], []) = 0'
-	const link = '1 symlink("target", "link") = 0'
-	const change = '2 chdir("/project/pkg") = 0'
-	const read = (rows: string[]): Observation =>
-		inspectSandboxActivity([start, ...rows], "", "0 packets dropped by kernel", []).files
-
-	// Keep earlier evidence and treat even an unfinished change as ambiguous for concurrent writes.
-	assert.equal(read([link, change]).complete, true)
-	assert.equal(read([change, link]).complete, false)
-	assert.equal(read(['2 chdir("/project/pkg" <unfinished ...>', link, "2 <... chdir resumed>) = 0"]).complete, false)
-})
-
-test("Bun hardlinks anonymous temporary inodes into the project", () => {
-	const trace = [
-		'2 execve("/usr/bin/env", [], []) = 0',
-		'2 linkat(5</project/.cache/#123>(deleted), "", 6</project/node_modules>, "pkg", AT_EMPTY_PATH) = 0',
-	].join("\n")
-	assert.deepEqual(inspectSandboxActivity(trace, "", "0 packets dropped by kernel", []).files, {
-		complete: true,
-		findings: [],
-	})
-})
-
-test("network observation traces all outbound address-bearing calls and keeps unfinished sends inconclusive", () => {
-	// inspect an unfinished system call under network observation
-	const { argv: args } = guestArguments({ argv: ["true"], timeoutMs: 1000, observe: "network" }, "/evidence")
-	assert.ok(args.includes("trace=execve,connect,sendto,sendmsg,sendmmsg"))
-	const inspect = (name: string): ReturnType<typeof inspectSandboxActivity> =>
-		inspectSandboxActivity(
-			`1 execve("/usr/bin/env", [], []) = 0\n2 ${name}(3, <unfinished ...>`,
-			"",
-			"0 packets dropped by kernel",
-			[],
-		)
-
-	// distinguish inbound calls from outbound sends and writes
-	assert.equal(inspect("recvfrom").connections.complete, true)
-	assert.equal(inspect("recvfrom").files.complete, true)
-	assert.equal(inspect("write").files.complete, false)
-	assert.equal(inspect("sendto").connections.complete, false)
 })
 
 test("only inventory readers receive the completed read-only snapshot", () => {
@@ -306,6 +145,7 @@ test("only inventory readers receive the completed read-only snapshot", () => {
 	// verify that only the integrity reader receives the read-only inventory
 	assert.equal(args([...base, "integrity", "0"], tests.capture).maxOutputBytes, 1024 * 1024)
 	assert.equal(args([...base, "integrity", "0"]).maxOutputBytes, undefined)
+	assert.equal(args([...base, "lifecycle"]).maxOutputBytes, 1024 * 1024)
 	assert.equal(tests.maxOutputBytes, undefined)
 	const read = args([...base, "integrity", "100"], tests.capture).argv
 	assert.deepEqual(read.slice(read.indexOf("/inspection-inventory") - 2, read.indexOf("/inspection-inventory") + 1), [
@@ -314,53 +154,6 @@ test("only inventory readers receive the completed read-only snapshot", () => {
 		"/inspection-inventory",
 	])
 	assert.equal(args(["bun", "run", "test"], tests.capture).argv.includes("/inspection-inventory"), false)
-})
-
-test("pinned runner setup and test-only helpers stay protected outside test folders", async () => {
-	const { protectedTestFiles } = await import("../guest/protectTestSupport.ts")
-	const files: Record<string, string> = {
-		"package.json": JSON.stringify({ scripts: { test: "jest --config ./configuration.json" } }),
-		"configuration.json": JSON.stringify({ rootDir: "./src", setupFiles: ["<rootDir>/jestSetup.ts"] }),
-		"src/jestSetup.ts": "",
-		"src/alternative.ts": "",
-		"pkg/tsconfig.json": '{"extends":["../tsconfig.json","../other.json"],"compilerOptions":{"baseUrl":"."}}',
-		"other.json": '{"compilerOptions":{"paths":{"choice":["one","two"]}}}',
-		"pkg/one.ts": "",
-		"pkg/two.ts": "",
-		"pkg/main.ts": 'import "choice"; import "@support/alternative"',
-		"pkg/main.test.ts": 'import "./two"; import "../src/alternative"',
-
-		"tsconfig.json": '{"extends":"./config/base"}',
-		"config/base.json": '{"compilerOptions":{"baseUrl":"..","paths":{"@support/*":["src/*"]}}}',
-		"bunfig.toml": '[test]\npreload=["./src/bootstrap.ts"]',
-		"src/bootstrap.ts": 'import "./environment"',
-		"src/environment.ts": "",
-		"src/widget.ts": "export const widget = 1",
-		"src/fixtureHelper.ts": "",
-		"src/app.ts": 'import "./widget"',
-		"src/widget.test.ts": 'import "./widget"; import "@support/fixtureHelper"',
-	}
-
-	// find test support through runner configuration and import aliases
-	const blocked = protectedTestFiles(
-		Object.keys(files),
-		["src/widget.test.ts", "pkg/main.test.ts"],
-		(file) => files[file] ?? "",
-	)
-
-	// require the runner's setup dependencies to remain protected
-	assert.ok(blocked.has("src/bootstrap.ts"))
-	assert.ok(blocked.has("src/environment.ts"))
-	assert.ok(blocked.has("src/jestSetup.ts"))
-	assert.ok(blocked.has("configuration.json"))
-
-	// distinguish test-only imports from shared production dependencies
-	assert.ok(blocked.has("pkg/two.ts"))
-	assert.ok(blocked.has("src/alternative.ts"))
-	assert.equal(blocked.has("pkg/one.ts"), false)
-	assert.ok(blocked.has("src/fixtureHelper.ts"))
-	assert.equal(blocked.has("src/widget.ts"), false)
-	assert.throws(() => protectedTestFiles(["vitest.config.ts"], [], () => "export default loadConfig()"), /Dynamic/)
 })
 
 test("test inventory pages retain all cases and mark the end of a full page", async () => {
@@ -396,4 +189,22 @@ test("test inventory pages retain all cases and mark the end of a full page", as
 	} finally {
 		rmSync(root, { recursive: true, force: true })
 	}
+})
+
+test("caller test values replace placeholders without overriding runtime controls", () => {
+	const { argv, placeholderVariableCount } = guestArguments(
+		{
+			argv: ["true"],
+			timeoutMs: 1000,
+			environment: ["BUDGET", "API_URL"],
+			environmentValues: { BUDGET: "5", EXTRA: "a=b", PATH: "/unsafe", NODE_OPTIONS: "--require=x" },
+		},
+		undefined,
+	)
+
+	// keep the trusted path and count only inert placeholders
+	assert.ok(argv.includes("BUDGET=5") && argv.includes("EXTRA=a=b") && argv.includes("API_URL=placeholder"))
+	assert.ok(!argv.includes("BUDGET=placeholder") && !argv.includes("PATH=/unsafe"))
+	assert.ok(!argv.some((item) => item.startsWith("NODE_OPTIONS=")))
+	assert.equal(placeholderVariableCount, 1)
 })

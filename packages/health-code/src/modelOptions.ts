@@ -1,5 +1,5 @@
 import type { InspectionOptionsV2, ModelRole, PreviousInspectionOptions } from "./agentContracts.ts"
-import { InspectionError, type InspectionOptions } from "./contracts.ts"
+import { InspectionError, type InspectionOptions, type WithSandboxProvider } from "./contracts.ts"
 import type { ModelRequestSandboxOptions } from "./modelRequestSandbox.ts"
 import { credentialTarget } from "./sandbox/setCredentialBinding.ts"
 
@@ -48,7 +48,9 @@ export function hasModels(
 /**
  * Maps legacy role names to the current local model options.
  */
-export function toModelOptions(options: InspectionOptionsV2 | PreviousInspectionOptions): InspectionOptionsV2 {
+export function toModelOptions(
+	options: (InspectionOptionsV2 | PreviousInspectionOptions) & WithSandboxProvider,
+): InspectionOptionsV2 & WithSandboxProvider {
 	const { models, limits } = options
 	const agent: NonNullable<PreviousInspectionOptions["limits"]>["agent"] = limits?.agent
 

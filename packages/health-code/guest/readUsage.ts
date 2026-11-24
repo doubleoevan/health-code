@@ -1,7 +1,9 @@
 import { existsSync, lstatSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { parse } from "@babel/parser"
+import { isPackagePath } from "../src/isPackagePath.ts"
 import { filesUnder, readText, workspaceDirectories } from "./inventory.ts"
+import { isSyntax } from "./readSyntax.ts"
 
 type Usage = { file: string; line: number; symbol: string; workspace: string; text: string }
 type Syntax = {
@@ -14,7 +16,7 @@ type Syntax = {
 
 // recognize syntax nodes before reading their bindings
 function node(value: unknown): value is Syntax {
-	return !!value && typeof value === "object" && "type" in value && typeof value.type === "string"
+	return isSyntax(value)
 }
 
 function childNodes(entry: Syntax): Syntax[] {
@@ -141,6 +143,11 @@ export function installedBytes(): number | null {
 	return bytes
 }
 
+// match the package root and any of its subpaths
+function isDependencyModule(module: unknown, dependency: string): boolean {
+	return node(module) && typeof module.value === "string" && isPackagePath({ path: module.value, dependency })
+}
+
 // recognize dependency loads through a literal require call
 function isRequiredModule(entry: Syntax, dependency: string): boolean {
 	return (
@@ -151,7 +158,7 @@ function isRequiredModule(entry: Syntax, dependency: string): boolean {
 		// check the callee name and the required package
 		entry.init.callee.name === "require" &&
 		Array.isArray(entry.init.arguments) &&
-		entry.init.arguments[0]?.value === dependency
+		isDependencyModule(entry.init.arguments[0], dependency)
 	)
 }
 function recordImport({
@@ -168,8 +175,7 @@ function recordImport({
 	// match import declarations for the selected dependency
 	if (
 		entry.type === "ImportDeclaration" &&
-		node(entry.source) &&
-		entry.source.value === dependency &&
+		isDependencyModule(entry.source, dependency) &&
 		Array.isArray(entry.specifiers)
 	) {
 		add(entry, "import")
@@ -241,8 +247,13 @@ function walk(entry: Syntax, parent: Bindings): void {
 	const scope = entry.type === "BlockStatement" || Array.isArray(entry.params) ? nestedScope(entry, parent) : parent
 	const { dependency, names, add } = scope
 	recordImport({ entry, dependency, names, add })
-	if (entry.type === "ImportExpression" && node(entry.source) && entry.source.value === dependency) {
+	if (entry.type === "ImportExpression" && isDependencyModule(entry.source, dependency)) {
 		add(entry, "dynamic import")
+	}
+
+	// include declaration files that name the dependency's modules
+	if (entry.type === "TSModuleDeclaration" && isDependencyModule(entry.id, dependency)) {
+		add(entry, "module declaration")
 	}
 
 	// register each literal require binding

@@ -7,7 +7,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client"
 import { createFakeSandboxProvider, inspectRepository, type SandboxFixture } from "health-code"
 import { parse as parseToml } from "smol-toml"
 import { createServer } from "./createServer.ts"
-import { environment, inspectionFixtureUrl, key, repo } from "./fixtures/inspectionSettings.ts"
+import { environment, inspectionFixtureUrl, key, modelSettings, repo } from "./fixtures/inspectionSettings.ts"
 import { setupAccount } from "./setupAccount.ts"
 import { InspectionStore, protect } from "./storeInspection.ts"
 import { Inspections } from "./trackInspections.ts"
@@ -31,13 +31,13 @@ test("setup registers and rotates a host-bound secret and prints name-only clien
 	const output = await setupAccount({ ...environment, GITHUB_TOKEN: "separate-opt-in" }, setup)
 	assert.ok(!output.includes(key) && !output.includes(environment.RUNTA_TOKEN))
 	const entry = JSON.parse(`{${output.split("\n")[2]}}`)["health-code"]
-	assert.equal(entry.env.ANTHROPIC_API_KEY, undefined)
+	assert.equal(entry.env.MODEL_API_KEY, undefined)
 	const config = parseToml(output.split("\n").at(-1) ?? "")
 	assert.deepEqual(JSON.parse(JSON.stringify(config.mcp_servers)), {
 		"health-code": {
 			command: entry.command,
 			args: entry.args,
-			env_vars: ["RUNTA_TOKEN", "HEALTH_CODE_SUMMARY_MODEL"],
+			env_vars: ["RUNTA_TOKEN", ...Object.keys(modelSettings)],
 		},
 	})
 
@@ -51,27 +51,22 @@ test("setup registers and rotates a host-bound secret and prints name-only clien
 	}
 
 	// rotate the secret in place and isolate registrations for other origins
-	await setupAccount({ ...environment, ANTHROPIC_API_KEY: `${key}-rotated` }, setup)
+	await setupAccount({ ...environment, MODEL_API_KEY: `${key}-rotated` }, setup)
 	assert.equal(stored[0], stored[1])
 	await setupAccount(
 		{
 			...environment,
 			HEALTH_CODE_MODEL_HOST: "https://models.example.com",
-			HEALTH_CODE_INPUT_USD_PER_MILLION: "3",
-			HEALTH_CODE_OUTPUT_USD_PER_MILLION: "16",
 		},
 		setup,
 	)
 	assert.notEqual(stored[1], stored[2])
-	await setupAccount({ RUNTA_TOKEN: environment.RUNTA_TOKEN }, setup)
+	await setupAccount({ ...environment, MODEL_API_KEY: undefined }, setup)
 	assert.equal(stored.length, 3)
 
 	// reject missing and unresolved credentials
 	await assert.rejects(setupAccount({}, setup), /Supply RUNTA_TOKEN/)
-	await assert.rejects(
-		setupAccount({ ...environment, ANTHROPIC_API_KEY: `\${ANTHROPIC_API_KEY}` }, setup),
-		/ANTHROPIC_API_KEY/,
-	)
+	await assert.rejects(setupAccount({ ...environment, MODEL_API_KEY: `\${MODEL_API_KEY}` }, setup), /MODEL_API_KEY/)
 
 	// withhold credential-bearing messages from both setup failure paths
 	for (const step of ["check", "store", "probe"]) {

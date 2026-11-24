@@ -2,10 +2,11 @@ import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { test } from "node:test"
 import { registryHosts } from "../src/networkPolicy.ts"
+import { readModelRoutes } from "../src/readModelRoutes.ts"
 import { connectProvider } from "../src/sandbox/createSandboxProvider.ts"
 
 test("the live gateway authenticates only while the scoped model stub is attached", {
-	skip: !process.env.RUNTA_TOKEN || !process.env.HEALTH_CODE_STORED_CREDENTIAL,
+	skip: !process.env.RUNTA_TOKEN || !process.env.HEALTH_CODE_MODEL,
 	timeout: 300000,
 }, async () => {
 	const provider = connectProvider({}, "7e6d81920e7959933822dc628fe7ad184f56cf61", true)
@@ -18,19 +19,8 @@ test("the live gateway authenticates only while the scoped model stub is attache
 		await provider.setNetworkPolicy(sandbox, registryHosts, operation)
 		await provider.resetProject(sandbox, operation)
 
-		// bind the configured credential name to the intended model endpoint
-		const name = process.env.HEALTH_CODE_STORED_CREDENTIAL
-		assert.ok(name)
-		const route = {
-			protocol: "anthropic" as const,
-			baseUrl: "https://api.anthropic.com/v1",
-			modelId: "claude-opus-5-5",
-			credential: {
-				name,
-				header: "x-api-key",
-				valueTemplate: `\${credential}`,
-			},
-		}
+		// bind the stored credential to the configured model endpoint
+		const route = readModelRoutes(process.env).repair
 		assert.ok(provider.openCredentialSession)
 		const session = await provider.openCredentialSession(sandbox, route, operation)
 		try {

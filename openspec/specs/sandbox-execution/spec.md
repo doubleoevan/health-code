@@ -9,6 +9,8 @@ Give inspection checks a disposable execution environment with bounded resources
 
 Providers SHALL support an authenticated availability check, sandbox creation, bounded command execution, file reads and writes, complete network policy replacement, reading attempted connections and filesystem changes for an observed command, and destruction. The production and fixture providers SHALL satisfy the same behavioral contract.
 
+An inspection SHALL use the production provider with `RUNTA_TOKEN` when the caller supplies no provider.
+
 #### Scenario: Cheap credential check
 
 - **WHEN** a consumer probes the provider with a missing, rejected, or expired token
@@ -37,6 +39,11 @@ The provider SHALL allow trusted provisioning and acquisition of the pinned sour
 
 - **WHEN** repository code or its example environment file names a required variable
 - **THEN** the guest receives an inert placeholder for a statically discoverable application variable and reserved runtime controls keep their trusted settings.
+
+#### Scenario: Caller-supplied test values
+
+- **WHEN** a caller supplies non-secret application values
+- **THEN** repository commands receive those values in place of placeholders, and a name reserved for runtime controls fails before any sandbox is allocated.
 
 ### Requirement: Attributable installation evidence
 

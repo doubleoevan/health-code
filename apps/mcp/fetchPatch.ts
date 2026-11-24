@@ -104,7 +104,7 @@ export function fetchPatch(report: SavedReport, input: Fetch): z.infer<typeof pa
 			!raw ||
 			!verified(raw, prerequisite))
 	) {
-		throw new UserError("Invalid Patch prerequisite order or digest.")
+		throw new UserError("Invalid required Patch order or digest.")
 	}
 
 	// stop the handoff if either patch changes tests
@@ -124,7 +124,7 @@ export function fetchPatch(report: SavedReport, input: Fetch): z.infer<typeof pa
 		agentPrompt: patch.prompt,
 		action: blocked
 			? "Stop. This series includes test edits."
-			: "Compare the checkout to the inspected commit with local Git ancestry. Disclose ahead, behind, diverged or unknown history and preserve uncommitted work. Verify the SHA-256 of each complete mailbox, create a new branch, apply prerequisites in order, typecheck and test without editing tests, then open the authorized pull request.",
+			: "Compare the checkout to the inspected commit with local Git ancestry. Disclose ahead, behind, diverged or unknown history and preserve uncommitted work. Verify the SHA-256 of each complete mailbox, create a new branch, apply required patches in order, typecheck and test without editing tests, then open the authorized pull request.",
 	}
 }
 export function validateOutcome(report: SavedReport, outcome: Outcome): void {

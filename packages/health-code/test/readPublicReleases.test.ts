@@ -132,3 +132,17 @@ test("the library returns feature entries beyond the first web page with their r
 	)
 	assert.equal(result.features.at(-1)?.source, "https://github.com/example/widget/releases/tag/v1.1.0")
 })
+
+test("a release note cut at its limit keeps only whole lines", async () => {
+	const line = "- [290c594](https://github.com/example/widget/commit/290c594) feat: add an option"
+	const { notes } = await readReleases({
+		upgrade: { dependency: "widget", kind: "minor", from: { ".": "1.0.0" }, to: "1.1.0" },
+		changelog: "## 1.1.0\n" + Array.from({ length: 80 }, () => line).join("\n"),
+		request: async () => new Response(null, { status: 503 }),
+	})
+
+	// end the note on a complete entry
+	const text = notes[0]?.text ?? ""
+	assert.ok(text.length > 3900 && text.length <= 4000)
+	assert.ok(text.endsWith(line))
+})

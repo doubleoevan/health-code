@@ -6,6 +6,7 @@ import {
 	type InspectionReport,
 	type Sandbox,
 	SandboxUnavailableError,
+	type WithSandboxProvider,
 } from "./contracts.ts"
 import { ModelInspection } from "./inspectModels.ts"
 import { inspectProject } from "./inspectProject.ts"
@@ -13,6 +14,8 @@ import { hasModels, toModelOptions } from "./modelOptions.ts"
 import type { ModelRequestSandboxInspectionReport, ModelRequestSandboxOptions } from "./modelRequestSandbox.ts"
 import { RepositoryRuntime } from "./openRepositoryRuntime.ts"
 import { retainMeasuredStages } from "./preservePartialReport.ts"
+import { createSandboxProvider } from "./sandbox/createSandboxProvider.ts"
+import { isApplicationVariable } from "./sandbox/executeGuest.ts"
 import { toInspectionMode } from "./toInspectionMode.ts"
 import { toRepositoryUrl } from "./toRepositoryUrl.ts"
 
@@ -26,8 +29,11 @@ export function inspectRepository(
 ): Promise<ModelRequestSandboxInspectionReport>
 export function inspectRepository(options: InspectionOptions): Promise<InspectionReport>
 export async function inspectRepository(
-	input: InspectionOptions | InspectionOptionsV2 | PreviousInspectionOptions | ModelRequestSandboxOptions,
+	request: InspectionOptions | InspectionOptionsV2 | PreviousInspectionOptions | ModelRequestSandboxOptions,
 ): Promise<InspectionReport | ModelRequestSandboxInspectionReport> {
+	// use the caller's Runta account unless the request supplies a provider
+	const input = { ...request, sandboxProvider: request.sandboxProvider ?? createSandboxProvider() }
+
 	// select the model-backed inspection contract and validate the repository
 	const engine = createEngine(input)
 	const options = { ...toCheckOptions(input, engine), mode: toInspectionMode(input) }
@@ -37,6 +43,7 @@ export async function inspectRepository(
 	if (input.revision !== undefined && !/^[0-9a-f]{40}$/.test(input.revision)) {
 		throw new InspectionError("invalid-revision", "Expected a full commit SHA")
 	}
+	requireApplicationVariables(options.applicationEnvironment)
 	const context = new InspectionContext(
 		options,
 		engine && ((event) => engine.forward(event)),
@@ -89,6 +96,15 @@ export async function inspectRepository(
 	// Include every prompt dispatched before cleanup completed.
 	inspectionReport.promptVersions = context.prompts.references
 	return engine ? engine.buildInspectionReport(redactEvidence(inspectionReport)) : redactEvidence(inspectionReport)
+}
+
+// reject names that would override the trusted sandbox controls
+function requireApplicationVariables(setting: InspectionOptions["applicationEnvironment"]): void {
+	for (const [name, value] of Object.entries(typeof setting === "object" ? setting : {})) {
+		if (!isApplicationVariable(name) || typeof value !== "string" || value.includes("\0") || value.length > 4096) {
+			throw new InspectionError("invalid-environment", `Unsupported application variable: ${name}`)
+		}
+	}
 }
 
 async function inspectWithRecovery({
@@ -153,7 +169,8 @@ async function inspectWithRecovery({
 }
 
 function createEngine(
-	input: InspectionOptions | InspectionOptionsV2 | PreviousInspectionOptions | ModelRequestSandboxOptions,
+	input: (InspectionOptions | InspectionOptionsV2 | PreviousInspectionOptions | ModelRequestSandboxOptions) &
+		WithSandboxProvider,
 ): ModelInspection | undefined {
 	if (
 		"callerModelExecution" in input &&
@@ -273,9 +290,10 @@ async function failInspection(
 }
 
 function toCheckOptions(
-	input: InspectionOptions | InspectionOptionsV2 | PreviousInspectionOptions | ModelRequestSandboxOptions,
+	input: (InspectionOptions | InspectionOptionsV2 | PreviousInspectionOptions | ModelRequestSandboxOptions) &
+		WithSandboxProvider,
 	engine?: ModelInspection,
-): InspectionOptions {
+): InspectionOptions & WithSandboxProvider {
 	return engine
 		? {
 				repositoryUrl: input.repositoryUrl,
@@ -288,7 +306,7 @@ function toCheckOptions(
 				includeTestInventory: true,
 				limits: engine.limits,
 			}
-		: (input as InspectionOptions)
+		: (input as InspectionOptions & WithSandboxProvider)
 }
 
 function asFailure(error: unknown): InspectionError {

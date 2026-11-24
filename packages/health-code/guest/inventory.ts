@@ -2,9 +2,10 @@ import { execFileSync } from "node:child_process"
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { join, matchesGlob, sep } from "node:path"
 import { parse as parseClassicLock } from "@yarnpkg/lockfile"
-import { parse as jsonc } from "jsonc-parser/lib/esm/main.js"
+import { applyEdits, parse as jsonc, modify } from "jsonc-parser/lib/esm/main.js"
 import { valid, validRange } from "semver"
 import { parse as yaml } from "yaml"
+import { applyManifestChanges } from "../src/applyManifestChanges.ts"
 import { bumpManifest, lockfiles, type Manifest, sections } from "../src/bumpManifest.ts"
 import type { PackageManager, Project } from "../src/contracts.ts"
 
@@ -285,7 +286,8 @@ export function bumpDependency(name: string, target: string): void {
 }
 
 function writeManifest(dir: string, manifest: Manifest): void {
-	writeFileSync(join(dir, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`)
+	const file = join(dir, "package.json")
+	writeFileSync(file, applyManifestChanges({ applyEdits, modify }, readText(file), manifest))
 }
 
 function registrySource(range: string): boolean {

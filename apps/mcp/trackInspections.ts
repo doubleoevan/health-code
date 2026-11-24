@@ -35,7 +35,7 @@ export const readOutput = z.object({
 })
 
 // accept either supported event and report format from the inspection engine
-type Choice = Pick<InspectionOptions, "revision" | "mode" | "upgrade">
+type Choice = Pick<InspectionOptions, "revision" | "mode" | "upgrade" | "limits" | "applicationEnvironment">
 export type Inspect = (
 	options: Choice & {
 		repositoryUrl: string

@@ -8,12 +8,42 @@ npx @health-code/mcp setup
 
 Follow the printed client instructions. To start the stdio server directly, run `npx @health-code/mcp`. Each release runs the executable from the matching version of the `health-code` package.
 
-See the [account setup guide](https://github.com/doubleoevan/health-code#mcp-setup) for credentials, sandbox behavior and local storage.
+See the [account setup guide](https://github.com/doubleoevan/health-code#mcp-setup) for credentials and client configuration.
 
 MIT licensed.
 
 Call `list_upgrades({ repositoryUrl })` to see eligible versions and their documented features. Choose one and call `get_upgrade({ upgradeMenuId, dependency, to })` to get its verified patch or the check results explaining why none was produced. Starting discovery or testing a selected upgrade sends ordered events to clients that display MCP progress. A saved upgrade menu reuses the discovered versions and fetches release notes for the visible page. A saved patch opens from local storage. Use the inspection ID with `read_inspection` to replay the log. To browse another page or sort the same upgrade menu, pass its `upgradeMenuId` to `list_upgrades` with `offset`, `order` (minor, alphabetical or workspaces), `search` or `readyOnly`.
 
-`read_inspection` returns a `patches` list with the dependency, target version when recorded, role, SHA-256 and prerequisite SHA-256. Choose one artifact and pass its `sha256` and the same `inspectionId` to `get_tested_patch`. Verify the downloaded mailbox and apply any required upgrade patch before its feature patch.
+`read_inspection` returns a `patches` list with the dependency, target version when recorded, role, SHA-256 and required Patch SHA-256 (`prerequisiteSha256`). Choose one artifact and pass its `sha256` and the same `inspectionId` to `get_tested_patch`. Verify the downloaded mailbox and apply any required upgrade patch before its feature patch.
 
 Each upgrade menu target includes its first five documented features. Pass `nextOffset` as `offset` to `get_upgrade_features` for the next page.
+
+## Example agent session
+
+Ask your agent to **list upgrades for this repository, test the upgrade I choose and apply its verified patch**.
+
+1. Call `list_upgrades` with the public GitHub `repositoryUrl`. Review the versions and documented features. To browse more, pass the returned `upgradeMenuId` and pass `nextOffset` as `offset`.
+2. Call `get_upgrade` with `upgradeMenuId`, `dependency` and `to` from the upgrade menu. It returns the verified upgrade patch or the check results explaining why none was produced.
+3. Compare the local remote and HEAD with the inspected repository and commit. To fetch additional patch pages, pass the inspection ID, digest and offset to `get_tested_patch`. New discovery and testing stream step and sandbox events as MCP progress notifications. A saved upgrade menu skips sandbox discovery and fetches release notes for the visible page. Saved patches open from local storage. Replay the log with `read_inspection`.
+4. Concatenate each Patch’s text pages verbatim. Verify the SHA-256 digest, follow the library prompt and apply the required series first on a new branch. Run the typecheck and tests without editing tests. Open the authorized pull request.
+5. Call `report_patch_result` with the ID, digest, `application` (clean or adapted), `tests` (passed, failed or not_run) and optional `pullRequest`. Supply `adaptation` for an adapted Patch.
+
+Completed Inspection Reports live under `~/.health-code/inspections/<inspection-id>/inspection-report.json`. Restart either client and read by the same ID without credentials. Developer-reported results are separate from the library Verdict. Closing the local server interrupts active Inspections. Public links belong to hosted Inspections.
+
+## CI
+
+Run `npx @health-code/mcp setup` once to register your model key with your Runta account. In CI, set `RUNTA_TOKEN` and the model settings from setup, then run:
+
+```sh
+npx health-code check https://github.com/owner/repository --dependency zod --to 4.0.0
+```
+
+Omit the target to test the first eligible upgrade. The command writes `inspection-report.json` and any `.patch` files to `health-code-report/`. Use `--output` to change the folder and `--revision` to pin a commit. It exits nonzero when the inspection fails or stops early. An upgrade without a patch still exits zero, so read its verdict in the report.
+
+Tests receive placeholder environment values. Supply a non-secret value with `--env NAME=value`, repeated as needed. The sandbox and its saved output can expose these values.
+
+Your pipeline can apply a patch with `git am` and open a pull request with its own token.
+
+## Unpublished checkout
+
+To use an unpublished checkout, build the library with `bun run --cwd packages/health-code build`, then run `bun run --cwd apps/mcp build`. Use `node packages/health-code/dist/mcp/cli.js mcp setup` in your secret environment. In the printed client entry, use `node` as the command and pass the absolute path to that file followed by `mcp` as the arguments.

@@ -1,48 +1,32 @@
 import { posix } from "node:path"
-import { parse } from "@babel/parser"
 import { parse as parseToml } from "smol-toml"
+import { isPackagePath } from "../src/isPackagePath.ts"
+import { isSyntax, parseStatements, readPropertyName, type Syntax } from "./readSyntax.ts"
 import { createTestAliasResolver } from "./readTestAliases.ts"
+import { compareAliases, readViteAliases, type ViteAlias } from "./readViteAliases.ts"
 
-type Syntax = { type: string; [key: string]: unknown }
 const moduleSuffixes = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts", ".cjs", ".cts"]
 const sourceFile = /\.[cm]?[jt]sx?$/
 const runnerConfig = /(?:^|\/)(?:vitest(?:\.workspace)?|vite|jest)\.config\.[cm]?[jt]s$/
+const viteConfig = /(?:^|\/)(?:vitest|vite)\.config\.[cm]?[jt]s$/
+
+// the Vite settings that readViteAliases checks or that cannot name test setup modules
+const buildSettings = ["plugins", "resolve", "server", "preview", "build", "define", "css", "optimizeDeps", "esbuild"]
 const supportDirectory =
 	/(?:^|\/)(?:__mocks__|__fixtures__|__snapshots__|fixtures|snapshots|test-support|test-utils)(?:\/|\.)/i
 
-// recognize syntax nodes before traversing their fields
-function syntax(value: unknown): value is Syntax {
-	return !!value && typeof value === "object" && "type" in value && typeof value.type === "string"
-}
-function ast(text: string): ReturnType<typeof parse>["program"]["body"] {
-	return parse(text, {
-		sourceType: "unambiguous",
-		createImportExpressions: true,
-		plugins: ["typescript", "jsx", "decorators-legacy"],
-	}).program.body
-}
-
 // resolve static test configuration without evaluating project code
-function configValue(node: unknown): unknown {
-	if (!syntax(node)) {
+function configValue(node: unknown, ignoredSettings: string[] = []): unknown {
+	if (!isSyntax(node)) {
 		throw new Error("Unresolved test configuration")
 	}
 	if (node.type === "ObjectExpression" && Array.isArray(node.properties)) {
-		const config: Record<string, unknown> = Object.create(null)
-
-		// require ordinary named fields in configuration objects
-		for (const field of node.properties) {
-			if (field.type !== "ObjectProperty" || field.computed) {
-				throw new Error("Dynamic test configuration")
-			}
-			config[field.key.name ?? field.key.value] = configValue(field.value)
-		}
-		return config
+		return objectValue(node.properties, ignoredSettings)
 	}
 
 	// decode nested arrays and literal configuration values
 	if (node.type === "ArrayExpression" && Array.isArray(node.elements)) {
-		return node.elements.map(configValue)
+		return node.elements.map((element) => configValue(element))
 	}
 	if (["StringLiteral", "NumericLiteral", "BooleanLiteral", "RegExpLiteral", "NullLiteral"].includes(node.type)) {
 		return node.value
@@ -51,13 +35,13 @@ function configValue(node: unknown): unknown {
 	// unwrap a single static defineConfig argument
 	if (
 		node.type === "CallExpression" &&
-		syntax(node.callee) &&
+		isSyntax(node.callee) &&
 		node.callee.name === "defineConfig" &&
 		Array.isArray(node.arguments) &&
 		node.arguments.length === 1
 	) {
 		// resolve the wrapped options with the same literal checks
-		return configValue(node.arguments[0])
+		return configValue(node.arguments[0], ignoredSettings)
 	}
 
 	// reject configuration expressions that require execution
@@ -77,17 +61,18 @@ function readConfig(file: string, text: string): unknown {
 		return JSON.parse(text)
 	}
 
-	// strip recognized runner imports before checking the export
-	const statements = ast(text).filter(
+	// drop imports whose modules are protected or supplied by the runner
+	const isVite = viteConfig.test(file)
+	const statements = parseStatements(text).filter(
 		(statement) =>
 			statement.type !== "ImportDeclaration" ||
-			!["vite", "vitest/config", "jest", "jest/config"].includes(statement.source.value),
+			(!isVite && !["vite", "vitest/config", "jest", "jest/config"].includes(statement.source.value)),
 	)
 	const declaration = statements[0]
 
 	// accept a single default configuration export
 	if (statements.length === 1 && declaration?.type === "ExportDefaultDeclaration") {
-		return configValue(declaration.declaration)
+		return configValue(declaration.declaration, isVite ? buildSettings : [])
 	}
 	if (
 		statements.length === 1 &&
@@ -105,6 +90,23 @@ function readConfig(file: string, text: string): unknown {
 		return configValue(declaration.expression.right)
 	}
 	throw new Error("Dynamic test configuration")
+}
+
+// require ordinary named fields in configuration objects
+function objectValue(fields: Syntax[], ignoredSettings: string[]): Record<string, unknown> {
+	const config: Record<string, unknown> = Object.create(null)
+	for (const field of fields) {
+		const name = readPropertyName(field)
+		if (field.type !== "ObjectProperty" || typeof name !== "string") {
+			throw new Error("Dynamic test configuration")
+		}
+
+		// decode only the settings that can name test modules
+		if (!ignoredSettings.includes(name)) {
+			config[name] = configValue(field.value)
+		}
+	}
+	return config
 }
 
 function setupPaths(config: unknown): string[] {
@@ -147,12 +149,12 @@ function setupPaths(config: unknown): string[] {
 
 function collectImport(entry: Syntax, paths: string[]): void {
 	// collect static import and export source paths
-	if (syntax(entry.source) && typeof entry.source.value === "string") {
+	if (isSyntax(entry.source) && typeof entry.source.value === "string") {
 		paths.push(entry.source.value)
 	}
 	if (
 		entry.type === "CallExpression" &&
-		syntax(entry.callee) &&
+		isSyntax(entry.callee) &&
 		entry.callee.name === "require" &&
 		// accept a literal module path in require calls
 		Array.isArray(entry.arguments) &&
@@ -170,7 +172,7 @@ function moduleImports(text: string): string[] {
 			for (const item of value) {
 				visit(item)
 			}
-		} else if (syntax(value)) {
+		} else if (isSyntax(value)) {
 			// follow nested syntax nodes after reading the current import
 			collectImport(value, paths)
 			for (const child of Object.values(value)) {
@@ -180,7 +182,7 @@ function moduleImports(text: string): string[] {
 	}
 
 	// return import paths from the complete program
-	visit(ast(text))
+	visit(parseStatements(text))
 	return paths
 }
 
@@ -222,12 +224,57 @@ export function protectedTestFiles(files: string[], discovered: string[], read: 
 		}
 	}
 
+	// protect local modules loaded by a Vite configuration
+	const viteAliases: ViteAlias[] = []
+
+	// name the packages that resolve inside the repository
+	const packageNames = files
+		.filter((file) => posix.basename(file) === "package.json")
+		.map((file): unknown => JSON.parse(read(file)).name)
+		.filter((name) => typeof name === "string")
+
+	// resolve each module the configuration imports
+	function collectViteConfig(file: string, text: string): void {
+		viteAliases.push(...readViteAliases(file, text))
+		for (const path of moduleImports(text)) {
+			const locations = path.startsWith(".")
+				? [resolve(file, path)]
+				: aliases(file, path).map((name) => resolve("package.json", name))
+			const target = locations.find((name) => name !== undefined)
+
+			// reject a local module without a known entry file
+			const isLocal = path.startsWith(".") || packageNames.some((name) => isPackagePath({ path, dependency: name }))
+			if (!target && isLocal) {
+				throw new Error("Unresolved test configuration module")
+			}
+
+			// keep the loaded module out of source edits
+			if (target) {
+				configured.add(target)
+			}
+		}
+	}
+
+	// list the files an aliased import can reach
+	function resolveViteAlias(file: string, path: string): (string | undefined)[] {
+		return viteAliases
+			.filter(({ directory }) => directory === "." || file.startsWith(`${directory}/`))
+			.sort(compareAliases)
+			.filter(({ name }) => path === name || path.startsWith(name.endsWith("/") ? name : `${name}/`))
+			.map(({ name, target }) => resolve("package.json", posix.join(target, path.slice(name.length))))
+	}
+
 	// restrict configuration reads to known runner entry points
 	function collectConfigured(file: string): void {
 		if (!runnerConfig.test(file) && !/(?:^|\/)(?:package\.json|bunfig\.toml|jest\.config\.json)$/.test(file)) {
 			return
 		}
+
+		// collect the modules and aliases each configuration names
 		const text = read(file)
+		if (viteConfig.test(file)) {
+			collectViteConfig(file, text)
+		}
 		collectConfig(file, readConfig(file, text))
 
 		// inspect test command flags declared in package manifests
@@ -256,8 +303,8 @@ export function protectedTestFiles(files: string[], discovered: string[], read: 
 	}
 
 	// collect runner roots and repository module edges
+	files.forEach(collectConfigured)
 	for (const file of files) {
-		collectConfigured(file)
 		if (sourceFile.test(file)) {
 			if (supportDirectory.test(file)) {
 				configured.add(file)
@@ -267,11 +314,11 @@ export function protectedTestFiles(files: string[], discovered: string[], read: 
 			edges.set(
 				file,
 				moduleImports(read(file)).flatMap((path) => {
-					const locations = path.startsWith(".")
-						? [resolve(file, path)]
-						: aliases(file, path).map((name) => resolve("package.json", name))
-					const selected = locations.find((name) => name !== undefined)
-					return selected ? [selected] : []
+					// follow both alias sources when they name different files
+					const sources = path.startsWith(".")
+						? [[resolve(file, path)]]
+						: [resolveViteAlias(file, path), aliases(file, path).map((name) => resolve("package.json", name))]
+					return sources.flatMap((locations) => locations.find((name) => name !== undefined) ?? [])
 				}),
 			)
 		}

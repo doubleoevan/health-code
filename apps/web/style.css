@@ -1,31 +1,26 @@
+@import "./fonts.css";
+@import "./promptBox.css";
 @import "./upgradeMenu.css";
 
-@font-face {
-	font-family: "JetBrains Mono";
-	src: url("/assets/jetbrains-mono-bold.woff2") format("woff2");
-	font-weight: 700;
-	font-display: swap;
-}
-@font-face {
-	font-family: "JetBrains Mono";
-	src: url("/assets/jetbrains-mono-regular.woff2") format("woff2");
-	font-weight: 400;
-	font-display: swap;
-}
 :root {
 	color-scheme: light dark;
+	--glow: #3ee07a;
+	--section-gap: 2rem;
+	--block-gap: 1rem;
+	--inline-gap: 0.5rem;
 	--paper: #faf9f7;
 	--ink: #201f20;
 	--muted: #565458;
 	--rule: #ccc8c8;
 	--panel: #fff;
-	--brand-red: #e23a31;
-	--accent: color-mix(in srgb, var(--brand-red) 78%, black);
-	--wash: #f5e8e9;
+	--brand-green: #16853c;
+	--accent: color-mix(in srgb, var(--brand-green) 78%, black);
+	--wash: #e8f5ec;
+	--shimmer: color-mix(in srgb, var(--brand-green) 45%, white);
 	font:
-		16px / 1.55 "JetBrains Mono",
-		ui-monospace,
-		monospace;
+		16px / 1.55 "IBM Plex Sans",
+		system-ui,
+		sans-serif;
 	background: var(--paper);
 	color: var(--ink);
 }
@@ -34,6 +29,9 @@
 }
 body {
 	margin: 0;
+}
+:where(p, ul, ol, dl, blockquote, h4) {
+	margin-block: var(--block-gap);
 }
 main {
 	overflow-wrap: anywhere;
@@ -46,7 +44,9 @@ main {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 1rem;
+	flex-wrap: wrap;
+	gap: var(--block-gap);
+	white-space: nowrap;
 }
 :where(.mast) a {
 	font-weight: 750;
@@ -58,7 +58,7 @@ main {
 .mast a {
 	display: inline-flex;
 	align-items: center;
-	gap: 0.65rem;
+	gap: var(--inline-gap);
 	font-family: "JetBrains Mono", monospace;
 }
 .mark {
@@ -66,7 +66,7 @@ main {
 }
 .wordmark-accent,
 .steps li::marker {
-	color: var(--brand-red);
+	color: var(--brand-green);
 }
 @media (prefers-color-scheme: light) {
 	.mast a {
@@ -79,7 +79,7 @@ main {
 
 .steps {
 	padding-left: 1.65rem;
-	margin: 1.6rem 0;
+	margin: var(--section-gap) 0;
 }
 .steps li {
 	padding: 0.23rem 0 0.23rem 0.35rem;
@@ -125,16 +125,17 @@ main {
 }
 h1,
 h2,
-h3 {
+h3,
+h4 {
+	font-family: "Space Grotesk", system-ui, sans-serif;
 	line-height: 1.08;
 	text-wrap: balance;
 }
 h1 {
-	font-family: "JetBrains Mono", ui-monospace, monospace;
 	font-weight: 700;
 	font-size: clamp(2.5rem, 6vw, 4.6rem);
-	letter-spacing: -0.055em;
-	margin: 2.75rem 0 1.2rem;
+	letter-spacing: -0.03em;
+	margin: var(--section-gap) 0 var(--block-gap);
 }
 .inspection-heading {
 	width: fit-content;
@@ -146,7 +147,18 @@ h1 {
 	background: transparent;
 }
 .inspection-heading h1::selection {
-	color: var(--brand-red);
+	color: var(--brand-green);
+}
+.inspection-heading .shimmer {
+	background: linear-gradient(100deg, var(--brand-green) 40%, var(--shimmer) 50%, var(--brand-green) 60%) 100% 0 / 250%;
+	background-clip: text;
+	color: transparent;
+	animation: shimmer 2.5s linear infinite;
+}
+@keyframes shimmer {
+	to {
+		background-position: 0 0;
+	}
 }
 .landing h1 {
 	max-width: 19ch;
@@ -154,7 +166,7 @@ h1 {
 }
 h2 {
 	font-size: 1.3rem;
-	margin: 2rem 0 1rem;
+	margin: var(--section-gap) 0 var(--block-gap);
 }
 h3 {
 	font-size: 1.25rem;
@@ -162,7 +174,7 @@ h3 {
 }
 form {
 	max-width: 44rem;
-	margin-top: 2.75rem;
+	margin-top: var(--section-gap);
 }
 label,
 dt {
@@ -170,15 +182,14 @@ dt {
 }
 label {
 	display: block;
-	margin-bottom: 0.55rem;
+	margin-bottom: var(--inline-gap);
 }
 .field,
-.buttons,
 .pager,
 article header {
 	display: flex;
 	align-items: center;
-	gap: 0.6rem;
+	gap: var(--inline-gap);
 }
 :where(.field) input {
 	min-width: 0;
@@ -205,13 +216,25 @@ button {
 	cursor: pointer;
 	border: 0;
 	border-radius: 0.4rem;
-	background: var(--brand-red);
+	background: var(--brand-green);
 	color: #fff;
 	font-weight: 650;
 }
 button:enabled:hover,
-button:focus-visible {
-	box-shadow: 0 0 1rem color-mix(in srgb, var(--accent) 38%, transparent);
+button:focus-visible,
+:is(input, textarea, select):focus-visible {
+	box-shadow:
+		0 0 0.4rem color-mix(in srgb, var(--glow) 45%, transparent),
+		0 0 1.4rem color-mix(in srgb, var(--glow) 35%, transparent);
+}
+.button-link a {
+	display: inline-block;
+	padding: 0.85rem 1rem;
+	border-radius: 0.4rem;
+	background: light-dark(#000, #fff);
+	color: light-dark(#fff, #000);
+	font-weight: 650;
+	text-decoration: none;
 }
 button:disabled {
 	opacity: 0.7;
@@ -219,9 +242,50 @@ button:disabled {
 .secondary {
 	padding: 0.5rem 0.85rem;
 }
+.section-heading {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--inline-gap) var(--block-gap);
+	margin: var(--section-gap) 0 var(--block-gap);
+}
+.section-heading h2 {
+	margin: 0;
+}
+.mast nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--inline-gap) var(--block-gap);
+}
+.mast nav a {
+	color: var(--accent);
+	font: inherit;
+	letter-spacing: normal;
+}
+.mast > span {
+	display: flex;
+	flex-flow: row-reverse wrap;
+	align-items: center;
+}
+.mast > span > :not(button, :empty) {
+	margin-inline-end: var(--inline-gap);
+}
+.mast > a {
+	margin-inline-end: auto;
+}
+.quiet {
+	background: light-dark(#000, #fff);
+	color: light-dark(#fff, #000);
+	font-weight: inherit;
+}
 a {
-	color: var(--brand-red);
+	color: var(--accent);
 	text-underline-offset: 0.18em;
+}
+a:hover,
+a:focus-visible {
+	filter: drop-shadow(0 0 0.5rem color-mix(in srgb, var(--glow) 70%, transparent));
 }
 small,
 .mono,
@@ -231,6 +295,9 @@ dt {
 }
 .mono,
 .elapsed,
+.timeline,
+.section-heading a,
+code,
 pre {
 	font-family: "JetBrains Mono", ui-monospace, monospace;
 }
@@ -246,7 +313,7 @@ aside {
 .current {
 	display: flex;
 	align-items: center;
-	gap: 0.65rem;
+	gap: var(--inline-gap);
 }
 .spinner {
 	height: 1em;
@@ -262,12 +329,19 @@ aside {
 	}
 }
 @media (prefers-reduced-motion: reduce) {
-	.spinner {
+	.spinner,
+	.inspection-heading .shimmer {
 		animation: none;
 	}
 }
+aside {
+	margin-block: var(--section-gap);
+}
 aside h2 {
-	margin: 0.25rem 0;
+	margin: 0 0 var(--block-gap);
+}
+aside ul {
+	margin: 0;
 }
 .timeline li {
 	border-bottom: 1px solid var(--rule);
@@ -279,7 +353,7 @@ aside h2 {
 }
 article {
 	padding: clamp(1rem, 3vw, 2rem);
-	margin-bottom: 0.8rem;
+	margin-bottom: var(--block-gap);
 }
 article header {
 	justify-content: space-between;
@@ -289,7 +363,7 @@ article header {
 	color: var(--muted);
 }
 dt {
-	margin-top: 0.55rem;
+	margin-top: var(--inline-gap);
 	font-size: 0.85rem;
 }
 dd {
@@ -309,8 +383,14 @@ pre {
 	white-space: pre-wrap;
 }
 :focus-visible {
-	outline: 3px solid var(--brand-red);
+	outline: 3px solid var(--brand-green);
 	outline-offset: 3px;
+}
+
+/* keep a transparent outline for high-contrast modes, which hide shadows */
+:is(input, textarea, select):focus-visible {
+	border-color: var(--brand-green);
+	outline-color: transparent;
 }
 @media (min-width: 75rem) {
 	main {
@@ -337,7 +417,6 @@ pre {
 	}
 	.mast small {
 		max-width: 10rem;
-		text-align: right;
 	}
 }
 @media (prefers-color-scheme: dark) {
@@ -350,11 +429,33 @@ pre {
 		--rule: #494449;
 		--paper: #151416;
 		--panel: #201e21;
-		--accent: color-mix(in srgb, var(--brand-red) 70%, white);
-		--wash: #322427;
+		--accent: color-mix(in srgb, var(--brand-green) 70%, white);
+		--wash: #22322a;
 	}
 }
 
+section > table {
+	width: 100%;
+	border-collapse: collapse;
+}
+th,
+td {
+	padding: 0.5rem 0.75rem;
+	border: 1px solid var(--rule);
+	text-align: start;
+	vertical-align: top;
+}
+th[scope="row"] {
+	width: 35%;
+	color: var(--muted);
+}
+th[scope="rowgroup"] {
+	background: var(--wash);
+}
+td ul {
+	margin: 0;
+	padding-inline-start: 1.25rem;
+}
 .rolling,
 .history {
 	max-height: 55vh;

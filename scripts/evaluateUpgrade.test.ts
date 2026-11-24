@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
 import type { UpgradeReportV2 } from "health-code"
-import { gradeUpgrade, sourceDiff } from "./evaluateUpgrade.ts"
+import { gradeUpgrade, sourceDiff, toEvaluationModels } from "./evaluateUpgrade.ts"
 import { scoreBudget } from "./scoreBudget.ts"
 
 test("a repeated and located diagnosis is distinct from a verified repair", () => {
@@ -35,6 +35,29 @@ test("a repeated and located diagnosis is distinct from a verified repair", () =
 	assert.equal(gradeUpgrade({ ...input, report: fixed, green: false }).budgetAcceptance, false)
 	assert.equal(gradeUpgrade({ ...input, report: fixed, unchanged: false }).budgetAcceptance, false)
 })
+test("each evaluation role uses its own configured model", () => {
+	const models = toEvaluationModels(
+		{
+			HEALTH_CODE_MODEL_HOST: "https://api.anthropic.com",
+			HEALTH_CODE_MODEL: "default-model",
+			HEALTH_CODE_SUMMARY_MODEL: "summary-model",
+			HEALTH_CODE_MATCH_MODEL: "match-model",
+			HEALTH_CODE_ADOPTION_MODEL: "adoption-model",
+		},
+		"fixture-key",
+	)
+
+	// read the model ID from each bound role
+	const hostIds = [models.releaseSummary.model, models.featureMatch.model].map((model) =>
+		typeof model === "string" ? model : model.modelId,
+	)
+	assert.deepEqual(hostIds, ["summary-model", "match-model"])
+	assert.deepEqual(
+		[models.repair.modelId, models.featureAdoption.modelId, models.repair.pricing.maxInputTokens],
+		["default-model", "adoption-model", 96000],
+	)
+})
+
 test("the reference diff applies mailboxes in an isolated index", async () => {
 	// build the two revisions in a disposable repository
 	const repo = mkdtempSync(join(tmpdir(), "score-fixture-"))

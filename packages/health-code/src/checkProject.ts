@@ -5,9 +5,11 @@ import { toUpgradeInstallTimeout, untested } from "./confirmCheck.ts"
 import type {
 	Baseline,
 	CheckResult,
+	Command,
 	CommandResult,
 	EcosystemAdapter,
 	Evidence,
+	InspectionOptions,
 	InspectionReport,
 	Observation,
 	Operation,
@@ -16,8 +18,14 @@ import type {
 	Upgrade,
 	UpgradeReport,
 } from "./contracts.ts"
-import { InspectionError, SandboxUnavailableError } from "./contracts.ts"
+import { InspectionError } from "./contracts.ts"
 import { mergeTestInventory } from "./mergeTestInventory.ts"
+import {
+	ProjectEvidenceError,
+	parseRegistryVersions,
+	type RegistryVersions,
+	toRegistryLookupIssue,
+} from "./parseRegistryVersions.ts"
 import { selectUpgrades } from "./selectUpgrades.ts"
 
 const projectSchema = z.object({
@@ -57,6 +65,7 @@ export class NodeAdapter implements EcosystemAdapter {
 	project?: Project
 	lastObservation?: Observation
 	watchChecks = false
+	private skipsInstallScripts = false
 	private reportedPlaceholders = false
 	constructor(
 		private readonly context: InspectionContext,
@@ -69,11 +78,8 @@ export class NodeAdapter implements EcosystemAdapter {
 	}
 
 	// collect guest metadata within its stage timeout
-	async data(args: string[]): Promise<unknown> {
-		const action = args[0]
-		return this.context.step(action === "detect" ? "detect" : "setup", action ?? "Read project", (options) =>
-			this.readMetadata(args, options),
-		)
+	async data(args: string[], stage: "setup" | "detect" = "setup"): Promise<unknown> {
+		return this.context.step(stage, args[0] ?? "Read project", (options) => this.readMetadata(args, options))
 	}
 
 	private async readMetadata(args: string[], options: Operation): Promise<unknown> {
@@ -96,7 +102,7 @@ export class NodeAdapter implements EcosystemAdapter {
 
 	// validate the detected project against the adapter schema
 	async detectProject(): Promise<Project> {
-		const result = projectSchema.safeParse(await this.data(["detect"]))
+		const result = projectSchema.safeParse(await this.data(["detect"], "detect"))
 		if (!result.success) {
 			throw new ProjectEvidenceError("Unsupported project metadata")
 		}
@@ -170,42 +176,15 @@ export class NodeAdapter implements EcosystemAdapter {
 		return (await this.readRegistry("lookup", names)).versions
 	}
 
-	private async readRegistry(
-		action: "lookup" | "registry",
-		names: string[],
-	): Promise<{ versions: Record<string, string[]>; packageTimeoutCount: number; hasRegistryDeadlineExpired: boolean }> {
-		const versions: Record<string, string[]> = Object.create(null)
+	private async readRegistry(action: "lookup" | "registry", names: string[]): Promise<RegistryVersions> {
 		if (!names.length) {
-			return { versions, packageTimeoutCount: 0, hasRegistryDeadlineExpired: false }
+			return { versions: {}, packageTimeoutCount: 0, hasRegistryDeadlineExpired: false }
 		}
 
 		return this.context.step(
 			action === "registry" ? "registry" : "setup",
 			action,
-			async (options) => {
-				const result = z
-					.record(z.string(), z.union([z.array(z.string()), z.enum(["timed-out", "stage-timed-out", "unavailable"])]))
-					.safeParse(await this.readMetadata([action, ...names], options))
-				if (!result.success) {
-					throw new ProjectEvidenceError("Invalid registry metadata")
-				}
-
-				// Preserve completed lookups and distinguish the stage deadline from a single slow package.
-				let packageTimeoutCount = 0
-				let hasRegistryDeadlineExpired = false
-				for (const name of names) {
-					const entry = result.data[name]
-					if (Array.isArray(entry)) {
-						versions[name] = entry
-					} else if (entry === "stage-timed-out") {
-						// Report the shared deadline even for packages still in the queue.
-						hasRegistryDeadlineExpired = true
-					} else if (entry === "timed-out") {
-						packageTimeoutCount++
-					}
-				}
-				return { versions, packageTimeoutCount, hasRegistryDeadlineExpired }
-			},
+			async (options) => parseRegistryVersions(await this.readMetadata([action, ...names], options), names),
 			(result) => {
 				const availablePackageCount = Object.keys(result.versions).length
 				return availablePackageCount === names.length ? "passed" : availablePackageCount ? "untested" : "failed"
@@ -219,7 +198,7 @@ export class NodeAdapter implements EcosystemAdapter {
 		const result = await this.context.options.sandboxProvider.executeCommand(this.sandbox, {
 			...options,
 			argv: [...guest, ...args],
-			environment: this.context.options.applicationEnvironment === "empty" ? [] : this.project?.environment,
+			...toCommandEnvironment(this.context.options.applicationEnvironment, this.project?.environment),
 			observe,
 		})
 
@@ -238,6 +217,27 @@ export class NodeAdapter implements EcosystemAdapter {
 	}
 	async install(): Promise<CheckResult> {
 		return (await this.check(["install"], this.watchChecks)).check
+	}
+
+	// install the original dependencies, skipping scripts when the locked network broke one
+	async installBaseline(): Promise<CheckResult> {
+		const first = (await this.check(["install"], true)).check
+		const hasOffListConnection = this.lastObservation?.findings.some((finding) => finding.kind === "connection")
+		if (first.status !== "failed" || !hasOffListConnection) {
+			return first
+		}
+
+		// use the same install policy for every later comparison
+		await this.resetProject()
+		this.skipsInstallScripts = true
+		const second = (await this.check(["install"], true)).check
+		if (second.status === "passed") {
+			return { ...second, evidence: [...first.evidence, ...second.evidence] }
+		}
+
+		// restore the normal policy when scripts were not the cause
+		this.skipsInstallScripts = false
+		return first
 	}
 
 	// observe lockfile resolution separately from installation
@@ -265,7 +265,7 @@ export class NodeAdapter implements EcosystemAdapter {
 			stage,
 			stage,
 			async (options, stepId) => {
-				const raw = await this.call(args, options, observe)
+				const raw = await this.call(this.withScriptPolicy(args), options, observe)
 				checkOperation(options.signal)
 
 				// attach redacted output and optional installation observations
@@ -289,11 +289,21 @@ export class NodeAdapter implements EcosystemAdapter {
 						check = mergeTestInventory({ check, commandResult: raw, evidence })
 					}
 				}
-				return { check, observation }
+				return { check: this.withPolicyDisclosure(stage, check), observation }
 			},
 			(value) => value.check.status,
 		)
 	}
+
+	// apply and disclose the install policy chosen for the baseline
+	private withScriptPolicy(args: string[]): string[] {
+		return args[0] === "install" && this.skipsInstallScripts ? [...args, "--ignore-scripts"] : args
+	}
+	private withPolicyDisclosure(stage: string, check: CheckResult): CheckResult {
+		return stage === "install" && this.skipsInstallScripts ? { ...check, installScriptsSkipped: true } : check
+	}
+
+	// redact and publish the bounded command output
 	private async recordOutput(raw: CommandResult, stepId: string, signal?: AbortSignal): Promise<Evidence> {
 		const evidence: Evidence = {
 			stdout: redact(raw.stdout).slice(0, 65536),
@@ -405,25 +415,13 @@ export class NodeAdapter implements EcosystemAdapter {
 			: untested("missing-test-script")
 	}
 }
-export class ProjectEvidenceError extends Error {}
-export class RegistryDeadlineError extends ProjectEvidenceError {}
-
-function toRegistryLookupIssue(error: unknown, timeoutReason: string): string {
-	if (error instanceof SandboxUnavailableError) {
-		throw error
+// replace placeholders with the caller's safe test values
+function toCommandEnvironment(
+	setting: InspectionOptions["applicationEnvironment"],
+	names?: string[],
+): Pick<Command, "environment" | "environmentValues"> {
+	if (setting === "empty") {
+		return { environment: [] }
 	}
-
-	if (error instanceof InspectionError && error.code === "deadline") {
-		// The remote command may still own the sandbox when the host deadline fires.
-		throw new RegistryDeadlineError(`Couldn’t list available upgrades: ${timeoutReason}.`)
-	}
-
-	const timedOut = error instanceof InspectionError && error.code === "registry-command-timeout"
-	const unavailable = error instanceof InspectionError && error.code === "sandbox-unavailable"
-	if (!timedOut && !unavailable && !(error instanceof ProjectEvidenceError)) {
-		throw error
-	}
-
-	const reason = timedOut ? timeoutReason : "registry lookup failed"
-	return `Couldn’t list available upgrades: ${reason}.`
+	return { environment: names, environmentValues: typeof setting === "object" ? setting : undefined }
 }

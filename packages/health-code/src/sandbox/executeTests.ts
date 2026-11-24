@@ -18,7 +18,6 @@ export function buildTestCommand(options: { command: Command; dir?: string; id: 
 	const trustedTool = node === "node" && tool === projectTool
 	const capture =
 		trustedTool && action === "tests" && option === "--inventory" ? `/var/lib/health-code/tests-${id}` : undefined
-	let maxOutputBytes: number | undefined
 	let guest: ReturnType<typeof guestArguments>
 
 	// give a fresh report write access only during its test run
@@ -33,8 +32,6 @@ export function buildTestCommand(options: { command: Command; dir?: string; id: 
 			dir,
 		)
 	} else if (trustedTool && action === "integrity" && previous) {
-		// Allow room for repository-wide file paths on the first protected page.
-		maxOutputBytes = option === "0" ? 1024 * 1024 : undefined
 		guest = guestArguments(command, dir, { path: `${previous}/inventory`, kind: "inventory" })
 	} else if (trustedTool && action === "report" && previous) {
 		guest = guestArguments({ ...command, argv: [...command.argv, "--protected"] }, dir, {
@@ -55,5 +52,12 @@ export function buildTestCommand(options: { command: Command; dir?: string; id: 
 	if (capture) {
 		argv = ["/opt/health-code/bin/node", projectTool, "capture-tests", capture, ...argv]
 	}
+	const maxOutputBytes = trustedTool ? toOutputLimit(command.argv, previous) : undefined
 	return { argv, capture, maxOutputBytes, placeholderVariableCount: guest.placeholderVariableCount }
+}
+
+// allow room for every install script and for repository-wide paths on the first protected page
+function toOutputLimit([, , action, option]: string[], previous?: string): number | undefined {
+	const isFirstProtectedPage = action === "integrity" && option === "0" && previous
+	return action === "lifecycle" || isFirstProtectedPage ? 1024 * 1024 : undefined
 }

@@ -1,8 +1,12 @@
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { mock } from "node:test"
-import type { createFakeSandboxProvider, FixtureCommand, SandboxFixture } from "health-code"
-import { secretName } from "../modelSettings.ts"
+import {
+	type createFakeSandboxProvider,
+	type FixtureCommand,
+	type SandboxFixture,
+	toModelSecretName,
+} from "health-code"
 
 /**
  * Creates a recorded Inspection with model replies and a restorable release transport.
@@ -130,7 +134,7 @@ export async function modelRequestSandboxFixture(
 	// record the lifetime of the host-bound credential session
 	const phases: string[] = []
 	provider.openCredentialSession = async (_sandbox, route) => {
-		assert.equal(route.credential.name, secretName("https://api.anthropic.com"))
+		assert.equal(route.credential.name, toModelSecretName("https://api.anthropic.com"))
 		assert.equal(route.baseUrl, "https://api.anthropic.com/v1")
 		assert.ok(!JSON.stringify(route).includes("obsolete-key-never-forward"))
 		phases.push("open")

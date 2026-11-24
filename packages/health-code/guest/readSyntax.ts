@@ -1,0 +1,28 @@
+import { parse } from "@babel/parser"
+
+export type Syntax = { type: string; [key: string]: unknown }
+
+/**
+ * Recognizes a syntax node before its fields are traversed.
+ */
+export function isSyntax(value: unknown): value is Syntax {
+	return !!value && typeof value === "object" && "type" in value && typeof value.type === "string"
+}
+
+/**
+ * Parses a source file into its top-level statements.
+ */
+export function parseStatements(text: string): ReturnType<typeof parse>["program"]["body"] {
+	return parse(text, {
+		sourceType: "unambiguous",
+		createImportExpressions: true,
+		plugins: ["typescript", "jsx", "decorators-legacy"],
+	}).program.body
+}
+
+/**
+ * Reads the static name of an object property.
+ */
+export function readPropertyName(property: Syntax): unknown {
+	return isSyntax(property.key) && !property.computed ? (property.key.name ?? property.key.value) : undefined
+}

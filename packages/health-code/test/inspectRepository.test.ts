@@ -168,6 +168,35 @@ test("an upgrade install timeout names the check and reports its recorded durati
 	assert.equal(install.detail, "The upgrade install timed out after 180 seconds.")
 })
 
+test("a blocked install script download retries without scripts for every install", async () => {
+	const entries = scripts([], [], [])
+	entries[2] = command(["install"], "blocked", 1)
+	entries[2]!.connections = {
+		complete: true,
+		findings: [{ kind: "connection", destination: "github.com", outcome: "attempted" }],
+	}
+	entries.splice(3, 0, command(["install", "--ignore-scripts"]))
+
+	// require the same policy on upgrade installs
+	for (const entry of entries.slice(4)) {
+		if (entry.argv.includes("install")) {
+			entry.argv = [...entry.argv, "--ignore-scripts"]
+		}
+	}
+	const inspection = await inspectRepository({
+		repositoryUrl: fixtureUrl,
+		sandboxProvider: provider(entries),
+		limits: { maxUpgrades: 1 },
+	})
+
+	// retain the failed attempt beside the usable install
+	assert.equal(inspection.baseline.install.status, "passed")
+	assert.equal(inspection.baseline.install.installScriptsSkipped, true)
+	assert.equal(inspection.baseline.install.evidence.length, 2)
+	assert.equal(inspection.upgrades[0]?.install.installScriptsSkipped, true)
+	assert.equal(inspection.upgrades[0]?.result.status, "passed")
+})
+
 test("broken Baseline prevents all trials", async () => {
 	// fail the baseline install before either upgrade trial
 	const entries = scripts([], [], []).slice(0, 3)

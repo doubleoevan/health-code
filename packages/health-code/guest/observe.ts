@@ -2,6 +2,7 @@ import { isIP } from "node:net"
 import { posix } from "node:path"
 import type { InstallationFinding, Observation } from "../src/contracts.ts"
 import { type FileLinks, isProjectPath, trackFileLinks } from "./trackFileLinks.ts"
+import { WorkingDirectories } from "./trackWorkingDirectories.ts"
 
 type InstallationObservations = { connections: Observation; files: Observation }
 function markIncomplete(result: Observation, reason = "Incomplete installation observation"): void {
@@ -86,7 +87,7 @@ function network(line: string, hosts: DnsHistory, timestamp: number, allowed: st
 	if (address === "10.0.2.3" && /sin_port=htons\(53\)/.test(line)) {
 		return
 	}
-	if (address === "::1" || address.startsWith("127.")) {
+	if (/^(?:::1|::|0\.0\.0\.0|(?:::ffff:)?127\.[\d.]+|::ffff:0\.0\.0\.0)$/.test(address)) {
 		return
 	}
 
@@ -103,7 +104,7 @@ function network(line: string, hosts: DnsHistory, timestamp: number, allowed: st
 	if (candidates.length && candidates.every((host) => allowed.includes(host))) {
 		return
 	}
-	markIncomplete(result, "Socket destination could not be attributed to DNS")
+	markIncomplete(result, `Socket destination could not be attributed to DNS (${address})`)
 	addFinding(result, { kind: "connection", destination: address, outcome: "unknown" })
 }
 function mutationPaths({
@@ -271,9 +272,14 @@ function filesystem(line: string, result: Observation, state: FileState, knownWo
 	}
 }
 type RecordedSystemCall = { line: string; timestamp: number }
+type AttributedSystemCall = RecordedSystemCall & { workingDirectory?: string }
 
 // reconstruct interrupted syscall records per process
-function assembled(row: string, pending: Map<string, RecordedSystemCall>): RecordedSystemCall | undefined {
+function assembled(
+	row: string,
+	pending: Map<string, RecordedSystemCall>,
+	directories: WorkingDirectories,
+): AttributedSystemCall | undefined {
 	const match = row.match(/^(\d+)\s+(?:(\d+\.\d+)\s+)?(.*)$/)
 	if (!match) {
 		return
@@ -283,8 +289,10 @@ function assembled(row: string, pending: Map<string, RecordedSystemCall>): Recor
 	const pid = match[1] ?? ""
 	let line = match[3] ?? ""
 	let timestamp = Number(match[2])
-	if (line.endsWith("<unfinished ...>")) {
-		pending.set(pid, { line: line.replace(/\s*<unfinished \.\.\.>$/, ""), timestamp })
+	const workingDirectory = directories.record(pid, line)
+
+	// skip calls that a fatal signal stopped at entry, before the kernel ran them
+	if (/^\?+\(\s*(?:<unfinished \.\.\.>)?$/.test(line)) {
 		return
 	}
 
@@ -296,8 +304,14 @@ function assembled(row: string, pending: Map<string, RecordedSystemCall>): Recor
 		pending.delete(pid)
 	}
 
+	// save a call that has not returned
+	if (line.endsWith("<unfinished ...>")) {
+		pending.set(pid, { line: line.replace(/\s*<unfinished \.\.\.>$/, ""), timestamp })
+		return
+	}
+
 	// return the reconstructed syscall for attribution
-	return { line, timestamp }
+	return { line, timestamp, workingDirectory }
 }
 function recordDnsQueries(dns: string, allowed: string[], connections: Observation): void {
 	// Preserve off-list DNS attempts even when the gateway supplies no address.
@@ -334,24 +348,20 @@ export function inspectSandboxActivity(
 	const files: Observation = { complete: true, findings: [] }
 	const hosts = dnsAnswers(dns)
 
-	// Every traced descendant initially inherits the sandbox project directory.
+	// Attribute relative paths to each process's own directory.
 	const rows = typeof syscalls === "string" ? syscalls.split("\n") : syscalls
-	let knownWorkingDirectory: string | undefined = "/project"
+	const directories = new WorkingDirectories()
 	const pending = new Map<string, RecordedSystemCall>()
 	const state = { links: new Map(initialLinks.map((path) => [path, undefined])), sharedOutsideMapping: false }
 	let started = false
 
 	// reconstruct each syscall before assigning it to the installer
 	for (const row of rows) {
-		// Invalidate relative-path attribution as soon as a directory change can take effect.
-		if (knownWorkingDirectory && mayChangeWorkingDirectory(row)) {
-			knownWorkingDirectory = undefined
-		}
-		const entry = assembled(row, pending)
+		const entry = assembled(row, pending, directories)
 		if (!entry) {
 			continue
 		}
-		const { line, timestamp } = entry
+		const { line, timestamp, workingDirectory } = entry
 
 		// identify the command boundary in the traced process
 		if (line.startsWith("execve(") && line.includes('/env"') && line.endsWith("= 0")) {
@@ -359,13 +369,18 @@ export function inspectSandboxActivity(
 		}
 		if (started) {
 			network(line, hosts, timestamp, allowed, connections)
-			filesystem(line, files, state, knownWorkingDirectory)
+			filesystem(line, files, state, workingDirectory)
 		}
 	}
 
 	// check network capture and syscall coverage before returning findings
 	recordDnsQueries(dns, allowed, connections)
 	verifySystemCallLogEnd({ started, pending, connections, files })
+
+	// require a distinct identity for every traced process
+	if (directories.isProcessReused) {
+		markIncomplete(files, "Process identity could not be established")
+	}
 	if (!/\b0 packets dropped by kernel/.test(status)) {
 		markIncomplete(connections, "DNS capture dropped packets")
 	}
@@ -374,8 +389,18 @@ export function inspectSandboxActivity(
 
 // summarize names of unfinished system calls
 function pendingSyscalls(pending: Map<string, RecordedSystemCall>): string[] {
-	return [...new Set([...pending.values()].map((entry) => /^(\w+)\(/.exec(entry.line)?.[1] ?? "unknown"))]
+	return [
+		...new Set([...pending.values()].map((entry) => /^(\w+)\(/.exec(entry.line)?.[1] ?? toUnnamedCall(entry.line))),
+	]
 }
+
+// keep only safe leading text from a call without a name
+function toUnnamedCall(line: string): string {
+	const prefix = line.slice(0, 40).replace(/[^\w ?<>.(]/g, "")
+	return `unnamed call ${prefix}`.trim()
+}
+
+// allow calls that only receive data
 function onlySocketReads(calls: string[]): boolean {
 	return calls.every((call) => ["recvfrom", "recvmsg", "recvmmsg"].includes(call))
 }
@@ -403,14 +428,4 @@ function verifySystemCallLogEnd({
 			markIncomplete(connections, `Network trace did not finish (${reason})`)
 		}
 	}
-}
-
-function mayChangeWorkingDirectory(row: string): boolean {
-	const call = /^\d+\s+(?:\d+\.\d+\s+)?((?:f?chdir|chroot|pivot_root)\(.*)$/.exec(row)?.[1]
-	if (!call) {
-		return false
-	}
-
-	// Retain the known directory only for a confirmed return to the project mount.
-	return !/^chdir\("\/project"\) = 0$/.test(call) && !/^fchdir\(\d+<\/project>\) = 0$/.test(call)
 }

@@ -19,6 +19,7 @@ import { pageFileAndHookEntries } from "../guest/readPatchVerificationInputs.ts"
 import { readSystemCallLogLines } from "../guest/readSystemCallLogLines.ts"
 import { confirm } from "../src/confirmCheck.ts"
 import type { CheckResult, Project } from "../src/contracts.ts"
+import { formatManifest } from "../src/formatManifest.ts"
 import { maxSystemCallLogBytes } from "../src/sandbox/maxSystemCallLogBytes.ts"
 import { selectUpgrades } from "../src/selectUpgrades.ts"
 
@@ -100,6 +101,20 @@ test("bumps all declaring workspaces and uses the original manager lifecycle pol
 		}
 		assert.equal(readFileSync(join(cwd, "invocation"), "utf8").trim(), "install --no-frozen-lockfile")
 	}))
+test("a version change keeps the manifest's formatting", () => {
+	// start from tabs and an inline array
+	const text = '{\n\t"name": "app",\n\t"files": ["a", "b"],\n\t"dependencies": {\n\t\t"widget": "^1.0.0"\n\t}\n}\n'
+	const manifest = { name: "app", files: ["a", "b"], dependencies: { widget: "2.0.0" } }
+
+	// change only the version text
+	assert.equal(formatManifest(text, manifest), text.replace("^1.0.0", "2.0.0"))
+
+	// insert and remove dependencies with the file's own indentation
+	const added = { ...manifest, dependencies: { ...manifest.dependencies, gadget: "1.0.0" } }
+	const result = formatManifest(text, added)
+	assert.match(result, /\n\t\t"gadget": "1\.0\.0"\n/)
+	assert.equal(formatManifest(result, manifest), text.replace("^1.0.0", "2.0.0"))
+})
 test("ambiguous lockfiles and environment names", () =>
 	fixture("npm", (cwd, invoke) => {
 		// collect environment names from example settings and source
@@ -111,6 +126,24 @@ test("ambiguous lockfiles and environment names", () =>
 		writeFileSync(join(cwd, "package.json"), "{}")
 		writeFileSync(join(cwd, "yarn.lock"), "")
 		assert.notEqual(invoke(["detect"]).status, 0)
+	}))
+test("lists install scripts that package managers run", () =>
+	fixture("npm", (cwd, invoke) => {
+		// give the root and one installed package both kinds of script
+		writeFileSync(join(cwd, "package.json"), JSON.stringify({ name: "root", scripts: { prepare: "root" } }))
+		mkdirSync(join(cwd, "node_modules/widget"), { recursive: true })
+		writeFileSync(
+			join(cwd, "node_modules/widget/package.json"),
+			JSON.stringify({ name: "widget", scripts: { prepare: "build", postinstall: "node setup.js" } }),
+		)
+
+		// skip the preparation script of a registry package
+		const signatures: string[] = JSON.parse(invoke(["lifecycle"]).stdout)
+		assert.deepEqual(
+			signatures.map((signature) => JSON.stringify(signature)).filter((text) => text.includes("prepare")).length,
+			1,
+		)
+		assert.equal(signatures.filter((signature) => JSON.stringify(signature).includes("postinstall")).length, 1)
 	}))
 test("parses file-load failures and preserves opaque script evidence", () =>
 	fixture("npm", (cwd, invoke) => {
@@ -171,6 +204,61 @@ test("tracks observed destinations and transient writes with explicit uncertaint
 	// check filesystem attribution and explicitly dropped packets
 	assert.deepEqual(evidence.files.findings, [{ kind: "write", path: "/tmp/outside" }])
 	assert.equal(inspectSandboxActivity(trace, "", "1 packets dropped by kernel", []).connections.complete, false)
+})
+test("wildcard and mapped loopback sockets stay local while raw addresses are named", () => {
+	const connect = (address: string): string =>
+		`1 execve("/usr/bin/env", [], []) = 0\n1 3.000000 connect(3, {sa_family=AF_INET6, sin6_port=htons(80), inet_pton(AF_INET6, "${address}", &sin6_addr)}, 28) = 0`
+	for (const address of ["::1", "::", "::ffff:127.0.0.1"]) {
+		assert.equal(
+			inspectSandboxActivity(connect(address), "", "0 packets dropped by kernel", []).connections.complete,
+			true,
+		)
+	}
+
+	// name the address behind incomplete coverage
+	const { connections } = inspectSandboxActivity(connect("2001:db8::1"), "", "0 packets dropped by kernel", [])
+	assert.match(connections.reason ?? "", /2001:db8::1/)
+})
+test("repeated npm failures match across log timestamps", async () => {
+	// record the same npm failure under a different log name
+	const failure = (time: string): CheckResult => ({
+		status: "failed",
+		failingTests: [],
+
+		// include the complete command output
+		evidence: [
+			{
+				stdout: "",
+				stderr: `npm error ERESOLVE\nnpm error A complete log of this run: /logs/${time}-debug-0.log`,
+				exitCode: 1,
+				durationMs: 1,
+				stdoutTruncated: false,
+				stderrTruncated: false,
+			},
+		],
+	})
+	const passed: CheckResult = { status: "passed", evidence: [] }
+
+	// compare the same error from two log files
+	const result = await confirm(failure("2026-11-23T21_31_25_884Z"), passed, async () =>
+		failure("2026-11-23T21_31_40_112Z"),
+	)
+	assert.equal(result.status, "failed")
+})
+test("calls killed before execution leave network coverage complete", () => {
+	// read coverage for one recorded process
+	const start = '1 execve("/usr/bin/env", [], []) = 0\n'
+	const read = (line: string): boolean =>
+		inspectSandboxActivity(start + line, "", "0 packets dropped by kernel", []).connections.complete
+
+	// allow only a call that never ran
+	assert.equal(read("2 1.000000 ????( <unfinished ...>"), true)
+	assert.equal(read("2 1.000000 connect(3, <unfinished ...>"), false)
+
+	// keep a call interrupted twice incomplete until it returns
+	const twice = "2 1.0 connect(3, <unfinished ...>\n2 1.1 <... connect resumed> <unfinished ...>"
+	assert.equal(read(twice), false)
+	assert.equal(read(`${twice}\n2 1.2 <... connect resumed>{sa_family=AF_UNIX, sun_path="/x"}, 8) = 0`), true)
 })
 test("opaque baseline and non-reproducing failures remain untested", async () => {
 	const failed: CheckResult = { status: "failed", evidence: [], failingTests: [] }

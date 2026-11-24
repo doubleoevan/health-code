@@ -18,20 +18,21 @@ test("browse a pinned upgrade menu, choose one release and reopen its licensed p
 	try {
 		// Publish the discovery-only fixture through the durable submission path.
 		const upgradeMenu = await (await submit({ action: "discover" })).json()
-		expect(await (await app.request(`/r/${upgradeMenu.id}`)).text()).toContain("Finding upgrades...")
+		expect(await (await app.request(`/r/${upgradeMenu.id}`)).text()).toContain(
+			'<h1 class="shimmer">Finding upgrades...</h1>',
+		)
 		expect(store.choice(upgradeMenu.id)).toEqual({ mode: "listUpgrades" })
 		const discovery = await replay.inspect(repositoryUrl, () => {}, { mode: "listUpgrades" })
 		store.finish(upgradeMenu.id, publishReport(discovery, "MIT"))
 		const html = await (await app.request(`/r/${upgradeMenu.id}`)).text()
-		for (const label of [
-			"Upgrade a dependency",
-			"Search dependencies",
-			"Most workspaces first",
-			"Tested patch available",
-			"Test upgrade",
-		]) {
+		for (const label of ["Test an upgrade", "Search dependencies", "Most workspaces first", "Test upgrade"]) {
 			expect(html).toContain(label)
 		}
+
+		// Ignore the patch filter until a tested patch exists.
+		const unfiltered = await (await app.request(`/r/${upgradeMenu.id}?ready=on`)).text()
+		expect(unfiltered).not.toContain("Tested patch available")
+		expect(unfiltered).toContain("Test upgrade")
 
 		// Read release features for the selected version before starting its tests.
 		const path = `/api/inspections/${upgradeMenu.id}/features?dependency=widget&to=`
@@ -44,7 +45,7 @@ test("browse a pinned upgrade menu, choose one release and reopen its licensed p
 		expect((await submit({ ...choice, to: "9.9.9" })).status).toBe(400)
 		const result = await (await submit({ ...choice, repositoryUrl: repositoryUrl + ".git/" })).json()
 		const selectedPage = await (await app.request(`/r/${result.id}`)).text()
-		expect(selectedPage).toContain("Inspecting upgrade...")
+		expect(selectedPage).toContain('<h1 class="shimmer">Testing widget upgrade...</h1>')
 		expect(selectedPage).toContain(" · widget 1.2.0 → 1.3.0")
 		expect(store.choice(result.id)?.upgrade).toEqual({ dependency: "widget", to: "1.3.0", from: { ".": "1.2.0" } })
 		expect(store.choice(result.id)?.revision).toBe(discovery.report.repository.commit)
@@ -61,7 +62,11 @@ test("browse a pinned upgrade menu, choose one release and reopen its licensed p
 		const ready = await submit(choice)
 		expect(ready.status).toBe(200)
 		expect(await ready.json()).toEqual({ id: result.id })
-		expect(await (await app.request(`/r/${upgradeMenu.id}`)).text()).toContain("View tested patch")
+
+		// show the patch link and its filter on the refreshed menu
+		const refreshed = await (await app.request(`/r/${upgradeMenu.id}`)).text()
+		expect(refreshed).toContain("View tested patch")
+		expect(refreshed).toContain("Tested patch available")
 	} finally {
 		store.database.close()
 	}
@@ -122,7 +127,7 @@ test("saved upgrade menus and queued jobs retain their meaning across the field 
 
 		// Exercise both the shared page and its feature endpoint.
 		const app = createTestSite(store)
-		expect(await (await app.request(`/r/${id}`)).text()).toContain("Upgrade a dependency")
+		expect(await (await app.request(`/r/${id}`)).text()).toContain("Test an upgrade")
 		expect((await app.request(`/api/inspections/${id}/features?dependency=widget&to=1.3.0`)).status).toBe(200)
 	} finally {
 		store.database.close()

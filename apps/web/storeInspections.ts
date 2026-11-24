@@ -5,7 +5,11 @@ import { isReusableReport, UpgradeCache } from "./cacheUpgrades.ts"
 import type { InspectionChoice } from "./inspectionSource.ts"
 import type { Publication } from "./publishReport.ts"
 import { AdmissionLedger, migrateAdmissions } from "./recordAdmissions.ts"
-import { readPublishedReport, type SiteEvent, type Snapshot } from "./report.ts"
+import { readPublishedReport, type SiteEvent, type Snapshot, withheldReason } from "./report.ts"
+
+// use the final report's license once it exists and the license recorded before the run until then
+const licenseColumn = `CASE WHEN report IS NULL
+   THEN (SELECT license FROM inspected_licenses l WHERE l.id=inspections.id) ELSE json_extract(report,'$.license') END`
 
 type StoredRow = Pick<Snapshot, "id" | "state" | "repositoryUrl" | "message"> & { report: string | null }
 export class InspectionStore {
@@ -55,6 +59,7 @@ export class InspectionStore {
 
 		// Attach the admission ledger to this same SQLite connection.
 		this.database.exec("CREATE TABLE IF NOT EXISTS inspection_choices(id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
+		this.database.exec("CREATE TABLE IF NOT EXISTS inspected_licenses(id TEXT PRIMARY KEY, license TEXT NOT NULL)")
 		this.admission = new AdmissionLedger(this.database)
 		this.upgrades = new UpgradeCache(this.database)
 	}
@@ -272,9 +277,9 @@ export class InspectionStore {
 	publicEvents(id: string, after: number, limit = -1): SiteEvent[] {
 		// withhold raw command output from the initial page and event stream
 		const events = this.database.query<{ payload: string }, [string, number, number]>(`
-   SELECT CASE WHEN json_extract(payload,'$.type')='detail'
-     THEN json_set(payload,'$.text',CASE WHEN json_extract(report,'$.license') IS NULL
-        THEN 'Output withheld until an open source license is verified.' ELSE '' END)
+   SELECT CASE WHEN json_extract(payload,'$.type')='detail' THEN json_set(payload,'$.text',CASE WHEN ${licenseColumn} IS NOT NULL THEN ''
+        WHEN state IN ('queued','running') THEN 'Output withheld until an open source license is verified after inspection completes...'
+        ELSE '${withheldReason}' END)
      ELSE payload END AS payload
    FROM events JOIN inspections USING(id) WHERE id=? AND sequence>? ORDER BY sequence LIMIT ?
    `)
@@ -283,13 +288,21 @@ export class InspectionStore {
 		return events.all(id, after, limit).map((row) => JSON.parse(row.payload))
 	}
 
+	// record the license found at the inspected commit before the sandbox starts
+	saveInspectedLicense(id: string, license: string | null): void {
+		this.database.query("DELETE FROM inspected_licenses WHERE id=?").run(id)
+		if (license) {
+			this.database.query("INSERT INTO inspected_licenses VALUES(?,?)").run(id, license)
+		}
+	}
+
 	// reveal raw detail text only after license verification
 	detail(id: string, sequence: number): string | null {
 		return (
 			this.database
 				.query<{ text: string }, [string, number]>(`
    SELECT json_extract(payload,'$.text') AS text FROM events JOIN inspections USING(id)
-   WHERE id=? AND sequence=? AND json_extract(report,'$.license') IS NOT NULL AND json_extract(payload,'$.type')='detail'
+   WHERE id=? AND sequence=? AND ${licenseColumn} IS NOT NULL AND json_extract(payload,'$.type')='detail'
    `)
 
 				// return null if the event lacks a public detail

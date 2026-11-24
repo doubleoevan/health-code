@@ -54,7 +54,7 @@ export async function readSiteEnvironment(
 		// Copy only app settings and the provider credentials the worker consumes.
 		if (
 			name.startsWith("HEALTH_CODE_") ||
-			["RUNTA_TOKEN", "ANTHROPIC_API_KEY", "GITHUB_TOKEN", "TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY"].includes(name)
+			["RUNTA_TOKEN", "MODEL_API_KEY", "GITHUB_TOKEN", "TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY"].includes(name)
 		) {
 			runtime[name] = values[name]
 		}

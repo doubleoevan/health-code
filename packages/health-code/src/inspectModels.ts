@@ -11,6 +11,7 @@ import {
 	type Observation,
 	type Sandbox,
 	type UpgradeReport,
+	type WithSandboxProvider,
 } from "./contracts.ts"
 import { agentLimits, cap, type Ledger } from "./modelBudget.ts"
 import { validateModels } from "./modelOptions.ts"
@@ -57,7 +58,7 @@ export class ModelInspection {
 	// clamp inspection limits before constructing the model budget
 	readonly meter = new RuntimeMeter()
 	readonly modelRequestSandbox?: ModelRequestSandboxAllocation
-	constructor(readonly options: InspectionOptionsV2 | ModelRequestSandboxOptions) {
+	constructor(readonly options: (InspectionOptionsV2 | ModelRequestSandboxOptions) & WithSandboxProvider) {
 		this.limits = {
 			...options.limits,
 			maxCostUsd: cap(options.limits?.maxCostUsd, 15),

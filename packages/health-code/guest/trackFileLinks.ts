@@ -3,7 +3,10 @@ import { posix } from "node:path"
 // Initial links and links affected by moves have an unknown target.
 export type FileLinks = Map<string, string | undefined>
 
-function containsPath(root: string, path: string): boolean {
+/**
+ * Checks whether a path is a directory or lies beneath it.
+ */
+export function containsPath(root: string, path: string): boolean {
 	return path === root || path.startsWith(`${root}/`)
 }
 

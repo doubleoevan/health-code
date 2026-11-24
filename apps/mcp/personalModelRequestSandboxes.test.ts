@@ -6,10 +6,11 @@ import { join } from "node:path"
 import { test } from "node:test"
 import { createFakeSandboxProvider } from "health-code"
 import { configureModels } from "./configureModels.ts"
+import { modelSettings } from "./fixtures/inspectionSettings.ts"
 import { organizationFolder, recordOwnership, recoverModelRequestSandboxes } from "./personalModelRequestSandboxes.ts"
 import { probeModelRequestSandbox } from "./probeModelRequestSandbox.ts"
 
-const route = configureModels({}).releaseSummary
+const route = configureModels(modelSettings).releaseSummary
 test("personal recovery protects live owners and ignores unrecorded or malformed names", async () => {
 	// Isolate the owner journal under a fresh private directory.
 	const folder = await mkdtemp(join(tmpdir(), "relay-owners-"))

@@ -100,7 +100,7 @@ export function guestArguments(
 			"-e",
 			command.observe === "network"
 				? "trace=execve,connect,sendto,sendmsg,sendmmsg"
-				: "trace=%file,%network,write,writev,pwrite64,pwritev,pwritev2,ftruncate,fallocate,sendfile,copy_file_range,splice,mmap,mprotect,pkey_mprotect,fchmod,fchown,fsetxattr,fremovexattr,fchdir,dup,dup2,clone,clone3,fork,vfork",
+				: "trace=%file,%network,write,writev,pwrite64,pwritev,pwritev2,ftruncate,fallocate,sendfile,copy_file_range,splice,mmap,mprotect,pkey_mprotect,fchmod,fchown,fsetxattr,fremovexattr,fchdir,unshare,setns,dup,dup2,clone,clone3,fork,vfork",
 			"--",
 		)
 	}
@@ -130,16 +130,31 @@ export function guestArguments(
 
 	// pass placeholders only for permitted application variables
 	const start = args.length
+	const values = command.environmentValues ?? {}
 	for (const name of new Set(command.environment)) {
-		if (/^[A-Z_][A-Z0-9_]{0,127}$/i.test(name) && !reserved.test(name)) {
+		if (isApplicationVariable(name) && !Object.hasOwn(values, name)) {
 			args.push(`${name}=placeholder`)
 		}
 	}
 
 	// launch the command through the trusted syscall filter
 	const placeholderVariableCount = args.length - start
+
+	// add the caller's values outside the placeholder count
+	for (const [name, value] of Object.entries(values)) {
+		if (isApplicationVariable(name)) {
+			args.push(`${name}=${value}`)
+		}
+	}
+
+	// run the command after its environment
 	args.push("/usr/bin/python3", "-I", "/opt/health-code/execute.py", ...command.argv)
 	return { argv: args, placeholderVariableCount }
+}
+
+// accept portable names outside the trusted runtime controls
+export function isApplicationVariable(name: string): boolean {
+	return /^[A-Z_][A-Z0-9_]{0,127}$/i.test(name) && !reserved.test(name)
 }
 
 /**

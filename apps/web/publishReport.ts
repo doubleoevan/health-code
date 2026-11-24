@@ -1,7 +1,14 @@
 import { createHash } from "node:crypto"
 import type { Baseline, InspectionReport, ModelRequestSandboxInspectionReport, UpgradeReportV2 } from "health-code"
 import { testInventorySummarySchema, toInspectionMode } from "health-code"
-import { type Citation, type PatchLink, type PublishedReport, toCheckText, type UpgradeCard } from "./report.ts"
+import {
+	type Citation,
+	type PatchLink,
+	type PublishedReport,
+	toCheckText,
+	type UpgradeCard,
+	withheldReason,
+} from "./report.ts"
 
 export type InspectionOutput = { report: InspectionReport | ModelRequestSandboxInspectionReport }
 export type Publication = {
@@ -64,16 +71,15 @@ function toUsage(receipts: UpgradeReportV2["modelUsage"]): UpgradeCard["usage"] 
 	}
 }
 
-function toTestFileErrors(check: Baseline["tests"]): UpgradeCard["testFileErrors"] {
+// withhold repository output from an unlicensed report
+function toTestFileErrors(check: Baseline["tests"], license: string | null): UpgradeCard["testFileErrors"] {
 	const inventory = testInventorySummarySchema.safeParse(check.inventory)
-	return inventory.data?.testFileErrors
+	return inventory.data?.testFileErrors.map((error) => (license ? error : { ...error, reason: withheldReason }))
 }
 
 export function publishReport(output: InspectionOutput, license: string | null): Publication {
 	const { report } = output
-	const agent = report.version === 2 ? report.limits?.agent : undefined
 	const blobs = new Map<string, Uint8Array>()
-	const featureDigests = new Set<string>()
 
 	// collect links and bytes from the same verified patch series
 	function collectPatches(sources: UpgradeReportV2["patches"]): PatchLink[] {
@@ -85,11 +91,6 @@ export function publishReport(output: InspectionOutput, license: string | null):
 			const digest = createHash("sha256").update(bytes).digest("hex")
 			if (digest !== patch.digest) {
 				throw new Error("Patch verification failed")
-			}
-
-			// count distinct feature patches even when downloads are withheld
-			if (patch.role === "feature") {
-				featureDigests.add(digest)
 			}
 
 			// publish downloadable bytes and prompts only for licensed repositories
@@ -121,7 +122,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 			from: upgrade.from,
 			to: upgrade.to,
 			checks: toChecks(upgrade),
-			testFileErrors: toTestFileErrors(upgrade.tests),
+			testFileErrors: toTestFileErrors(upgrade.tests, license),
 			observation: upgrade.observation,
 			verdict: upgradeV2?.verdict,
 			reason: upgradeV2?.diagnosis?.stopReason,
@@ -166,20 +167,14 @@ export function publishReport(output: InspectionOutput, license: string | null):
 			upgradeMenu: toInspectionMode(report.selection) === "listUpgrades" ? report.selection.eligible : undefined,
 			promptVersions: report.promptVersions,
 			repository: report.repository,
-			usageAsOf: report.version === 2 ? report.runtimeUsage?.usageAsOf : undefined,
 			baseline: toChecks(report.baseline),
 			stoppedReason: report.stoppedReason,
 			omitted: report.selection.omitted.map((upgrade) => `${upgrade.dependency}@${upgrade.to}`),
-			baselineTestFileErrors: toTestFileErrors(report.baseline.tests),
-			turnLimits:
-				agent?.repair?.maxTurns !== undefined && agent.featureAdoption?.maxTurns !== undefined
-					? { repair: agent.repair.maxTurns, featureAdoption: agent.featureAdoption.maxTurns }
-					: undefined,
+			baselineTestFileErrors: toTestFileErrors(report.baseline.tests, license),
 			registryLookupIssue: report.selection.registryLookupIssue,
 			detection: "reason" in report.packageManager ? report.packageManager.reason : undefined,
 			license,
 			upgrades,
-			featureCount: featureDigests.size,
 		},
 	}
 }

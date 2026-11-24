@@ -1,4 +1,5 @@
 import { isAbsolute, normalize } from "node:path"
+import { stripVTControlCharacters } from "node:util"
 import { XMLParser } from "fast-xml-parser"
 import type { TestCase, TestCounts, TestInventory } from "../src/contracts.ts"
 import { jsonCaseName, xmlCaseName } from "../src/testCaseName.ts"
@@ -209,7 +210,7 @@ export function collectJsonInventory(text: string, root = process.cwd()): TestIn
 			suite.status === "failed" &&
 			!suite.assertionResults.some((entry: { status: string }) => entry.status === "failed")
 		) {
-			testFileErrors.push({ file, reason: "Suite failed before reporting a failing test" })
+			testFileErrors.push({ file, reason: toSuiteError(suite.message, root) })
 		}
 	}
 
@@ -230,6 +231,14 @@ export function collectJsonInventory(text: string, root = process.cwd()): TestIn
 		testFileErrors: testFileErrors.sort((a, b) => a.file.localeCompare(b.file)),
 	}
 }
+
+// keep the first line of the runner's load error without control codes or local paths
+function toSuiteError(message: unknown, root: string): string {
+	const lines = typeof message === "string" ? stripVTControlCharacters(message).split("\n") : []
+	const line = lines.map((entry) => entry.trim()).find(Boolean)
+	return line?.replaceAll(`${root}/`, "").slice(0, 320) ?? "Suite failed before reporting a failing test"
+}
+
 function toJsonCase(
 	file: string,
 	assertion: { status: string; fullName?: string; title?: string; ancestorTitles?: string[] },

@@ -4,9 +4,11 @@ import {
 	type InspectionReport,
 	inspectRepository,
 	SandboxUnavailableError,
+	toModelSecretName,
 } from "health-code"
 import { createLiveSource } from "./configureSite.ts"
 import { createTestSite, replay } from "./fixtures/createTestSite.ts"
+import { modelSettings } from "./fixtures/modelSettings.ts"
 import { toLaunchLimits } from "./launchLimits.ts"
 import { publishReport } from "./publishReport.ts"
 import { replayRepositoryUrl as repositoryUrl } from "./report.ts"
@@ -17,9 +19,8 @@ test("live inspections forward all four model roles, limits, credentials and eve
 	const output = await replay.inspect(repositoryUrl, () => {})
 	const environment = {
 		RUNTA_TOKEN: "example-provider-token",
-		ANTHROPIC_API_KEY: "example-host-key",
-		HEALTH_CODE_STORED_CREDENTIAL: "example-model-name",
-		HEALTH_CODE_MODEL: "claude-opus-5-5",
+		MODEL_API_KEY: "example-host-key",
+		...modelSettings,
 		HEALTH_CODE_DEPLOYMENT: "fixture",
 		HEALTH_CODE_MAX_UPGRADES: "1",
 		HEALTH_CODE_MAX_COST_USD: "3",
@@ -49,8 +50,9 @@ test("live inspections forward all four model roles, limits, credentials and eve
 				featureAdoption.modelId,
 			]).toEqual(Array(4).fill(environment.HEALTH_CODE_MODEL))
 			for (const route of [repair, featureAdoption]) {
-				expect(route.credential.name).toBe(environment.HEALTH_CODE_STORED_CREDENTIAL)
-				expect(JSON.stringify(route)).not.toContain(environment.ANTHROPIC_API_KEY)
+				expect(route).toMatchObject({ protocol: "openai-compatible", baseUrl: "https://models.example.com/v1" })
+				expect(route.credential.name).toBe(toModelSecretName("https://models.example.com"))
+				expect(JSON.stringify(route)).not.toContain(environment.MODEL_API_KEY)
 			}
 
 			// emit recorded evidence through the public callback
@@ -71,24 +73,21 @@ test("live inspections forward all four model roles, limits, credentials and eve
 
 		// inspect the published report for private account settings
 		const publicReport = JSON.stringify(publishReport(result, "MPL-2.0").card)
-		for (const privateSetting of [
-			environment.RUNTA_TOKEN,
-			environment.ANTHROPIC_API_KEY,
-			environment.HEALTH_CODE_STORED_CREDENTIAL,
-			githubToken,
-		].filter((value): value is string => !!value)) {
+		for (const privateSetting of [environment.RUNTA_TOKEN, environment.MODEL_API_KEY, githubToken].filter(
+			(value): value is string => !!value,
+		)) {
 			expect(publicReport).not.toContain(privateSetting)
 		}
 	}
-	expect(() => createLiveSource({ ...environment, HEALTH_CODE_STORED_CREDENTIAL: "" })).toThrow()
+	expect(() => createLiveSource({ ...environment, HEALTH_CODE_MODEL: "" })).toThrow("Set HEALTH_CODE_MODEL ")
 })
 
 test("admitted workers forward the current ceilings and the immutable revision", async () => {
 	const output = await replay.inspect(repositoryUrl, () => {})
 	const environment = {
 		RUNTA_TOKEN: "fixture",
-		ANTHROPIC_API_KEY: "fixture",
-		HEALTH_CODE_STORED_CREDENTIAL: "fixture",
+		MODEL_API_KEY: "fixture",
+		...modelSettings,
 		HEALTH_CODE_DEPLOYMENT: "fixture",
 	}
 
@@ -103,11 +102,11 @@ test("admitted workers forward the current ceilings and the immutable revision",
 	const source = createLiveSource(environment, async (options) => {
 		expect(options.revision).toBe(output.report.repository.commit)
 		for (const route of [options.models.repair, options.models.featureAdoption]) {
-			expect(route.modelId).toBe("claude-fable-5-2")
-			expect(route.pricing).toMatchObject({ inputUsdPerMillion: 8, outputUsdPerMillion: 40 })
+			expect(route.modelId).toBe("example-model")
+			expect(route.pricing).toMatchObject({ inputUsdPerMillion: 3, outputUsdPerMillion: 16 })
 		}
 
-		// Preserve the hosted ceilings when the selected patch uses Fable.
+		// Preserve the hosted ceilings on a selected upgrade.
 		expect(options.limits?.maxCostUsd).toBe(4)
 		expect(options.limits?.maxUpgrades).toBe(1)
 		expect(options.limits?.agent?.repair?.maxCostUsd).toBe(1.5)
@@ -134,8 +133,8 @@ test("an unavailable sandbox quote stops an inspection before it allocates a run
 	const source = createLiveSource(
 		{
 			RUNTA_TOKEN: "fixture",
-			ANTHROPIC_API_KEY: "fixture",
-			HEALTH_CODE_STORED_CREDENTIAL: "fixture",
+			MODEL_API_KEY: "fixture",
+			...modelSettings,
 			HEALTH_CODE_DEPLOYMENT: "fixture",
 		},
 		(options) => inspectRepository({ ...options, sandboxProvider }),
@@ -163,7 +162,7 @@ test("stored version 1 and version 2 reports show agent startup only with explic
 		// check the visible startup and patch controls for each version
 		const html = await (await app.request(`/r/${id}`)).text()
 		expect(html.includes("Agent started with its real key withheld")).toBe(report.version === 2)
-		expect(html.includes("Copy prompt to apply patch")).toBe(report.version === 2)
+		expect(html.includes("Upgrade prompt for your coding agent")).toBe(report.version === 2)
 	}
 
 	// require an attributed sandbox event for feature adoption
@@ -208,7 +207,10 @@ test("reports distinguish empty findings from incomplete recordings and share th
 			expect(html.includes("Some install activity could not be recorded.")).toBe(!complete)
 
 			// compare the page and share titles with the observed counts
-			const summary = `1 upgrade inspected, 1 feature patch, ${findings.length} connections blocked during install`
+			const blocked = findings.length ? ` ${findings.length} connections blocked during install.` : ""
+			const summary = `Your 2 tested patches are ready.${blocked}`
+
+			// repeat the summary on the page and in shared previews
 			expect(html).toContain(`<p>${summary}</p>`)
 			expect(html).toContain(`property="og:title" content="Health Code: ${summary}"`)
 			expect(html).toContain(`name="twitter:title" content="Health Code: ${summary}"`)
@@ -234,12 +236,45 @@ test("large raw output is fetched only when the licensed detail is opened", asyn
 	store.append(id, { ...detail, text })
 	const path = `/api/inspections/${id}/details/${detail.sequence}`
 	expect((await app.request(path)).status).toBe(404)
+	expect(JSON.stringify(store.publicEvents(id, 0))).toContain("verified after inspection completes...")
+
+	// expose live output while the license found at the start stands
+	store.saveInspectedLicense(id, "MIT")
+	expect(await (await app.request(path)).text()).toBe(text)
+	expect(JSON.stringify(store.publicEvents(id, 0))).not.toContain("Output withheld")
+	store.saveInspectedLicense(id, null)
+	expect((await app.request(path)).status).toBe(404)
 
 	// expose the licensed detail only through its dedicated endpoint
 	store.finish(id, publishReport({ report }, "MIT"))
 	expect(await (await app.request(`/r/${id}`)).text()).not.toContain(text)
 	expect(await (await app.request(`/api/inspections/${id}/events`)).text()).not.toContain(text)
 	expect(await (await app.request(path)).text()).toBe(text)
+	store.database.close()
+})
+
+test("a failed inspection keeps the output its inspected license allowed", async () => {
+	const { report } = await replay.inspect(repositoryUrl, () => {})
+	const store = new InspectionStore(":memory:")
+	const app = createTestSite(store)
+	const detail = report.timeline.find((event) => event.type === "detail")
+	if (!detail) {
+		throw new Error("Expected recorded command output")
+	}
+
+	// fail one licensed and one unlicensed inspection
+	for (const [license, status] of [
+		["MIT", 200],
+		[null, 404],
+	] as const) {
+		const id = store.enqueue(repositoryUrl)
+		store.append(id, detail)
+		store.saveInspectedLicense(id, license)
+		store.fail({ id, message: "Stopped", dispatched: true })
+
+		// request the saved output after the failure
+		expect((await app.request(`/api/inspections/${id}/details/${detail.sequence}`)).status).toBe(status)
+	}
 	store.database.close()
 })
 
@@ -312,9 +347,9 @@ test("a hosted retry runs a fresh baseline and only installs outstanding targets
 	const source = createLiveSource(
 		{
 			HEALTH_CODE_DEPLOYMENT: "fixture",
-			HEALTH_CODE_STORED_CREDENTIAL: "fixture",
+			...modelSettings,
 			RUNTA_TOKEN: "fixture",
-			ANTHROPIC_API_KEY: "fixture",
+			MODEL_API_KEY: "fixture",
 		},
 		(options) => inspectRepository({ ...options, sandboxProvider: fake }),
 	)

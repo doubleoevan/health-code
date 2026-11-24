@@ -3,6 +3,9 @@ import type { ModelRole } from "./agentContracts.ts"
 import { redactEvidence } from "./collectEvents.ts"
 import { InspectionPrompts, readInvestigationPromptTemplate } from "./readPrompt.ts"
 
+// the most serialized evidence one prompt can hold
+export const maxEvidenceBytes = 80_000
+
 export async function buildPrompt(
 	role: ModelRole,
 	evidence: unknown,
@@ -16,21 +19,24 @@ export async function buildPrompt(
  * Builds downstream investigation instructions with bounded, fenced inspection evidence.
  */
 export function buildInvestigationPrompt(evidence: unknown): string {
-	return toEvidencePrompt(readInvestigationPromptTemplate(), evidence)
+	return toEvidencePrompt(readInvestigationPromptTemplate(), evidence, 2)
 }
 
-function toEvidencePrompt(content: string, evidence: unknown): string {
+function toEvidencePrompt(content: string, evidence: unknown, indent = 0): string {
 	// remove embedded fence markers before serializing redacted evidence
 	const nonce = randomUUID()
-	const serialized = JSON.stringify(redactEvidence(evidence), (_key, value: unknown) =>
-		typeof value === "string" ? value.replace(/<\/?untrusted-data-[A-Za-z0-9_-]*>?/gi, "") : value,
+	const serialized = JSON.stringify(
+		redactEvidence(evidence),
+		(_key, value: unknown) =>
+			typeof value === "string" ? value.replace(/<\/?untrusted-data-[A-Za-z0-9_-]*>?/gi, "") : value,
+		indent,
 	).replaceAll(String.fromCharCode(96), "\\u0060")
 
 	// cap the evidence in bytes before enclosing it in a fresh fence
 	const bytes = Buffer.from(serialized)
 	const material =
-		bytes.length > 80000
-			? `${bytes.subarray(0, 80000).toString("utf8")}\n[Remaining evidence omitted at 80,000 bytes]`
+		bytes.length > maxEvidenceBytes
+			? `${bytes.subarray(0, maxEvidenceBytes).toString("utf8")}\n[Remaining evidence omitted at ${maxEvidenceBytes.toLocaleString("en-US")} bytes]`
 			: serialized
 	return content.replace("{{evidence}}", () => `<untrusted-data-${nonce}>\n${material}\n</untrusted-data-${nonce}>`)
 }

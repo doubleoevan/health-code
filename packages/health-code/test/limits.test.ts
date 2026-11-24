@@ -283,6 +283,34 @@ test("a timed-out final check settles before its caller can publish", async () =
 	assert.equal(published, false)
 })
 
+test("later project reads outlive the initial detection deadline", async () => {
+	const { InspectionContext } = await import("../src/collectEvents.ts")
+	const { NodeAdapter } = await import("../src/checkProject.ts")
+	const sandboxProvider = offline()
+	sandboxProvider.executeCommand = async () => ({
+		exitCode: 0,
+		stdout: "{}",
+		stderr: "",
+		durationMs: 0,
+		timedOut: false,
+		stdoutTruncated: false,
+		stderrTruncated: false,
+	})
+	const context = new InspectionContext({
+		repositoryUrl: fixtureUrl,
+		sandboxProvider,
+		limits: { timeouts: { detect: 20 } },
+	})
+	context.setupComplete = true
+	const adapter = new NodeAdapter(context, { id: "fixture" })
+
+	// expire the detection deadline before rereading the project
+	await assert.rejects(adapter.detectProject())
+	await new Promise((resolve) => setTimeout(resolve, 30))
+	assert.deepEqual(await adapter.data(["detect"]), {})
+	await assert.rejects(adapter.detectProject(), { code: "deadline" })
+})
+
 test("a failed event listener leaves internal cleanup and terminal events sequenced", async () => {
 	const { InspectionContext } = await import("../src/collectEvents.ts")
 	const internal: InspectionEvent[] = []

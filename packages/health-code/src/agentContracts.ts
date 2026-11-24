@@ -195,7 +195,15 @@ export type UpgradeReportV2 = UpgradeReport & {
 	verdict: Verdict
 
 	// record the commits and model usage behind each outcome
-	newDependencies: { name: string; version: string; reason: string; commit: string }[]
+	newDependencies: {
+		name: string
+		version: string
+		reason: string
+		commit: string
+
+		// identify a linked dependency that the repository already declared
+		from?: Record<string, string>
+	}[]
 	patches: Patch[]
 	diagnosis?: { breakingChange: string; actions: string[]; stopReason: string }
 	attemptDurationMs?: Partial<Record<AgentRole, number>>

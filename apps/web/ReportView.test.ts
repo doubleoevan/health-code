@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { createHash } from "node:crypto"
 import { origin, replay, createTestSite as site } from "./fixtures/createTestSite.ts"
 import { publishReport } from "./publishReport.ts"
-import { replayRepositoryUrl as repository } from "./report.ts"
+import { replayRepositoryUrl as repository, toReportHeading, toSummary } from "./report.ts"
 import { InspectionStore } from "./storeInspections.ts"
 
 test("server HTML renders each Verdict, license decision, evidence and preview before JavaScript", async () => {
@@ -27,24 +27,8 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 		],
 	}
 
-	// include unsafe release text and separate turn limits
+	// include unsafe release text
 	upgrade.releaseSummary.text = "</script><script>alert(1)</script>"
-	output.report.limits = {
-		maxDurationMs: 60000,
-		maxCostUsd: 1,
-		agent: {
-			repair: { maxTurns: 4, maxDurationMs: 20000, maxCostUsd: 0.5 },
-			featureAdoption: { maxTurns: 0, maxDurationMs: 0, maxCostUsd: 0 },
-		},
-	}
-
-	// Publish the runtime usage cutoff with the saved report.
-	output.report.runtimeUsage = {
-		usageAsOf: "2026-11-20T10:42:00.000Z",
-		runtimes: [],
-		modelCostUsd: 0,
-		modelReservedUsd: 0,
-	}
 
 	// include unavailable size evidence and a test file error
 	upgrade.installSize = { reason: "Size measurement unavailable" }
@@ -87,26 +71,19 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 		if (verdict === "Untested") {
 			upgrade.result = { status: "untested", reason: "The pinned project has no test script.", evidence: [] }
 		}
-		output.report.promptVersions = {
-			model: [{ name: "repair", version: 12, sha256: "e".repeat(64) }],
-			handoff: [{ name: "applyPatch", version: 1, sha256: "c".repeat(64) }],
-		}
+
+		// publish and render the saved report
 		const id = store.enqueue(repository)
 		store.finish(id, publishReport(output, "MPL-2.0"))
 		const html = (await (await app.request(`/r/${id}`)).text()).replaceAll("<!-- -->", "")
-		expect((html.match(/>Copy prompt to apply patch<\/button>/g) ?? []).length).toBe(1)
+		expect((html.match(/<h2>Upgrade prompt for your coding agent<\/h2>/g) ?? []).length).toBe(1)
 		for (const expected of [
 			verdict.replace("'", "&#x27;"),
-			"repair v12",
-			"applyPatch v1",
 			...(verdict === "Untested" ? ["Why this upgrade was untested", "The pinned project has no test script."] : []),
 			"<h1>Inspection complete</h1>",
-			"<p>1 upgrade inspected, 1 feature patch, 1 connection blocked during install</p>",
+			"<p>Your 2 tested patches are ready. 1 connection blocked during install.</p>",
 			"Checks before the upgrade",
-			'Usage measured through <time dateTime="2026-11-20T10:42:00.000Z">2026-11-20 10:42:00 UTC</time>',
-			"<summary>Turn limit</summary>",
-			"<dt>Repair</dt><dd>4</dd>",
-			"<dt>Feature adoption</dt><dd>0</dd>",
+			"<h2>Health inspection details</h2>",
 			"Some install activity could not be recorded. The network trace ended early.",
 			"blocked · example.org",
 			"unknown · example.net",
@@ -116,7 +93,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			"og:description",
 			"og:title",
 			`${origin}/r/${id}`,
-			"Copy prompt to apply patch",
+			"Upgrade prompt for your coding agent",
 			"Direct replacement",
 			match.directQuote,
 			"Source location",
@@ -126,10 +103,10 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			"Adoption outcome",
 			"Why no tested patch is available",
 			"Turn limit reached",
-			"What we could verify",
+			"What the health inspector could verify",
 			"Upgraded typecheck",
 			"Upgraded tests",
-			"Added dependencies",
+			"Dependency changes",
 			"options-helper@1.0.0",
 			"Model cost",
 			"Reserved upper bound",
@@ -140,15 +117,15 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			"Applies to commit",
 			"Tested commit",
 			"Required upgrade patch",
-			"Copy link",
-			"Share",
+			"Copy report link",
 			"dashboard.runta.com",
 			"mcp-setup",
 		]) {
 			expect(html).toContain(expected)
 		}
 
-		// reject a false empty state and unescaped release text
+		// keep internal run settings, false empty states and unescaped release text off the page
+		expect(html).not.toMatch(/Prompt versions|Turn limit<|Usage measured through/)
 		expect(html).not.toContain("No findings.")
 		expect(html).not.toContain(upgrade.releaseSummary.text)
 	}
@@ -158,7 +135,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 	store.finish(withheld, publishReport(output, null))
 	const html = await (await app.request(`/r/${withheld}`)).text()
 	expect(html).toContain("Findings only")
-	expect(html).not.toContain(upgrade.patches[0]?.prompt ?? "Copy prompt to apply patch")
+	expect(html).not.toContain(upgrade.patches[0]?.prompt ?? "Upgrade prompt for your coding agent")
 	expect(html).not.toContain("/patches/")
 	expect((await app.request(`/patches/${"0".repeat(64)}.patch`)).status).toBe(404)
 
@@ -185,6 +162,40 @@ test("a timed-out upgrade install explains which checks did not run", async () =
 	expect(published()).toBe(`${timeout} The upgraded typecheck and tests did not run.`)
 	upgrade.tests = { status: "passed", evidence: [] }
 	expect(published()).toBe(timeout)
+})
+
+test("the summary names the outcome and whether a patch is available", async () => {
+	const output = await replay.inspect(repository, () => {})
+	const { card } = publishReport(output, "MIT")
+	const upgrade = card.upgrades[0]
+	if (!upgrade) {
+		throw new Error("The fixture requires an upgrade")
+	}
+
+	// Remove the patches and installation findings from one upgrade.
+	const observation = { ...upgrade.observation, findings: [] }
+	const tested = { ...upgrade, observation, patches: [] }
+	const skipped = { ...tested, coverage: "skipped" as const, verdict: "Untested" as const }
+	const failed = { ...card, upgrades: [skipped], baseline: { ...card.baseline, install: "failed" } }
+
+	// Explain an upgrade that never started.
+	expect(toReportHeading(failed)).toBe("Upgrade not tested")
+	expect(toSummary(failed)).toBe(
+		"No patch. Your project’s dependencies failed to install so the health inspector couldn’t test this upgrade.",
+	)
+
+	// Distinguish unsuccessful repairs, incomplete checks and ready patches.
+	const unfixed = { ...card, upgrades: [{ ...tested, verdict: "Can't fix" as const }] }
+	expect(toSummary(unfixed)).toBe("No patch. The upgrade broke your checks and the health inspector couldn’t fix it.")
+	expect(toReportHeading(unfixed)).toBe("Inspection complete")
+	const incomplete = { ...card, upgrades: [{ ...tested, verdict: "Untested" as const }] }
+	expect(toSummary(incomplete)).toBe("No patch. The health inspector couldn’t finish testing this upgrade.")
+
+	// Count the upgrades without a patch beside a ready one.
+	const mixed = { ...card, upgrades: [{ ...upgrade, observation, patches: upgrade.patches.slice(0, 1) }, skipped] }
+	expect(toSummary(mixed)).toBe("Your tested patch is ready. No patch for 1 of 2 upgrades.")
+	expect(toReportHeading(mixed)).toBe("Inspection complete")
+	expect(toSummary({ ...card, upgrades: [] })).toBe("No patch. No upgrades were tested.")
 })
 
 test("patch order belongs to the dependency that requires it", async () => {
@@ -261,12 +272,27 @@ test("an empty report explains registry failure on the shared report page", asyn
 	store.finish(id, publishReport(output, null))
 	const html = await (await app.request(`/r/${id}`)).text()
 	expect(html).toContain(`<p>${reason}</p>`)
-	expect(html).toContain(">Copy prompt to investigate</button>")
-	expect(html).not.toContain(">Copy prompt to apply patch</button>")
+	expect(html).toContain("<h2>Troubleshooting prompt for your coding agent</h2>")
+	expect(html).toContain("identify the first failed or skipped check")
+	expect(html).not.toContain("SHA-256: ")
 
 	// Keep the requested target in the copied prompt when discovery returned no cards.
 	const state = JSON.parse(html.match(/<script id="page-state" type="application\/json">(.*?)<\/script>/s)![1]!)
 	expect(state.snapshot.investigationPrompt).toContain(upgrade.dependency)
+
+	// Highlight the evidence without changing the displayed prompt.
+	const prompt = /<pre tabindex="0">(.*?)<\/pre>/is.exec(html)?.[1] ?? ""
+	expect(prompt).toContain('class="token property"')
+
+	// Decode the displayed text.
+	const displayed = prompt
+		.replace(/<[^>]+>/g, "")
+		.replaceAll("&lt;", "<")
+		.replaceAll("&gt;", ">")
+		.replaceAll("&quot;", '"')
+		.replaceAll("&#x27;", "'")
+		.replaceAll("&amp;", "&")
+	expect(displayed).toBe(state.snapshot.investigationPrompt)
 
 	// Preserve the same registry diagnosis in shared previews.
 	expect(html).toContain(`property="og:title" content="Health Code: ${reason}"`)
@@ -328,7 +354,8 @@ test("a partial report shows the interrupted step, skipped upgrades and reused e
 	expect(html).toContain("Where this fits in your code")
 
 	// Show unfinished work alongside the link to the previous inspection.
-	expect(html).toContain("1 skipped")
+	expect(html).toContain("its patch can’t be published")
+	expect(html).toContain("Skipped before checking this upgrade.")
 	expect(html).toContain("Last step: tests")
 	expect(html).toContain("outside-limit@")
 	expect(html).toContain('href="/r/original-proof"')

@@ -1,5 +1,5 @@
 import { type ReactElement, useState } from "react"
-import { Copy, CopyInvestigationPrompt } from "./ReportControls.tsx"
+import { PromptBox, TroubleshootingPrompt } from "./PromptBox.tsx"
 import { type PatchLink, type PublishedReport, toOrderedPatches, toPatchPath } from "./report.ts"
 
 function toPatchPrompt({
@@ -64,23 +64,14 @@ export function ReportActions({
 				</label>
 			)}
 			{selectedPatch ? (
-				<Copy
+				<PromptBox
 					key={selectedPatch.patch.digest}
-					label="Copy prompt to apply patch"
+					title="Upgrade prompt for your coding agent"
 					text={toPatchPrompt({ ...selectedPatch, url, commit: report.repository.commit })}
 				/>
 			) : (
-				investigationPrompt && <CopyInvestigationPrompt text={investigationPrompt} />
+				investigationPrompt && <TroubleshootingPrompt text={investigationPrompt} />
 			)}
-
-			{/* secondary report actions */}
-			<details>
-				<summary>Share report</summary>
-				<div className="buttons">
-					<Copy label="Copy link" text={url} />
-					<Copy label="Share" text={url} share />
-				</div>
-			</details>
 		</>
 	)
 }

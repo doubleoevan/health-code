@@ -2,8 +2,14 @@ import { execFileSync } from "node:child_process"
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { createAnthropic } from "@ai-sdk/anthropic"
-import { createSandboxProvider, inspectRepository, type UpgradeReportV2 } from "health-code"
+import {
+	createHostModel,
+	createSandboxProvider,
+	type InspectionModels,
+	inspectRepository,
+	readModelRoutes,
+	type UpgradeReportV2,
+} from "health-code"
 import { z } from "zod"
 import { scoreBudget } from "./scoreBudget.ts"
 
@@ -33,28 +39,9 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	const fixture = schema.parse(
 		JSON.parse(await readFile(new URL("../evals/typescript-7.json", import.meta.url), "utf8")),
 	)
-	if (!process.env.ANTHROPIC_API_KEY || !process.env.RUNTA_TOKEN) {
+	const { MODEL_API_KEY: apiKey, RUNTA_TOKEN: token } = process.env
+	if (!apiKey || !token) {
 		throw new Error("TypeScript evaluation requires a host model credential and a sandbox account")
-	}
-
-	// configure the host model and its token prices
-	const modelId = "claude-opus-5-5"
-	const baseUrl = "https://api.anthropic.com/v1"
-	const model = createAnthropic({ baseURL: baseUrl, apiKey: process.env.ANTHROPIC_API_KEY })(modelId)
-	const pricing = { inputUsdPerMillion: 4, outputUsdPerMillion: 20, maxInputTokens: 96000 }
-
-	// bind sandbox requests to the registered model credential
-	const route = {
-		protocol: "anthropic" as const,
-		effort: "medium" as const,
-		baseUrl,
-		modelId,
-		credential: {
-			name: process.env.HEALTH_CODE_STORED_CREDENTIAL ?? "anthropic-api-key",
-			header: "x-api-key",
-			valueTemplate: `\${credential}`,
-		},
-		pricing,
 	}
 
 	// inspect the exact repository revision and dependency upgrade
@@ -65,12 +52,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 		signal,
 		upgrade: fixture.upgrade,
 		sandboxProvider: provider,
-		models: {
-			releaseSummary: { model, pricing },
-			featureMatch: { model, pricing },
-			repair: route,
-			featureAdoption: route,
-		},
+		models: toEvaluationModels(process.env, apiKey),
 		onEvent(event) {
 			// show step progress and elapsed time
 			if (event.type === "step.started") {
@@ -218,6 +200,21 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	)
 	if (!passed) {
 		process.exitCode = 1
+	}
+}
+
+/**
+ * Binds each role to its configured model with the evaluation's input bound.
+ */
+export function toEvaluationModels(environment: NodeJS.ProcessEnv, apiKey: string): InspectionModels {
+	const { repair, releaseSummary, featureMatch, featureAdoption } = readModelRoutes(environment)
+	const pricing = { ...repair.pricing, maxInputTokens: 96000 }
+	const effort = "medium" as const
+	return {
+		releaseSummary: { model: createHostModel(releaseSummary, apiKey), pricing },
+		featureMatch: { model: createHostModel(featureMatch, apiKey), pricing },
+		repair: { ...repair, effort, pricing },
+		featureAdoption: { ...featureAdoption, effort, pricing },
 	}
 }
 

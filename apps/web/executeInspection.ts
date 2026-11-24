@@ -302,6 +302,25 @@ export class Inspections {
 		}
 		return !this.launch || (this.launch.settings.available && settings === this.launch.settings.current)
 	}
+
+	// Save the license at the inspected commit for live output.
+	private async recordInspectedLicense(
+		row: { id: string; repositoryUrl: string },
+		commit?: string,
+	): Promise<string | null> {
+		const license = commit ? await this.lookUpLicense({ url: row.repositoryUrl, commit }) : null
+		this.store.saveInspectedLicense(row.id, license)
+		return license
+	}
+
+	// Keep findings available if GitHub cannot identify the license.
+	private async lookUpLicense(
+		repository: { url: string; commit: string },
+		knownLicense: string | null = null,
+	): Promise<string | null> {
+		return knownLicense ?? this.source.license(repository).catch(() => null)
+	}
+
 	private async execute(row: { id: string; repositoryUrl: string }): Promise<void> {
 		// persist each event before waking its subscribers
 		const started = Date.now()
@@ -328,6 +347,9 @@ export class Inspections {
 				row.repositoryUrl,
 				checkout && limits ? { repositoryId: checkout.repositoryId, maxSizeKiB: limits.maxSizeKiB } : undefined,
 			)
+
+			// Show live output when GitHub confirms the license at the inspected commit.
+			const inspectedLicense = await this.recordInspectedLicense(row, revision)
 
 			// Recheck a claimed job if admission changed while GitHub verified its repository.
 			if (!this.canStartVerified(lifecycle, settings)) {
@@ -364,8 +386,8 @@ export class Inspections {
 				throw new Error("Inspection repository or commit mismatch")
 			}
 
-			// Keep findings available if GitHub cannot identify the license at the pinned commit.
-			const license = await this.source.license(output.report.repository).catch(() => null)
+			// Look up the license again only when the start of the inspection left it unverified.
+			const license = await this.lookUpLicense(output.report.repository, inspectedLicense)
 			const publication = publishReport(output, license)
 			this.store.finish(row.id, publication)
 

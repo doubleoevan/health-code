@@ -99,6 +99,13 @@ export type {
 } from "./modelRequestSandbox.ts"
 export { isModelRequestSandboxName, toModelRequestSandboxName } from "./modelRequestSandbox.ts"
 export {
+	createHostModel,
+	modelSettingNames,
+	readModelOrigin,
+	readModelRoutes,
+	toModelSecretName,
+} from "./readModelRoutes.ts"
+export {
 	type ReleaseFeaturePage,
 	readUpgradeFeatures,
 	toFeaturePage,

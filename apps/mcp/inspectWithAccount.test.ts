@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { createFakeSandboxProvider, InspectionError } from "health-code"
 import { fetchPatch } from "./fetchPatch.ts"
+import { modelSettings } from "./fixtures/inspectionSettings.ts"
 import { modelRequestSandboxFixture } from "./fixtures/modelRequestSandboxInspection.ts"
 import { inspectWithAccount } from "./inspectWithAccount.ts"
 import { reportSchema, toHash } from "./storeInspection.ts"
@@ -9,7 +10,7 @@ import { reportSchema, toHash } from "./storeInspection.ts"
 test("the paid entry point routes each credential and closes the guest binding on a replay", async () => {
 	const environment = {
 		RUNTA_TOKEN: "synthetic-runta-token",
-		ANTHROPIC_API_KEY: "synthetic-model-key",
+		MODEL_API_KEY: "synthetic-model-key",
 		GITHUB_TOKEN: "synthetic-github-token",
 	}
 	const repositoryUrl = "https://github.com/example/project"
@@ -26,7 +27,11 @@ test("the paid entry point routes each credential and closes the guest binding o
 			onEvent(): void {},
 		}
 		assert.throws(() => inspectWithAccount(options, {}), /RUNTA_TOKEN/)
-		const report = await inspectWithAccount(options, { ...environment, ANTHROPIC_API_KEY: undefined })
+		const report = await inspectWithAccount(options, {
+			...modelSettings,
+			...environment,
+			MODEL_API_KEY: undefined,
+		})
 		assert.equal(report.version, 2)
 		assert.deepEqual(requested, ["registry", "releases"])
 		assert.deepEqual(
@@ -112,7 +117,7 @@ test("failed inspections delete both runtimes independently and preserve all unr
 						}
 					},
 				},
-				{ RUNTA_TOKEN: "fixture" },
+				{ ...modelSettings, RUNTA_TOKEN: "fixture" },
 			)
 			await assert.rejects(inspection, (error: unknown) => {
 				assert.ok(error instanceof InspectionError)

@@ -1,7 +1,7 @@
 import { posix } from "node:path"
 import type { z } from "zod"
 import type { CodeFeatureMatch } from "./agentContracts.ts"
-import { sections } from "./bumpManifest.ts"
+import { prepareDependencies } from "./changeDependencies.ts"
 import type { decision } from "./proposeEdits.ts"
 import { reviewNewTest, reviewTestEdit } from "./reviewTestEdit.ts"
 import { caseMatchesTitle } from "./testCaseName.ts"
@@ -13,9 +13,6 @@ import {
 	recordCommit,
 	requireBaseline,
 	type State,
-	trackedLockfile,
-	verifyLifecycleHooks,
-	verifyManifest,
 	workspace,
 } from "./verifyCandidate.ts"
 
@@ -90,55 +87,6 @@ export async function applyDecision({
 		reason: edit.reason,
 		behaviorChange: edit.behaviorChange,
 	})
-}
-
-async function addDependency(
-	evidence: PatchEvidence,
-	state: State,
-	dep: { name: string; version: string; reason: string },
-): Promise<void> {
-	const { adapter, baseInstall } = evidence
-	if (state.dependencies.some((entry) => entry.name === dep.name && entry.version === dep.version)) {
-		return
-	}
-
-	// restore the committed candidate before modifying its manifest
-	await workspace(evidence, { kind: "restore", tip: state.tip })
-	const manifest = JSON.parse(await workspace(evidence, { kind: "read", file: "package.json", revision: state.tip }))
-	if (sections.some((section) => Object.hasOwn(manifest[section] ?? {}, dep.name))) {
-		throw new Error("Dependency already present")
-	}
-	manifest.dependencies = { ...manifest.dependencies, [dep.name]: dep.version }
-
-	// reinstall to verify the proposed dependency addition
-	await workspace(evidence, { kind: "edit", file: "package.json", contents: `${JSON.stringify(manifest, null, 2)}\n` })
-	const install = await adapter.refreshInstallation()
-	if (install.check.status !== "passed" || !baseInstall || !cleanInstall(install.observation, baseInstall)) {
-		throw new Error(
-			`Flagged dependency ${dep.name}@${dep.version} could not be installed: ${install.check.status}, ${install.observation.reason ?? (install.observation.findings.length ? "installation finding" : "destination comparison")}. ${install.check.evidence
-				.map((entry) => entry.stderr.slice(-450))
-				.join(" ")
-				.slice(-600)}`,
-		)
-	}
-
-	// check lifecycle changes before recording the dependency commit
-	requireBaseline(evidence)
-	verifyLifecycleHooks(
-		evidence.baselinePatchVerificationInputs.lifecycleHookSignatures,
-		await adapter.data(["lifecycle"]),
-	)
-	const lock = trackedLockfile(evidence)
-	await verifyManifest(evidence, "package.json", manifest)
-	const commit = await recordCommit(
-		evidence,
-		state,
-		`build: add ${dep.name} ${dep.version}`,
-		["package.json", lock],
-		"dependency",
-		dep.reason,
-	)
-	state.dependencies.push({ ...dep, commit })
 }
 
 async function proveBehavior({
@@ -227,39 +175,6 @@ async function proveBehavior({
 	}
 }
 
-async function removeDependency(evidence: PatchEvidence, state: State, name: string): Promise<void> {
-	const file = "package.json"
-
-	// remove dependencies from the committed manifest
-	await workspace(evidence, { kind: "restore", tip: state.tip })
-	const manifest = JSON.parse(await workspace(evidence, { kind: "read", file, revision: state.tip }))
-	const present = sections.filter((section) => Object.hasOwn(manifest[section] ?? {}, name))
-	if (!present.length) {
-		throw new Error("Dependency is absent from the root manifest")
-	}
-
-	// delete each declaration before refreshing the lockfile
-	for (const section of present) {
-		delete manifest[section][name]
-	}
-	await workspace(evidence, { kind: "edit", file, contents: `${JSON.stringify(manifest, null, 2)}\n` })
-	const result = await evidence.adapter.refreshInstallation()
-	if (
-		result.check.status !== "passed" ||
-		// require the removal to keep install observations within the baseline
-		!evidence.baseInstall ||
-		!cleanInstall(result.observation, evidence.baseInstall)
-	) {
-		throw new Error("Dependency removal install failed")
-	}
-
-	// verify and commit the manifest together with the lockfile
-	await verifyManifest(evidence, file, manifest)
-	const lock = trackedLockfile(evidence)
-	await recordCommit(evidence, state, `build: remove ${name}`, [file, lock])
-	state.removedDependency = name
-}
-
 // permit new test files beside a discovered test
 function adjacentTest(file: string, tests: Set<string>): boolean {
 	const suffix = file.match(/\.(?:test|spec)\.[cm]?[jt]sx?$/)?.[0]
@@ -297,18 +212,40 @@ function prepareEdits(edit: z.infer<typeof decision>, state: State, created: Set
 	}
 	return changed
 }
-async function reviewTestFile(
-	evidence: PatchEvidence,
-	state: State,
-	file: string,
-	contents: string,
-	create: boolean,
-	citation: z.infer<typeof decision>["behaviorChange"],
-): Promise<ReturnType<typeof reviewTestEdit>> {
+async function reviewTestFile({
+	evidence,
+	state,
+	file,
+	contents,
+	create,
+	citation,
+	mockDependency,
+}: {
+	evidence: PatchEvidence
+	state: State
+	file: string
+	contents: string
+	create: boolean
+
+	// identify the cited change and the package whose mocks can move
+	citation: z.infer<typeof decision>["behaviorChange"]
+	mockDependency?: string
+}): Promise<ReturnType<typeof reviewTestEdit>> {
 	if (create) {
 		return reviewNewTest(contents)
 	}
-	return reviewTestEdit(await workspace(evidence, { kind: "read", revision: state.tip, file }), contents, citation)
+
+	// compare the proposal with the committed test
+	const before = await workspace(evidence, { kind: "read", revision: state.tip, file })
+	return reviewTestEdit({ before, after: contents, citation, mockDependency })
+}
+
+// list the cases that must pass after a reviewed edit
+function toReviewedNames(review: ReturnType<typeof reviewTestEdit>): string[] {
+	if (review.kind === "mock") {
+		return []
+	}
+	return review.kind === "coverage" ? review.names : [review.name]
 }
 async function reviewTests({
 	created,
@@ -333,9 +270,18 @@ async function reviewTests({
 }): Promise<void> {
 	// select test files for independent review
 	const tests = [...changed].filter(([file]) => testFiles.has(file))
+	const mockDependency = match ? undefined : evidence.report.dependency
 	for (const [file, contents] of tests) {
 		const createTest = created.has(file)
-		const review = await reviewTestFile(evidence, state, file, contents, createTest, behaviorChange)
+		const review = await reviewTestFile({
+			evidence,
+			state,
+			file,
+			contents,
+			create: createTest,
+			citation: behaviorChange,
+			mockDependency,
+		})
 		if (review.kind === "expectation") {
 			// limit changed expectations to a single verified repair
 			if (match || state.testChanged) {
@@ -351,42 +297,14 @@ async function reviewTests({
 			state,
 			`test: ${reason.replace(/[\r\n]/g, " ").slice(0, 180)}`,
 			[file],
-			review.kind === "expectation" ? "test" : undefined,
+			review.kind === "coverage" ? undefined : "test",
 			review.kind === "expectation" && behaviorChange
 				? reason + "\n" + behaviorChange.source + "\n" + behaviorChange.quote
 				: reason,
 		)
 		state.files.set(file, contents)
-		state.testChanged ||= review.kind === "expectation"
-		const names = "names" in review ? review.names : [review.name]
+		state.testChanged ||= review.kind !== "coverage"
+		const names = toReviewedNames(review)
 		state.expectedCases.push(...names.map((name) => ({ file, name })))
-	}
-}
-async function prepareDependencies({
-	state,
-	evidence,
-	edit,
-	match,
-}: {
-	state: State
-	evidence: PatchEvidence
-	edit: z.infer<typeof decision>
-	match?: CodeFeatureMatch
-}): Promise<void> {
-	// require at least one actionable edit
-	if (!edit.edits.length && !edit.dependency && !edit.dependencies?.length && !edit.removeDependency) {
-		throw new Error("Agent returned a diagnosis without edits")
-	}
-
-	for (const addition of [...(edit.dependencies ?? []), ...(edit.dependency ? [edit.dependency] : [])]) {
-		await addDependency(evidence, state, addition)
-	}
-
-	// allow removal only while adopting a replacement feature
-	if (edit.removeDependency) {
-		if (!match || edit.removeDependency === evidence.report.dependency) {
-			throw new Error("Dependency removal requires a feature adoption")
-		}
-		await removeDependency(evidence, state, edit.removeDependency)
 	}
 }

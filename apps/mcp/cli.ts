@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs"
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio"
+import { InspectionError } from "health-code"
+import { checkRepository, checkUsage } from "./checkRepository.ts"
 import { createServer } from "./createServer.ts"
 import { inspectWithAccount } from "./inspectWithAccount.ts"
 import { accountToken, UserError } from "./modelSettings.ts"
@@ -10,9 +12,14 @@ import { InspectionStore } from "./storeInspection.ts"
 import { Inspections } from "./trackInspections.ts"
 
 async function main(args: string[]): Promise<void> {
+	if (args[0] === "check") {
+		await runCheck(args.slice(1))
+		return
+	}
+
 	// reject unsupported subcommands before loading account settings
 	if (args[0] !== "mcp" || args.length > 2 || (args.length === 2 && args[1] !== "setup")) {
-		throw new UserError("Usage: health-code mcp [setup]")
+		throw new UserError(`Usage: health-code mcp [setup]\n${checkUsage}`)
 	}
 
 	// Pin client configurations to the installed release that provided this executable.
@@ -59,8 +66,19 @@ async function main(args: string[]): Promise<void> {
 	await server.connect(transport)
 }
 
+// stop the inspection and delete its sandboxes when CI cancels the job
+async function runCheck(args: string[]): Promise<void> {
+	const controller = new AbortController()
+	for (const signal of ["SIGTERM", "SIGINT"] as const) {
+		process.once(signal, () => controller.abort())
+	}
+	const { isComplete } = await checkRepository(args, { environment: process.env, signal: controller.signal })
+	process.exitCode = isComplete ? 0 : 1
+}
+
 // expose setup guidance and keep internal errors out of stderr
 main(process.argv.slice(2)).catch((error: unknown) => {
-	console.error(error instanceof UserError ? error.message : "Health Code MCP could not start.")
+	const isExpected = error instanceof UserError || error instanceof InspectionError
+	console.error(isExpected ? error.message : "Health Code could not start.")
 	process.exitCode = 1
 })

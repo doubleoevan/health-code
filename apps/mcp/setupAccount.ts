@@ -1,20 +1,16 @@
 import { Runta } from "@runta/runta-sdk"
-import { createSandboxProvider, type SandboxModelRoutes } from "health-code"
-import { configureModels } from "./configureModels.ts"
 import {
-	accountToken,
-	modelOrigin,
-	priceVariables,
-	roleVariables,
-	secretName,
-	setupKey,
-	toEnvironmentReference,
-	UserError,
-} from "./modelSettings.ts"
+	createSandboxProvider,
+	modelSettingNames,
+	readModelOrigin,
+	type SandboxModelRoutes,
+	toModelSecretName,
+} from "health-code"
+import { configureModels } from "./configureModels.ts"
+import { accountToken, setupKey, toEnvironmentReference, UserError } from "./modelSettings.ts"
 import { personalProvider } from "./personalModelRequestSandboxes.ts"
 import { probeModelRequestSandbox, setupTimeoutMs } from "./probeModelRequestSandbox.ts"
 
-const optional = ["HEALTH_CODE_MODEL_HOST", ...Object.values(roleVariables), ...priceVariables]
 type Account = {
 	probe(token: string, route: SandboxModelRoutes["releaseSummary"], end: number): Promise<void>
 	check(token: string): Promise<void>
@@ -43,7 +39,7 @@ export async function setupAccount(
 	const key = setupKey(environment)
 	const end = Date.now() + setupTimeoutMs
 	const route = configureModels(environment).releaseSummary
-	const origin = modelOrigin(environment)
+	const origin = readModelOrigin(environment)
 
 	// Keep credentials and SDK response bodies out of setup diagnostics.
 	try {
@@ -53,7 +49,7 @@ export async function setupAccount(
 	}
 
 	// register the model key under the selected origin's secret name
-	const name = secretName(origin)
+	const name = toModelSecretName(origin)
 	try {
 		if (key) {
 			await client.store({ token, key, name })
@@ -72,7 +68,7 @@ export async function setupAccount(
 	}
 
 	// Forward environment references so the emitted configuration can be shared.
-	const names = ["RUNTA_TOKEN", ...optional.filter((name) => environment[name])]
+	const names = ["RUNTA_TOKEN", ...modelSettingNames.filter((name) => environment[name])]
 
 	// Resolve npm packages from the user's home when a client opens a new checkout.
 	const windows = process.platform === "win32"
@@ -84,7 +80,7 @@ export async function setupAccount(
 	// render shared launcher settings in each client's configuration format
 	const env = Object.fromEntries(names.map((name) => [name, toEnvironmentReference(name)]))
 	return [
-		"Model key verified in Runta. After setup, only RUNTA_TOKEN is required.",
+		"Model key verified in Runta. You can now remove MODEL_API_KEY from your environment.",
 		"Claude Code · add inside mcpServers in .mcp.json",
 		`"health-code": ${JSON.stringify({ type: "stdio", command, args, env })}`,
 		"Codex · add at the top level of ~/.codex/config.toml",

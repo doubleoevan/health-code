@@ -4,6 +4,7 @@ import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } 
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
+import { collectJsonInventory } from "../guest/collectTestInventory.ts"
 import { selectRegistryVersions } from "../guest/selectRegistryVersions.ts"
 import type { Locator } from "../src/agentContracts.ts"
 import { verifyMatch } from "../src/rankFeatureMatches.ts"
@@ -33,19 +34,23 @@ test("pinned usage distinguishes aliases, shadowed names, generated source and d
 			'import { example as alias } from "widget"\nalias()\nfunction f(alias){alias()}\nimport("widget")\n',
 		)
 		writeFileSync(join(root, "apps/a/unknown.ts"), "import(variableName)")
+		writeFileSync(join(root, "apps/a/subpath.ts"), 'void import("widget/lib/a.js")\nimport "widget-other"\n')
+		writeFileSync(join(root, "apps/a/widget.d.ts"), 'declare module "widget/lib/a.js" {}\n')
 		writeFileSync(join(root, "gen.ts"), '// @generated\nimport "widget"')
 
 		// check the verified call sites against the pinned source
 		const data = measure('readUsage("widget")') as {
-			usage: { symbol: string; workspace: string; line: number }[]
+			usage: { file: string; symbol: string; workspace: string; line: number }[]
 			unresolved: string[]
 		}
 		assert.deepEqual(
-			data.usage.map((entry) => [entry.symbol, entry.line, entry.workspace]),
+			data.usage.map((entry) => [entry.file, entry.symbol, entry.line, entry.workspace].join(" ")).sort(),
 			[
-				["import", 1, "apps/a"],
-				["example", 2, "apps/a"],
-				["dynamic import", 4, "apps/a"],
+				"apps/a/index.ts dynamic import 4 apps/a",
+				"apps/a/index.ts example 2 apps/a",
+				"apps/a/index.ts import 1 apps/a",
+				"apps/a/subpath.ts dynamic import 1 apps/a",
+				"apps/a/widget.d.ts module declaration 1 apps/a",
 			],
 		)
 		assert.deepEqual(data.unresolved, ["apps/a/unknown.ts"])
@@ -151,4 +156,24 @@ test("feature ranking uses the cited symbol and distinct verified call sites", (
 	)
 	assert.equal(verifyMatch({ ...input, match: { ...entry, directQuote: "unsupported" } })?.replacement, "inferred")
 	assert.equal(verifyMatch({ ...input, match: { ...entry, symbol: "different" } }), undefined)
+})
+
+test("a JSON suite that fails to load reports the first line of its runner error", () => {
+	const suite = { name: "/project/a.test.ts", status: "failed", assertionResults: [] }
+	const toReasons = (message?: string): string[] =>
+		collectJsonInventory(
+			JSON.stringify({
+				testResults: [{ ...suite, message }],
+				numTotalTests: 0,
+				numPassedTests: 0,
+				numFailedTests: 0,
+			}),
+			"/project",
+		).testFileErrors.map((entry) => entry.reason)
+
+	// remove terminal codes and the sandbox root
+	assert.deepEqual(toReasons("\u001b[31mCannot resolve widget in /project/a.ts\u001b[0m\nstack"), [
+		"Cannot resolve widget in a.ts",
+	])
+	assert.deepEqual(toReasons(), ["Suite failed before reporting a failing test"])
 })

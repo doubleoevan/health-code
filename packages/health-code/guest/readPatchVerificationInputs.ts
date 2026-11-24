@@ -95,6 +95,12 @@ export function pageFileAndHookEntries(
 	return result
 }
 
+// package managers run these scripts for installed registry packages
+const installEvents = ["preinstall", "install", "postinstall"] as const
+
+// the root package and workspaces also run preparation scripts
+const projectEvents = [...installEvents, "prepare", "prepublish", "prepack", "postpack"] as const
+
 export function readLifecycleHookSignatures(): string[] {
 	// reject installs whose lifecycle inventory cannot be enumerated
 	if ([".pnp.cjs", ".pnp.js", ".pnp.loader.mjs"].some((file) => existsSync(file))) {
@@ -105,14 +111,14 @@ export function readLifecycleHookSignatures(): string[] {
 	const copies = new Map<string, number>()
 
 	// inspect each installed package manifest for lifecycle hooks
-	function inspect(path: string): void {
+	function inspect(path: string, events: readonly string[]): void {
 		if (!existsSync(join(path, "package.json"))) {
 			return
 		}
 		const manifest = JSON.parse(readText(join(path, "package.json")))
 
 		// hash hook bodies together with their package and location
-		for (const name of ["preinstall", "install", "postinstall", "prepare", "prepublish", "prepack", "postpack"]) {
+		for (const name of events) {
 			if (typeof manifest.scripts?.[name] === "string") {
 				const location = path.replace(/(\/(?:\.pnpm|\.bun)\/[^/]+?)@\d[^/]*(?=\/)/g, "$1")
 				const identity = [
@@ -154,14 +160,14 @@ export function readLifecycleHookSignatures(): string[] {
 			if (!entry.isDirectory() && !entry.isSymbolicLink()) {
 				continue
 			}
-			inspect(path)
+			inspect(path, installEvents)
 			visit(join(path, "node_modules"))
 		}
 	}
 
 	// include the root package and every declared workspace
 	for (const dir of [".", ...workspaceDirectories()]) {
-		inspect(dir)
+		inspect(dir, projectEvents)
 		visit(join(dir, "node_modules"))
 	}
 	return [...hooks].sort()

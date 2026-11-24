@@ -5,6 +5,7 @@ import { fetchRegistryVersions, isPackageName } from "./fetchRegistryVersions.ts
 import { bumpDependency, detectProject, managerName, readManifest } from "./inventory.ts"
 import { measureTests } from "./measureTests.ts"
 import { readLifecycleHookSignatures, readPatchVerificationInputs } from "./readPatchVerificationInputs.ts"
+import { readReleaseAge } from "./readReleaseAge.ts"
 import { readTestReport, reporterArguments, reportPath } from "./readTestReport.ts"
 import { installedBytes, readChangelog, readUsage } from "./readUsage.ts"
 
@@ -31,9 +32,16 @@ function resolveLock(manager: string): number {
 	return execute([manager, "install", "--lockfile-only", "--ignore-scripts"])
 }
 
-// determine the workspace manager before handling install modes
-function install(name?: string, target?: string): number {
+// separate the script policy from the install target
+function install(args: string[]): number {
+	const skipsScripts = args.includes("--ignore-scripts")
+	const [name, target] = args.filter((argument) => argument !== "--ignore-scripts")
+	const scripts = skipsScripts ? ["--ignore-scripts"] : []
+
+	// determine the workspace manager before handling install modes
 	const manager = managerName(readManifest("."))
+
+	// resolve only the lockfile when requested
 	if (name === "--resolve-lock") {
 		return resolveLock(manager)
 	}
@@ -43,26 +51,30 @@ function install(name?: string, target?: string): number {
 		bumpDependency(name, target)
 	}
 	if (manager === "npm") {
-		return execute(name ? ["npm", "install"] : ["npm", "ci"])
+		return execute(["npm", name ? "install" : "ci", ...scripts])
 	}
 
 	// choose frozen or mutable installs for the detected manager
 	if (manager === "yarn") {
-		return installYarn(Boolean(name))
+		return installYarn(Boolean(name), skipsScripts)
 	}
 	if (name && manager === "pnpm") {
-		return execute([manager, "install", "--no-frozen-lockfile"])
+		return execute([manager, "install", "--no-frozen-lockfile", ...scripts])
 	}
-	return execute([manager, "install", ...(name ? [] : ["--frozen-lockfile"])])
+	return execute([manager, "install", ...(name ? [] : ["--frozen-lockfile"]), ...scripts])
 }
 
 // enable lockfile edits only for a changed yarn install
-function installYarn(changed: boolean): number {
+function installYarn(changed: boolean, skipsScripts: boolean): number {
 	const modern = existsSync(".yarnrc.yml") || /^yarn@(?:[2-9]|\d\d)/.test(readManifest(".").packageManager ?? "")
 	if (changed && modern) {
 		process.env.YARN_ENABLE_IMMUTABLE_INSTALLS = "false"
 	}
-	return execute(["yarn", "install", ...(changed ? [] : [modern ? "--immutable" : "--frozen-lockfile"])])
+
+	// match the lockfile and script flags to this yarn version
+	const frozen = changed ? [] : [modern ? "--immutable" : "--frozen-lockfile"]
+	const scripts = skipsScripts ? [modern ? "--mode=skip-build" : "--ignore-scripts"] : []
+	return execute(["yarn", "install", ...frozen, ...scripts])
 }
 
 // prepare a reporter path for the project's test script
@@ -82,14 +94,14 @@ function tests(protectedReport = false): number {
 }
 
 function discoverVersions(args: string[]): ReturnType<typeof fetchRegistryVersions> {
-	const prefix = "--timeout-ms="
-	if (!args[0]?.startsWith(prefix)) {
-		return fetchRegistryVersions(args)
-	}
-
 	// Return completed packages before the supervising command times out.
-	const budget = Number(args[0].slice(prefix.length))
-	return fetchRegistryVersions(args.slice(1), { signal: AbortSignal.timeout(budget) })
+	const prefix = "--timeout-ms="
+	const budget = args[0]?.startsWith(prefix) ? Number(args[0].slice(prefix.length)) : undefined
+	const signal = budget === undefined ? undefined : AbortSignal.timeout(budget)
+
+	// Offer only releases the repository's own policy would install.
+	const releaseAge = readReleaseAge(managerName(readManifest(".")))
+	return fetchRegistryVersions(budget === undefined ? args : args.slice(1), { releaseAge, signal })
 }
 
 // dispatch the requested guest operation
@@ -146,7 +158,7 @@ async function main(): Promise<void> {
 
 		// run install and type checks through the detected manager
 		case "install":
-			process.exitCode = install(args[0], args[1])
+			process.exitCode = install(args)
 			break
 		case "typecheck": {
 			const options = args[0] === "build" ? ["-b"] : ["--noEmit"]

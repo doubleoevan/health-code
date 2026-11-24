@@ -1,0 +1,41 @@
+.prompt {
+	max-width: 44rem;
+}
+.prompt-box {
+	position: relative;
+	background: var(--panel);
+	border: 1px solid var(--rule);
+	border-radius: 0.5rem;
+}
+.prompt-box pre {
+	max-height: 16rem;
+	overflow-y: auto;
+	margin: 0;
+	padding: 1rem 6.5rem 1rem 1rem;
+	font-size: 0.85rem;
+}
+.prompt-box button {
+	position: absolute;
+	top: 0.6rem;
+	inset-inline-end: 0.6rem;
+}
+@media (hover: none) {
+	.prompt-box {
+		padding-top: 3.5rem;
+	}
+	.prompt-box pre {
+		padding: 0 1rem 1rem;
+	}
+}
+.prompt-box :is(.property, .key, .tag) {
+	color: var(--accent);
+}
+.prompt-box :is(.string, .attr-value) {
+	color: light-dark(#0a5c8a, #8cc8f0);
+}
+.prompt-box :is(.number, .boolean, .null) {
+	color: light-dark(#8a4b00, #f0b870);
+}
+.prompt-box .punctuation {
+	color: var(--muted);
+}

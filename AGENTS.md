@@ -9,8 +9,9 @@ The TypeScript library owns inspections. The site and MCP server expose the libr
 | --- | --- |
 | `packages/health-code/` | Library workspace. Owns inspection behavior and the public package entry. Read its AGENTS.md for the boundary. |
 | `apps/web/` | Web application (`@health-code/web`). Owns submission, SQLite persistence, SSE, browser interactions and Inspection Report publication. |
-| `apps/mcp/` | Source for the `health-code mcp` Node command and the published `@health-code/mcp` launcher. Owns account setup, MCP tools, Inspection storage and Patch handoff. |
+| `apps/mcp/` | Source for the `health-code mcp` and `health-code check` Node commands and the published `@health-code/mcp` launcher. Owns account setup, MCP tools, Inspection storage and Patch handoff. |
 | `evals/` | On-demand, pinned inspection cases and the CarlNotes Baseline inventory for maintainer review. |
+| `DEVELOPMENT.md` | Contributor commands and release verification. |
 | `scripts/` | Repository checks, preflight, and the developer inspection CLI. Use `bun run inspect <repo-url> [--fake]` for a rolling log and a local JSON Inspection Report. |
 | `.github/` | CI, CodeQL, weekly dependency updates, and shared Bun setup. |
 | `openspec/` | Specifications and change artifacts. |
@@ -28,7 +29,7 @@ The library ships the inspection engine. The site and MCP workspaces consume the
 | Model-facing instructions, evidence interpolation, or model calls | `packages/health-code/` | prompt-authoring, ai-sdk |
 | Hosted submission, recovery, SSE, live log, timeline, or Inspection Report publication | `apps/web/` | jsx-conventions, vercel-react-best-practices, web-design-guidelines |
 | MCP tools, arguments, or protocol responses | `apps/mcp/` | Consume the library through its public entry. |
-| Lint, types, dependency policy, import rules, or test discovery | `scripts/` and root tool configs | See scripts/AGENTS.md and the README Development section. |
+| Lint, types, dependency policy, import rules, or test discovery | `scripts/` and root tool configs | See scripts/AGENTS.md and DEVELOPMENT.md. |
 | CI or dependency updates | `.github/` | CI and /ship both invoke `bash scripts/preflight.sh`. |
 | Naming or documentation | `.agents/skills/` and the affected module guide | domain-model, write-docs |
 

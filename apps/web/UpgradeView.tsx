@@ -17,7 +17,7 @@ function Citations({ links }: { links: Citation[] }): ReactElement {
 		</>
 	)
 }
-export function TestFileErrors({ errors }: { errors?: UpgradeCard["testFileErrors"] }): ReactElement | null {
+function TestFileErrors({ errors }: { errors?: UpgradeCard["testFileErrors"] }): ReactElement | null {
 	if (!errors) {
 		return null
 	}
@@ -26,19 +26,49 @@ export function TestFileErrors({ errors }: { errors?: UpgradeCard["testFileError
 			{/* test files that could not run */}
 			<dt>Test file errors</dt>
 			<dd>
-				{errors.length ? (
-					<ul>
-						{errors.map(({ file, reason }) => (
-							<li key={JSON.stringify([file, reason])}>
-								<code>{file}</code> · {reason}
-							</li>
-						))}
-					</ul>
-				) : (
-					"None recorded"
-				)}
+				<TestFileErrorList errors={errors} />
 			</dd>
 		</>
+	)
+}
+
+export function TestFileErrorList({ errors }: { errors: NonNullable<UpgradeCard["testFileErrors"]> }): ReactElement {
+	if (!errors.length) {
+		return <>None recorded</>
+	}
+	return (
+		<details>
+			<summary>
+				{errors.length.toLocaleString("en")} {errors.length === 1 ? "error" : "errors"}
+			</summary>
+			<ul>
+				{errors.map(({ file, reason }) => (
+					<li key={JSON.stringify([file, reason])}>
+						<code>{file}</code> · {reason}
+					</li>
+				))}
+			</ul>
+		</details>
+	)
+}
+
+export function CheckOutcome({ text }: { text: string }): ReactElement {
+	if (text.length <= 160) {
+		return <>{text}</>
+	}
+
+	// show test counts before the long list of names
+	const counts = /(\d+) passed, (\d+) failed, (\d+) skipped, (\d+) todo/.exec(text)?.slice(1).map(Number)
+	const total = counts?.reduce((sum, count) => sum + count, 0)
+	return (
+		<details>
+			<summary>
+				{counts
+					? `${text.startsWith("failed") ? "failed · " : ""}${total?.toLocaleString("en")} ${total === 1 ? "test" : "tests"} · ${counts[1]?.toLocaleString("en")} failed`
+					: `${text.slice(0, 100)}…`}
+			</summary>
+			<p>{text}</p>
+		</details>
 	)
 }
 
@@ -228,14 +258,20 @@ export function UpgradeView({ upgrade }: { upgrade: UpgradeCard }): ReactElement
 			))}
 
 			{/* results from the upgraded checkout */}
-			<h4>What we could verify</h4>
+			<h4>What the health inspector could verify</h4>
 			<dl>
 				<dt>Upgrade install</dt>
-				<dd>{upgrade.checks.install}</dd>
+				<dd>
+					<CheckOutcome text={upgrade.checks.install} />
+				</dd>
 				<dt>Upgraded typecheck</dt>
-				<dd>{upgrade.checks.typecheck}</dd>
+				<dd>
+					<CheckOutcome text={upgrade.checks.typecheck} />
+				</dd>
 				<dt>Upgraded tests</dt>
-				<dd>{upgrade.checks.tests}</dd>
+				<dd>
+					<CheckOutcome text={upgrade.checks.tests} />
+				</dd>
 				<TestFileErrors errors={upgrade.testFileErrors} />
 
 				{/* observed installation activity */}
@@ -281,12 +317,12 @@ export function UpgradeView({ upgrade }: { upgrade: UpgradeCard }): ReactElement
 				</dd>
 				{!!upgrade.addedDependencies?.length && (
 					<>
-						<dt>Added dependencies</dt>
+						<dt>Dependency changes</dt>
 						<dd>
 							<ul>
 								{upgrade.addedDependencies.map((dep) => (
-									<li key={dep.commit}>
-										{dep.name}@{dep.version} · {dep.reason}{" "}
+									<li key={dep.name}>
+										{dep.name}@{dep.version} · {dep.from ? "Upgraded together" : "Added"} · {dep.reason}{" "}
 										<Link href={dep.patch && toPatchPath(dep.patch)}>
 											<code>{dep.commit}</code>
 										</Link>

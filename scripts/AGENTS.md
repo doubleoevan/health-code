@@ -1,6 +1,6 @@
 # Repository checks
 
-Run these commands from the repository root. The root package manifest names the commands and README.md documents their use.
+Run these commands from the repository root. The root package manifest names the commands and DEVELOPMENT.md documents their use.
 
 | Entry point | Scope |
 | --- | --- |

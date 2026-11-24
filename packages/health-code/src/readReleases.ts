@@ -184,7 +184,7 @@ function toReleaseNotes({
 		if (workspaces.length && entry.body) {
 			notes.push({
 				source: `https://github.com/${repository}/releases/tag/${encodeURIComponent(tag)}`,
-				text: entry.body.slice(0, 4000),
+				text: toNoteText(entry.body),
 				workspaces,
 			})
 		}
@@ -223,8 +223,18 @@ function toChangelogNotes({
 
 		// retain changelog text only for affected workspaces
 		if (workspaces.length) {
-			notes.push({ source: registry, text: section.slice(0, 4000), workspaces })
+			notes.push({ source: registry, text: toNoteText(section), workspaces })
 		}
 	}
 	return notes
+}
+
+// bound the note and drop a line cut off by the limit
+function toNoteText(text: string): string {
+	const limit = 4000
+	if (text.length <= limit) {
+		return text
+	}
+	const end = text.lastIndexOf("\n", limit)
+	return text.slice(0, end > 0 ? end : limit)
 }

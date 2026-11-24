@@ -1,4 +1,4 @@
-import { ProjectEvidenceError, RegistryDeadlineError, skippedUpgrade } from "./checkProject.ts"
+import { skippedUpgrade } from "./checkProject.ts"
 import { toUpgradeInstallTimeout } from "./confirmCheck.ts"
 import {
 	type Baseline,
@@ -9,7 +9,7 @@ import {
 	SandboxUnavailableError,
 	type UpgradeReport,
 } from "./contracts.ts"
-
+import { ProjectEvidenceError, RegistryDeadlineError } from "./parseRegistryVersions.ts"
 import { toUpgradeKey } from "./selectUpgrades.ts"
 
 const stages = ["install", "typecheck", "tests"] as const

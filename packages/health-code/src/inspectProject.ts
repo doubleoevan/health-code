@@ -65,7 +65,7 @@ export async function inspectProject({
 				.filter((upgrade) => !engine.reused.has(toUpgradeKey(upgrade)))
 				.map((upgrade) => upgrade.dependency),
 		)
-		inspectionReport.baseline.install = await adapter.install()
+		inspectionReport.baseline.install = await adapter.installBaseline()
 
 		// capture installation evidence for baseline comparisons
 		if (engine) {
