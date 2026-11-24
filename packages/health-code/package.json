@@ -30,6 +30,24 @@
 		"@types/yarnpkg__lockfile": "1.1.9"
 	},
 	"version": "0.1.0",
+	"description": "Try dependency upgrades on your code in a Runta sandbox and get tested patches for what breaks",
+	"keywords": [
+		"dependencies",
+		"upgrade",
+		"update",
+		"npm",
+		"pnpm",
+		"yarn",
+		"bun",
+		"sandbox",
+		"runta",
+		"agent",
+		"mcp",
+		"patch",
+		"typescript"
+	],
+	"homepage": "https://runhealthcode.dev",
+	"bugs": "https://github.com/doubleoevan/health-code/issues",
 	"license": "MIT",
 	"files": [
 		"dist",

@@ -7,7 +7,19 @@
 		"health-code": "0.1.0",
 		"zod": "4.6.7"
 	},
-	"description": "Inspect public repositories from a local coding agent using your Runta account.",
+	"description": "Try dependency upgrades from Claude Code or Codex in a Runta sandbox",
+	"keywords": [
+		"mcp",
+		"mcp-server",
+		"claude-code",
+		"codex",
+		"dependencies",
+		"upgrade",
+		"sandbox",
+		"runta"
+	],
+	"homepage": "https://runhealthcode.dev",
+	"bugs": "https://github.com/doubleoevan/health-code/issues",
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json && bun build view/client.tsx --target=browser --format=iife --minify --define process.env.NODE_ENV='\"production\"' --outdir=../../packages/health-code/dist/mcp/view && cp view/style.css ../../packages/health-code/dist/mcp/view/"
 	},

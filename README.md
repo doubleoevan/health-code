@@ -7,10 +7,11 @@
 
 # Health Code
 
-### Test dependency upgrades before you merge them
+### Try dependency upgrades before you merge them
 
 The health inspector runs your checks in a Runta sandbox and tries to repair what breaks.
 
+[![npm](https://img.shields.io/npm/v/health-code?style=flat-square&color=16853c)](https://www.npmjs.com/package/health-code)
 [![GitHub stars](https://img.shields.io/github/stars/doubleoevan/health-code?style=flat-square&color=16853c)](https://github.com/doubleoevan/health-code/stargazers)
 [![GitHub issues](https://img.shields.io/github/issues/doubleoevan/health-code?style=flat-square)](https://github.com/doubleoevan/health-code/issues)
 [![Last commit](https://img.shields.io/github/last-commit/doubleoevan/health-code?style=flat-square)](https://github.com/doubleoevan/health-code/commits)
@@ -27,7 +28,7 @@ The health inspector runs your checks in a Runta sandbox and tries to repair wha
 
 ## What it does
 
-Pick an upgrade. The health inspector tests it on your code, tries to repair what breaks and retests the patch. You get a report and any tested patch.
+Pick an upgrade. The health inspector tries it on your code, attempts to repair what breaks and retests the patch. You get a report with a tested patch when it works.
 
 Your model key stays outside the sandbox.
 
@@ -51,7 +52,7 @@ npx health-code mcp setup
 Paste the printed entry into your client and restart it. Then ask:
 
 ```text
-List upgrades for https://github.com/owner/repository
+Use health-code to list upgrades
 ```
 
 See the [MCP guide](apps/mcp/README.md#setup) for settings.
@@ -59,12 +60,12 @@ See the [MCP guide](apps/mcp/README.md#setup) for settings.
 ## Packages
 
 ```text
-packages/health-code   Inspection library
+packages/health-code   Inspection library on npm
 apps/web               Demo site
 apps/mcp               MCP server and CI command
 ```
 
-Guides: [library](packages/health-code/README.md) · [MCP](apps/mcp/README.md) · [development](DEVELOPMENT.md)
+Guides: [library](packages/health-code/GUIDE.md) · [MCP](apps/mcp/README.md) · [development](DEVELOPMENT.md)
 
 ## Architecture
 

@@ -14,7 +14,7 @@ Run `bun run --cwd packages/health-code build` from the root. The package emits 
 
 The web report calls `buildInvestigationPrompt` to hand incomplete checks to a coding agent with bounded, fenced evidence.
 
-The Node adapter supports npm, pnpm, Yarn, and Bun. Recognized Bun, Vitest, and Jest scripts produce per-test evidence. Other scripts report their exit status. The optional live suite requires `RUNTA_TOKEN` and verifies registry access, installation observation, timeouts, and deletion. See the package README for the public call, event delivery, partial Inspection Reports, and typed errors.
+The Node adapter supports npm, pnpm, Yarn, and Bun. Recognized Bun, Vitest, and Jest scripts produce per-test evidence. Other scripts report their exit status. The optional live suite requires `RUNTA_TOKEN` and verifies registry access, installation observation, timeouts, and deletion. See `GUIDE.md` for the public call, event delivery, partial Inspection Reports, and typed errors.
 
 A hosted consumer passes a stable deployment name to the provider factory and calls the public `reconcileSandboxes` operation before starting workers. The provider paginates runtime inventory, matches its reserved prefix and Inspection UUID, and reclaims abandoned allocations by runtime ID. Ordinary CLI allocations retain their existing names.
 
