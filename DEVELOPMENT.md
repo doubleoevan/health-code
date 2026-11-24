@@ -22,7 +22,7 @@ Use the Bun version in `.bun-version`. From the repository root, run `bun instal
 | `bun run --cwd apps/web dev` or `replay` | Serves live local inspections (`dev`) or a recorded example (`replay`) with hot reload. |
 | `bun run check:package` | Packs the library and verifies its public entry in fresh Node and Bun consumers with frozen workspace dependencies. |
 | `bun run test:provider` | Runs the shared production contract and two pinned public fixtures when the test harness has `RUNTA_TOKEN`. |
-| `doppler run -- bun run eval --case removed-apis` | Scores the historical repair under the default limits. `linked-dependencies` scores a repair that upgrades linked dependencies. `mocked-import-path` scores one that changes a mocked path. `--all` scores every case. |
+| `doppler run -- bun run eval --case removed-apis` | Scores the historical repair under the default limits. `linked-dependencies` scores a repair that upgrades linked dependencies. `matching-versions` scores one that upgrades two packages to the same version. `mocked-import-path` scores one that changes a mocked path. `--all` scores every case. |
 | `doppler run --only-secrets RUNTA_TOKEN -- bun run eval --case baseline-test-counts --record` | Measures test counts and test file errors at the pinned commit and writes the case file for review. |
 | `bun run check:advisories` | Queries the registry and fails on unreviewed high or critical advisories or stale exceptions. CI runs it separately. |
 

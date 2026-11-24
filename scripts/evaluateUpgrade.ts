@@ -18,7 +18,12 @@ const commit = z.string().regex(/^[a-f0-9]{40}$/)
 /**
  * Lists the IDs of the pinned upgrade cases.
  */
-export const upgradeCaseIds = ["removed-apis", "linked-dependencies", "mocked-import-path"] as const
+export const upgradeCaseIds = [
+	"removed-apis",
+	"linked-dependencies",
+	"matching-versions",
+	"mocked-import-path",
+] as const
 export type UpgradeCaseId = (typeof upgradeCaseIds)[number]
 
 export const upgradeCaseSchema = z.object({

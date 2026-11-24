@@ -40,11 +40,11 @@ The TypeScript seed SHALL inspect 5.9.3 to 7.0.2 at Health Code commit 7e6d81920
 
 ### Requirement: Grade linked dependency and mocked path repairs
 
-The linked-dependencies and mocked-import-path cases SHALL inspect commit a20b925b740b8e3ab1f639b53e3adc1e913f39fb and require a confirmed failed Upgrade Check, green tests and the public default budgets. The @vitejs/plugin-react 5.2.0 to 6.3.0 case SHALL require Fixed with unchanged existing tests and an upgraded vite. The @novnc/novnc 1.5.0 to 1.7.0 case SHALL require Fixed with test changes.
+The linked-dependencies, matching-versions and mocked-import-path cases SHALL inspect commit a20b925b740b8e3ab1f639b53e3adc1e913f39fb and require a confirmed failed Upgrade Check, green tests and the public default budgets. The @vitejs/plugin-react 5.2.0 to 6.3.0 case SHALL require Fixed with unchanged existing tests and an upgraded vite. The react 19.2.8 to 19.3.1 case SHALL require Fixed with unchanged existing tests and an upgraded react-dom. The @novnc/novnc 1.5.0 to 1.7.0 case SHALL require Fixed with test changes.
 
 #### Scenario: A linked dependency is missing
 
-- **WHEN** a repair of the linked-dependencies case leaves vite at its installed version
+- **WHEN** a repair of the linked-dependencies case leaves vite at its installed version or a repair of the matching-versions case leaves react-dom at its installed version
 - **THEN** the evaluation fails.
 
 #### Scenario: A repair has an unexpected Verdict

@@ -5,7 +5,7 @@ on:
       case:
         description: Pinned case to score
         type: choice
-        options: [removed-apis, linked-dependencies, mocked-import-path, baseline-test-counts]
+        options: [removed-apis, linked-dependencies, matching-versions, mocked-import-path, baseline-test-counts]
         required: true
 permissions:
   contents: read

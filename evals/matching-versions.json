@@ -1,0 +1,20 @@
+{
+	"version": 1,
+	"id": "matching-versions",
+	"kind": "upgrade",
+	"repositoryUrl": "https://github.com/runta-dev/errand",
+	"commit": "a20b925b740b8e3ab1f639b53e3adc1e913f39fb",
+	"memoryMib": 8192,
+	"upgrade": {
+		"dependency": "react",
+		"from": "19.2.8",
+		"to": "19.3.1"
+	},
+	"expected": {
+		"check": "failed",
+		"confirmed": true,
+		"verdict": "Fixed",
+		"existingTestChanges": false,
+		"linkedDependencies": ["react-dom"]
+	}
+}
