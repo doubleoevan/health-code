@@ -35,7 +35,7 @@ Use Health Code from Claude Code or Codex with your own Runta account. Bring a m
 
 1. Set these variables and run `npx health-code mcp setup` from your home directory.
 2. Paste the printed entry inside `mcpServers` in `.mcp.json` for Claude Code. For Codex paste it at the top level of `~/.codex/config.toml`.
-3. Remove `MODEL_API_KEY` and restart your client with the other variables set.
+3. Remove `MODEL_API_KEY` and restart your client with `RUNTA_TOKEN` set. The entry includes your model settings.
 4. Ask your agent to **list upgrades for this repository**. Choose one and ask it to **test that upgrade and apply its verified patch**.
 
 | Optional | Use |

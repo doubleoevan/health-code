@@ -17,7 +17,9 @@ import {
 	inspectionId,
 	outcomeSchema,
 	reportSchema,
+	type SavedReport,
 } from "./storeInspection.ts"
+import { toEventLine } from "./toEventLine.ts"
 
 const page = z.object({ text: z.string(), nextOffset: z.number().nullable() })
 export const readOutput = z.object({
@@ -25,7 +27,7 @@ export const readOutput = z.object({
 	status: z.string(),
 	currentStep: z.string(),
 	events: z.array(eventSchema),
-	pinned: z.array(z.object({ sequence: z.number(), action: z.unknown() })),
+	pinned: z.array(z.object({ sequence: z.number(), action: z.unknown(), detail: z.unknown().optional() })),
 	nextSequence: z.number(),
 	hasMore: z.boolean(),
 	report: page.nullable(),
@@ -49,6 +51,7 @@ type State = {
 	events: Event[]
 	step: string
 	status: "running" | "failed" | "complete"
+	controller: AbortController
 
 	// Retain terminal evidence when the report cannot be saved.
 	failure?: string
@@ -73,35 +76,6 @@ export function textPage(text: string, offset: number): { text: string; nextOffs
 	return { text: text.slice(offset, end), nextOffset: end < text.length ? end : null }
 }
 
-export function toEventLine(event: Event): string {
-	switch (event.type) {
-		// highlight sandbox activity in the terminal timeline
-		case "sandbox.event":
-			if (event.action === "model-request-sandbox-started" || event.action === "model-relay-started") {
-				// Recorded startup events keep the credential detail supplied by their provider.
-				const detail = typeof event.detail === "string" ? event.detail : "Model request sandbox started"
-				return `◆ ${detail.replace(/^Model relay started/, "Model request sandbox started")}`
-			}
-			return `◆ Runta · ${event.action}`
-		case "step.started":
-			return `Starting · ${event.label}`
-		case "step.finished":
-			return String(event.summary)
-
-		// show detail output with its source stream
-		case "detail":
-			return `${event.stream} · ${event.text}`
-
-		// label inspection lifecycle events separately from individual steps
-		case "inspection.started":
-			return "Inspection started"
-		case "inspection.failed":
-			return `Inspection failed · ${event.message}`
-		case "inspection.finished":
-			return "Inspection finished"
-	}
-}
-
 // truncate long detail text only in event previews
 function toPreview(event: Event): Event {
 	// bound detail previews while preserving the original event
@@ -117,6 +91,7 @@ export class Inspections {
 	currentStep(id: string): string {
 		return this.active.get(id)?.step ?? "Finished"
 	}
+	private upgradeTests = new Map<string, { controller: AbortController; accepted: Promise<string> }>()
 	private jobs = new Map<AbortController, Promise<void>>()
 	constructor(
 		readonly store: InspectionStore,
@@ -130,12 +105,42 @@ export class Inspections {
 		}
 		await Promise.all(this.jobs.values())
 	}
+
+	// read a report that storage could not save from memory
+	async loadReport(id: string): Promise<SavedReport> {
+		const unsaved = this.active.get(id)?.reportText
+		return unsaved ? reportSchema.parse(JSON.parse(unsaved)) : this.store.load(id)
+	}
+
+	// cancel one active inspection and let its sandboxes tear down
+	stop(id: string): void {
+		const state = this.active.get(id)
+		if (state?.status !== "running") {
+			throw new UserError("No active inspection has that ID.")
+		}
+		state.controller.abort()
+	}
 	async start(repositoryUrl: string, choice?: Choice & { signal?: AbortSignal }): Promise<string> {
+		// join a running test of the same upgrade
+		const upgradeKey = choice?.upgrade && JSON.stringify([repositoryUrl.toLowerCase(), choice.revision, choice.upgrade])
+		const running = upgradeKey ? this.upgradeTests.get(upgradeKey) : undefined
+		if (running && !running.controller.signal.aborted) {
+			return running.accepted
+		}
+
 		// prepare separate promises for acceptance and completion
 		const controller = new AbortController()
-		const state: State = { events: [], step: "Starting inspection", status: "running" }
+		const state: State = { events: [], step: "Starting inspection", status: "running", controller }
 		let id: string | undefined
 		const accepted = Promise.withResolvers<string>()
+
+		// share only a test that no single request can cancel
+		const upgradeTest = { controller, accepted: accepted.promise }
+		if (upgradeKey && !choice?.signal) {
+			this.upgradeTests.set(upgradeKey, upgradeTest)
+		}
+
+		// run the inspection in the background
 		const operation = Promise.resolve()
 			.then(() =>
 				this.inspect({
@@ -212,6 +217,11 @@ export class Inspections {
 								: `Inspection failed (${error.code}).`
 							: "Inspection failed."
 
+				// name any sandbox whose deletion is unconfirmed
+				if (error instanceof InspectionError && error.cleanupIds) {
+					state.failure += ` Sandbox deletion unconfirmed: ${error.cleanupIds.join(", ")}.`
+				}
+
 				// screen the failure message before delivery
 				try {
 					this.store.guard(state.failure)
@@ -224,6 +234,11 @@ export class Inspections {
 			// release the cancellation handle when the job settles
 			.finally(() => {
 				this.jobs.delete(controller)
+
+				// let the next request start a new test
+				if (upgradeKey && this.upgradeTests.get(upgradeKey) === upgradeTest) {
+					this.upgradeTests.delete(upgradeKey)
+				}
 			})
 		this.jobs.set(controller, operation)
 		return accepted.promise
@@ -305,7 +320,7 @@ export class Inspections {
 		const events = timeline.filter((event) => event.sequence > input.afterSequence).slice(0, 8)
 		const pinned = timeline
 			.filter((event) => event.type === "sandbox.event")
-			.map((event) => ({ sequence: event.sequence, action: event.action }))
+			.map((event) => ({ sequence: event.sequence, action: event.action, detail: event.detail }))
 
 		// return recorded outcomes alongside the next event cursor
 		const nextSequence = events.at(-1)?.sequence ?? input.afterSequence

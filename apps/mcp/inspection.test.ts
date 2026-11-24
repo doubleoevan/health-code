@@ -4,15 +4,22 @@ import { tmpdir } from "node:os"
 import { join, sep } from "node:path"
 import { test } from "node:test"
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client"
-import { createFakeSandboxProvider, inspectRepository, type SandboxFixture } from "health-code"
+import {
+	createFakeSandboxProvider,
+	InspectionError,
+	inspectRepository,
+	type SandboxFixture,
+	type Upgrade,
+} from "health-code"
 import { parse as parseToml } from "smol-toml"
 import { createServer } from "./createServer.ts"
 import { environment, inspectionFixtureUrl, key, modelSettings, repo } from "./fixtures/inspectionSettings.ts"
+import { requireSettings, toEnvironmentReference } from "./modelSettings.ts"
 import { setupAccount } from "./setupAccount.ts"
 import { InspectionStore, protect } from "./storeInspection.ts"
 import { Inspections } from "./trackInspections.ts"
 
-test("setup registers and rotates a host-bound secret and prints name-only client settings", async () => {
+test("setup registers and rotates a host-bound secret and prints model settings without credentials", async () => {
 	// capture registrations without contacting the account service
 	const stored: string[] = []
 	const fake = {
@@ -37,9 +44,11 @@ test("setup registers and rotates a host-bound secret and prints name-only clien
 		"health-code": {
 			command: entry.command,
 			args: entry.args,
-			env_vars: ["RUNTA_TOKEN", ...Object.keys(modelSettings)],
+			env_vars: ["RUNTA_TOKEN"],
+			env: modelSettings,
 		},
 	})
+	assert.deepEqual(entry.env, { RUNTA_TOKEN: toEnvironmentReference("RUNTA_TOKEN"), ...modelSettings })
 
 	// verify the version-pinned launcher for this platform
 	if (process.platform === "win32") {
@@ -65,7 +74,7 @@ test("setup registers and rotates a host-bound secret and prints name-only clien
 	assert.equal(stored.length, 3)
 
 	// reject missing and unresolved credentials
-	await assert.rejects(setupAccount({}, setup), /Supply RUNTA_TOKEN/)
+	await assert.rejects(setupAccount({}, setup), /RUNTA_TOKEN, HEALTH_CODE_MODEL_HOST and HEALTH_CODE_MODEL/)
 	await assert.rejects(setupAccount({ ...environment, MODEL_API_KEY: `\${MODEL_API_KEY}` }, setup), /MODEL_API_KEY/)
 
 	// withhold credential-bearing messages from both setup failure paths
@@ -108,6 +117,8 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 			get_upgrade_features: "Preview what’s new in this upgrade",
 			get_tested_patch: "Get a tested patch by SHA-256",
 			read_inspection: "Read progress and the inspection report",
+			read_upgrade_results: "Read verdicts and patches",
+			stop_inspection: "Stop an inspection",
 			report_patch_result: "Record a patch result",
 			start_inspection: "Start an inspection",
 			get_upgrade: "Get a selected dependency upgrade",
@@ -121,6 +132,21 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 				),
 			)
 		}
+
+		// attach one app view to the tools that open a screen
+		const viewUri = "ui://health-code/view.html"
+		assert.deepEqual(
+			tools.tools
+				.filter((tool) => tool._meta?.["ui/resourceUri"] === viewUri)
+				.map((tool) => tool.name)
+				.sort(),
+			["get_upgrade", "list_upgrades", "start_inspection"],
+		)
+		const { resources } = await client.listResources()
+		assert.deepEqual(
+			resources.map(({ uri, mimeType }) => [uri, mimeType]),
+			[[viewUri, "text/html;profile=mcp-app"]],
+		)
 
 		// capture progress on the initial request
 		const startProgress: string[] = []
@@ -197,6 +223,16 @@ test("start returns before allocation, progress is request-scoped, and a new rea
 		assert.equal(replay.repository.commit, fixture.commit)
 		assert.equal(replay.timeline.at(-1)?.type, "inspection.finished")
 
+		// return results without the report and refuse to stop a finished inspection
+		const results = await client.callTool({ name: "read_upgrade_results", arguments: { inspectionId: id } })
+		const recorded = results.structuredContent as { upgrades: { dependency: string; verdict?: string }[] }
+		assert.deepEqual(
+			recorded.upgrades.map(({ dependency, verdict }) => [dependency, verdict]),
+			replay.upgrades.map(({ dependency, verdict }) => [dependency, verdict]),
+		)
+		const stop = await client.callTool({ name: "stop_inspection", arguments: { inspectionId: id } })
+		assert.equal(stop.isError, true)
+
 		// reject a digest absent from the recovered report
 		const missing = await client.callTool({
 			name: "get_tested_patch",
@@ -238,6 +274,7 @@ test("storage failure keeps the completed evidence readable without restarting p
 			// require the completed report to remain available in memory
 			if (status === "failed") {
 				assert.match(view.failure ?? "", /memory only/)
+				assert.equal((await inspections.loadReport(id)).inspectionId, id)
 				assert.ok(view.report?.text)
 			}
 		}
@@ -269,4 +306,107 @@ test("typed provider failure and cleanup stay associated with the accepted ID", 
 		await inspections.close()
 		await rm(home, { recursive: true, force: true })
 	}
+})
+
+test("stopping an inspection deletes its sandbox and ends with a terminal status", async () => {
+	// hold the checkout after the sandbox exists
+	const home = await mkdtemp(join(tmpdir(), "mcp-stop-"))
+	const fixture: SandboxFixture = JSON.parse(await readFile(inspectionFixtureUrl, "utf8"))
+	const provider = createFakeSandboxProvider(fixture)
+	const created = Promise.withResolvers<void>()
+	const gate = Promise.withResolvers<void>()
+
+	// announce the sandbox before returning it
+	const createSandbox = provider.createSandbox.bind(provider)
+	provider.createSandbox = async (...input) => {
+		const sandbox = await createSandbox(...input)
+		created.resolve()
+		await gate.promise
+		return sandbox
+	}
+
+	// record each deletion
+	const destroyed: string[] = []
+	const destroySandbox = provider.destroySandbox.bind(provider)
+	provider.destroySandbox = async (...input) => {
+		destroyed.push(input[0].id)
+		return destroySandbox(...input)
+	}
+
+	// run the inspection on the held provider
+	const inspections = new Inspections(new InspectionStore(home), (options) =>
+		inspectRepository({ ...options, sandboxProvider: provider }),
+	)
+	try {
+		// stop the inspection while its sandbox exists
+		const id = await inspections.start(repo)
+		await created.promise
+		inspections.stop(id)
+		gate.resolve()
+
+		// wait for the cancelled inspection to settle
+		const end = Date.now() + 5000
+		let status = "running"
+		while (status === "running" && Date.now() < end) {
+			const view = await inspections.read({ inspectionId: id, afterSequence: 0, waitMs: 50, reportOffset: 0 })
+			status = view.status
+		}
+
+		// refuse to stop an inspection that already ended
+		assert.equal(status, "failed")
+		assert.equal(destroyed.length, 1)
+		assert.throws(() => inspections.stop(id), /No active inspection/)
+	} finally {
+		// release the held sandbox before removing storage
+		gate.resolve()
+		await inspections.close()
+		await rm(home, { recursive: true, force: true })
+	}
+})
+
+test("a repeated request joins the running test of the same upgrade", async () => {
+	// keep every inspection running until it is cancelled
+	const started: string[] = []
+	const cleanupFailure = new InspectionError("cancelled", "Cancelled")
+	cleanupFailure.cleanupIds = ["sandbox-1"]
+	const inspections = new Inspections(new InspectionStore(join(tmpdir(), "mcp-join")), ({ onEvent, signal }) => {
+		// announce a distinct inspection for each start
+		const id = crypto.randomUUID()
+		started.push(id)
+		const timestamp = new Date().toISOString()
+		onEvent({ type: "inspection.started", version: 1, inspectionId: id, sequence: 1, timestamp, repositoryUrl: repo })
+		return new Promise((_, reject) => signal.addEventListener("abort", () => reject(cleanupFailure)))
+	})
+
+	// start another inspection only for a different version or after a stop
+	type Choice = { revision: string; upgrade: Upgrade }
+	const choice = (to: string): Choice => ({
+		revision: "a".repeat(40),
+		upgrade: { dependency: "widget", from: { ".": "1.0.0" }, to, kind: "minor" },
+	})
+	const [first, joined] = await Promise.all([
+		inspections.start(repo, choice("1.1.0")),
+		inspections.start(repo, choice("1.1.0")),
+	])
+	assert.equal(joined, first)
+	assert.notEqual(await inspections.start(repo, choice("1.2.0")), first)
+	inspections.stop(first)
+	assert.notEqual(await inspections.start(repo, choice("1.1.0")), first)
+	assert.equal(started.length, 3)
+
+	// keep a test that one request can cancel separate
+	const request = { ...choice("2.0.0"), signal: new AbortController().signal }
+	assert.notEqual(await inspections.start(repo, request), await inspections.start(repo, choice("2.0.0")))
+
+	// name the sandbox whose deletion is unconfirmed
+	await inspections.close()
+	const view = await inspections.read({ inspectionId: first, afterSequence: 0, waitMs: 0, reportOffset: 0 })
+	assert.match(view.failure ?? "", /deletion unconfirmed: sandbox-1/)
+})
+
+test("one error names every missing setting", () => {
+	requireSettings(environment)
+	const unresolved = { RUNTA_TOKEN: toEnvironmentReference("RUNTA_TOKEN") }
+	assert.throws(() => requireSettings(unresolved), /RUNTA_TOKEN, HEALTH_CODE_MODEL_HOST and HEALTH_CODE_MODEL in/)
+	assert.throws(() => requireSettings({ ...environment, HEALTH_CODE_MODEL: " " }), /^Error: Set HEALTH_CODE_MODEL in/)
 })

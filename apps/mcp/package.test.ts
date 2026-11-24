@@ -18,8 +18,10 @@ const expectedTools = [
 	"get_upgrade_features",
 	"list_upgrades",
 	"read_inspection",
+	"read_upgrade_results",
 	"report_patch_result",
 	"start_inspection",
+	"stop_inspection",
 ]
 const releaseWorkspace = fileURLToPath(new URL("../../packages/health-code", import.meta.url))
 function checkStderr(key: string): (chunk: Buffer | string) => void {
@@ -243,6 +245,13 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 			await scopedClient.connect(transport)
 			assert.equal(scopedClient.getServerVersion()?.version, packed.version)
 			assert.deepEqual((await scopedClient.listTools()).tools.map((tool) => tool.name).sort(), expectedTools)
+
+			// Read the packed app view and confirm it has no network resources.
+			const page = await scopedClient.readResource({ uri: "ui://health-code/view.html" })
+			const [content] = page.contents
+			assert.ok(content && "text" in content)
+			assert.ok(content.text.includes('<div id="root"></div>'))
+			assert.doesNotMatch(content.text, /<(?:link|script)[^>]+(?:src|href)=/)
 		} finally {
 			await scopedClient.close()
 		}

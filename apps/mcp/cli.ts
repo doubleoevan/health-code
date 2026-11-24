@@ -5,7 +5,7 @@ import { InspectionError } from "health-code"
 import { checkRepository, checkUsage } from "./checkRepository.ts"
 import { createServer } from "./createServer.ts"
 import { inspectWithAccount } from "./inspectWithAccount.ts"
-import { accountToken, UserError } from "./modelSettings.ts"
+import { accountToken, requireSettings, UserError } from "./modelSettings.ts"
 import { recoverAccount } from "./personalModelRequestSandboxes.ts"
 import { setupAccount } from "./setupAccount.ts"
 import { InspectionStore } from "./storeInspection.ts"
@@ -42,6 +42,7 @@ async function main(args: string[]): Promise<void> {
 
 	// bind inspection jobs to the stdio session
 	const inspections = new Inspections(new InspectionStore(), async (options) => {
+		requireSettings(process.env)
 		const provider = await recovery
 		if (provider instanceof UserError) {
 			throw provider

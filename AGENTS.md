@@ -28,6 +28,7 @@ The library ships the inspection engine. The site and MCP workspaces consume the
 | Package-manager detection, install, bump, typecheck, tests, or upgrade discovery | `packages/health-code/` | Ecosystem Adapter boundary. |
 | Model-facing instructions, evidence interpolation, or model calls | `packages/health-code/` | prompt-authoring, ai-sdk |
 | Hosted submission, recovery, SSE, live log, timeline, or Inspection Report publication | `apps/web/` | jsx-conventions, vercel-react-best-practices, web-design-guidelines |
+| MCP app view | `apps/mcp/view/` | jsx-conventions, vercel-react-best-practices, web-design-guidelines |
 | MCP tools, arguments, or protocol responses | `apps/mcp/` | Consume the library through its public entry. |
 | Lint, types, dependency policy, import rules, or test discovery | `scripts/` and root tool configs | See scripts/AGENTS.md and DEVELOPMENT.md. |
 | CI or dependency updates | `.github/` | CI and /ship both invoke `bash scripts/preflight.sh`. |

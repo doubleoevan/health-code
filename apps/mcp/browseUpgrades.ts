@@ -9,7 +9,7 @@ import {
 } from "health-code"
 import * as z from "zod"
 import { fetchPatch, patchOutput } from "./fetchPatch.ts"
-import { listPatches } from "./listPatches.ts"
+import { listPatches, patchReference } from "./listPatches.ts"
 import { UserError } from "./modelSettings.ts"
 import { type InspectionStore, inspectionId, type SavedReport } from "./storeInspection.ts"
 
@@ -57,6 +57,7 @@ export const upgradeMenuOutput = z.object({
 			),
 		}),
 	),
+	totalDependencies: z.number().describe("Dependencies that match the search and filters, across every page."),
 	nextOffset: z.number().nullable(),
 	issue: z.string().optional(),
 })
@@ -116,6 +117,7 @@ export class UpgradeMenus {
 					releaseFeatures: toFeaturePage(target.releaseFeatures, 0),
 				})),
 			})),
+			totalDependencies: groups.length,
 			nextOffset: end < groups.length ? end : null,
 			issue,
 		}
@@ -207,7 +209,7 @@ export class UpgradeMenus {
 }
 
 const check = z.object({ status: z.string(), detail: z.string().optional(), reason: z.string().optional() })
-const checks = z.object({
+const checksSchema = z.object({
 	install: check.optional(),
 	typecheck: check.optional(),
 	tests: check.optional(),
@@ -218,7 +220,23 @@ export const selectedOutput = z.object({
 	patch: patchOutput.nullable(),
 	verdict: z.string().optional(),
 	reason: z.string().optional(),
-	checks,
+	checks: checksSchema,
+})
+export const upgradeResultsOutput = z.object({
+	inspectionId,
+	repository: z.object({ url: z.string(), commit: z.string() }),
+	upgrades: z.array(
+		z.object({
+			dependency: z.string(),
+			from: z.record(z.string(), z.string()).optional(),
+			to: z.string().optional(),
+			verdict: z.string().optional(),
+			reason: z.string().optional(),
+			checks: checksSchema,
+			patches: z.array(patchReference),
+		}),
+	),
+	stoppedReason: z.string().optional(),
 })
 
 /**
@@ -228,22 +246,62 @@ export function toSelectedResult(
 	report: SavedReport,
 	choice: { dependency: string; to: string },
 ): z.infer<typeof selectedOutput> {
+	// match the chosen dependency and version
 	const matches = (item: { dependency: string; to?: unknown }): boolean =>
 		item.dependency === choice.dependency && item.to === choice.to
-	const target = report.upgrades.find(matches)
+	const target = report.upgrades.find(matches) ?? { dependency: choice.dependency }
 	const reference = listPatches(report).find((item) => matches(item) && item.role === "upgrade")
 	const patch = reference ? fetchPatch(report, { sha256: reference.sha256, offset: 0 }) : null
-	const recorded = checks.parse(target ?? {})
-	const verdict = z.string().safeParse(target?.verdict).data
+
+	// explain a missing patch only
+	const { verdict, reason, checks } = toOutcome(report, target)
+	return { inspectionId: report.inspectionId, verdict, patch, checks, reason: patch ? undefined : reason }
+}
+
+// describe one upgrade for both result shapes
+function toOutcome(
+	report: SavedReport,
+	upgrade: SavedReport["upgrades"][number],
+): { verdict?: string; reason: string; checks: z.infer<typeof checksSchema> } {
+	// read the recorded checks and verdict
+	const recorded = checksSchema.parse(upgrade)
+	const verdict = z.string().safeParse(upgrade.verdict).data
 
 	// Prefer the recorded stopping reason over a generic missing-patch message.
-	const diagnosis = z.object({ stopReason: z.string() }).safeParse(target?.diagnosis)
+	const diagnosis = z.object({ stopReason: z.string() }).safeParse(upgrade.diagnosis)
 	const reason =
 		diagnosis.data?.stopReason ??
 		recorded.result?.detail ??
 		recorded.result?.reason ??
+		// fall back to why the whole inspection stopped
 		z.string().safeParse(report.stoppedReason).data ??
 		"No verified upgrade patch was produced."
+	return { verdict, reason, checks: recorded }
+}
 
-	return { inspectionId: report.inspectionId, verdict, patch, checks: recorded, reason: patch ? undefined : reason }
+/**
+ * Returns every upgrade's verdict, checks and patch references without mailbox text.
+ */
+export function toUpgradeResults(report: SavedReport): z.infer<typeof upgradeResultsOutput> {
+	const references = listPatches(report)
+	return {
+		inspectionId: report.inspectionId,
+		repository: { url: report.repository.url, commit: report.repository.commit },
+		upgrades: report.upgrades.map((upgrade) => {
+			// match patches to the same dependency and target version
+			const to = z.string().safeParse(upgrade.to).data
+			const patches = references.filter((item) => item.dependency === upgrade.dependency && item.to === to)
+			const { verdict, reason, checks } = toOutcome(report, upgrade)
+			return {
+				dependency: upgrade.dependency,
+				from: z.record(z.string(), z.string()).safeParse(upgrade.from).data,
+				to,
+				verdict,
+				reason: patches.length ? undefined : reason,
+				checks,
+				patches,
+			}
+		}),
+		stoppedReason: z.string().safeParse(report.stoppedReason).data,
+	}
 }

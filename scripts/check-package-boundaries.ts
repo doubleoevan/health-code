@@ -183,7 +183,9 @@ function toDependencyViolation({
 
 	// restrict development dependencies to types and development files
 	if (workspace.development.has(packageName)) {
-		if (typeOnly || /\.(?:test|spec|config)\.[cm]?[jt]sx?$/.test(filePath)) {
+		// the app view ships with its development dependencies bundled
+		const isBundled = contains(resolve("apps/mcp/view"), filePath)
+		if (isBundled || typeOnly || /\.(?:test|spec|config)\.[cm]?[jt]sx?$/.test(filePath)) {
 			return
 		}
 		return "declare runtime imports in dependencies"

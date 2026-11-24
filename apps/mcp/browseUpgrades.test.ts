@@ -118,6 +118,17 @@ test("replay delivers exact Patch pages and durable application results", async 
 			["gadget"],
 		)
 
+		// Count matching dependencies before paging.
+		assert.equal(upgradeMenu.totalDependencies, 1)
+		const pastLastPage = await upgradeMenus.list({
+			upgradeMenuId: inspectionId,
+			order: "minor",
+			search: "",
+			readyOnly: false,
+			offset: 4,
+		})
+		assert.deepEqual([pastLastPage.totalDependencies, pastLastPage.dependencies], [2, []])
+
 		// Reopen the upgrade menu with the same GitHub repository under another capitalization.
 		const upgradeMenuId = randomUUID()
 		await store.save({
@@ -287,7 +298,7 @@ test("the MCP lists choices and starts only the selected target", async () => {
 			{
 				onprogress: (update) => {
 					progress.push(String(update.message))
-					if (String(update.message).includes("Runta · created")) {
+					if (String(update.message).includes("Sandbox created")) {
 						sawLiveCreation = !checkoutReleased
 						created.resolve()
 					}
@@ -298,7 +309,7 @@ test("the MCP lists choices and starts only the selected target", async () => {
 		const { inspectionId: id, patch, reason } = selectedOutput.parse(tested.structuredContent)
 		assert.ok(patch || reason)
 		assert.ok(sawLiveCreation)
-		assert.ok(progress.some((line) => line.includes("Runta · deleted")))
+		assert.ok(progress.some((line) => line.includes("Sandbox deleted")))
 		assert.ok(progress.at(-1)?.endsWith("Inspection finished"))
 
 		// Check the durable report for the selected version and original upgrade menu commit.

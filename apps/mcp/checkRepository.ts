@@ -4,9 +4,10 @@ import { parseArgs } from "node:util"
 import type { ModelRequestSandboxInspectionReport } from "health-code"
 import { z } from "zod"
 import { inspectWithAccount } from "./inspectWithAccount.ts"
-import { accountToken, UserError } from "./modelSettings.ts"
+import { accountToken, requireSettings, UserError } from "./modelSettings.ts"
 import { type PersonalProvider, personalProvider } from "./personalModelRequestSandboxes.ts"
-import { type Inspect, toEventLine } from "./trackInspections.ts"
+import { toEventLine } from "./toEventLine.ts"
+import type { Inspect } from "./trackInspections.ts"
 
 type CheckArguments = {
 	repositoryUrl: string
@@ -39,6 +40,7 @@ export async function checkRepository(
 	},
 ): Promise<{ isComplete: boolean }> {
 	const request = readCheckArguments(args)
+	requireSettings(environment)
 	const provider = sandboxProvider ?? (await personalProvider(accountToken(environment)))
 
 	// print step and sandbox progress without command output

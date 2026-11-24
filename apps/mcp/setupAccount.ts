@@ -1,13 +1,14 @@
 import { Runta } from "@runta/runta-sdk"
-import {
-	createSandboxProvider,
-	modelSettingNames,
-	readModelOrigin,
-	type SandboxModelRoutes,
-	toModelSecretName,
-} from "health-code"
+import { createSandboxProvider, readModelOrigin, type SandboxModelRoutes, toModelSecretName } from "health-code"
 import { configureModels } from "./configureModels.ts"
-import { accountToken, setupKey, toEnvironmentReference, UserError } from "./modelSettings.ts"
+import {
+	accountToken,
+	readModelSettings,
+	requireSettings,
+	setupKey,
+	toEnvironmentReference,
+	UserError,
+} from "./modelSettings.ts"
 import { personalProvider } from "./personalModelRequestSandboxes.ts"
 import { probeModelRequestSandbox, setupTimeoutMs } from "./probeModelRequestSandbox.ts"
 
@@ -35,6 +36,7 @@ export async function setupAccount(
 	environment: NodeJS.ProcessEnv,
 	{ version, client = account }: { version: string; client?: Account },
 ): Promise<string> {
+	requireSettings(environment)
 	const token = accountToken(environment)
 	const key = setupKey(environment)
 	const end = Date.now() + setupTimeoutMs
@@ -67,8 +69,8 @@ export async function setupAccount(
 		throw new UserError("Model Request Sandbox verification failed. Register the origin-bound key during setup.")
 	}
 
-	// Forward environment references so the emitted configuration can be shared.
-	const names = ["RUNTA_TOKEN", ...modelSettingNames.filter((name) => environment[name])]
+	// include the model settings and keep the token as a reference
+	const settings = readModelSettings(environment)
 
 	// Resolve npm packages from the user's home when a client opens a new checkout.
 	const windows = process.platform === "win32"
@@ -78,7 +80,8 @@ export async function setupAccount(
 		: ["-c", 'cd "$HOME" && exec npx "$@"', "npx", "-y", `health-code@${version}`, "mcp"]
 
 	// render shared launcher settings in each client's configuration format
-	const env = Object.fromEntries(names.map((name) => [name, toEnvironmentReference(name)]))
+	const env = { RUNTA_TOKEN: toEnvironmentReference("RUNTA_TOKEN"), ...settings }
+	const codexSettings = Object.entries(settings).map(([name, value]) => `${name} = ${JSON.stringify(value)}`)
 	return [
 		"Model key verified in Runta. You can now remove MODEL_API_KEY from your environment.",
 		"Claude Code · add inside mcpServers in .mcp.json",
@@ -86,8 +89,6 @@ export async function setupAccount(
 		"Codex · add at the top level of ~/.codex/config.toml",
 		`mcp_servers.health-code = { command = ${JSON.stringify(command)}, args = ` +
 			JSON.stringify(args) +
-			", env_vars = " +
-			JSON.stringify(names) +
-			" }",
+			`, env_vars = ["RUNTA_TOKEN"], env = { ${codexSettings.join(", ")} } }`,
 	].join("\n")
 }

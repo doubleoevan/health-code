@@ -15,7 +15,7 @@ Use the Bun version in `.bun-version`. From the repository root, run `bun instal
 | `bun run test` | Runs the tooling and workspace test suites with Bun. |
 | `bun run --cwd packages/health-code build` | Builds the ESM library, declarations and the sandbox guest tools. |
 | `bun run inspect <repo-url> [--fake]` | Prints the live inspection log and saves the versioned Inspection Report to `logs/`. Use `--fake` for a credential-free fixture replay. For a live inspection, use `doppler run -- bun run inspect <repo-url>`. |
-| `bun run --cwd apps/mcp build` | Compiles the Node CLI from `apps/mcp` into `packages/health-code/dist/mcp/`. |
+| `bun run --cwd apps/mcp build` | Compiles the Node CLI and the app view from `apps/mcp` into `packages/health-code/dist/mcp/`. |
 | `bun test ./apps/mcp` | Exercises the MCP tools, account setup, private storage and the packed Node subprocess offline. |
 | `bun run --cwd apps/web build` | Builds the Vite browser entry for the Hono server. |
 | `bun run --cwd apps/web start` | Serves the built page, Inspection API and event stream. |

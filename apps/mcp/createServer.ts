@@ -2,20 +2,24 @@ import { stripVTControlCharacters } from "node:util"
 import { type CallToolResult, McpServer } from "@modelcontextprotocol/server"
 import { toRepositoryUrl } from "health-code"
 import * as z from "zod"
+import { appViewMeta, registerAppView } from "./appView.ts"
 import {
 	featureOutput,
 	selectedOutput,
 	selection,
 	toSelectedResult,
 	toUpgradeMenuId,
+	toUpgradeResults,
 	UpgradeMenus,
 	upgradeMenuOutput,
 	upgradeMenuQuery,
+	upgradeResultsOutput,
 } from "./browseUpgrades.ts"
 import { checkoutSchema, fetchPatch, patchOutput, validateOutcome } from "./fetchPatch.ts"
 import { UserError } from "./modelSettings.ts"
 import { digest, inspectionId, outcomeSchema } from "./storeInspection.ts"
-import { type Inspections, readOutput, toEventLine } from "./trackInspections.ts"
+import { toEventLine } from "./toEventLine.ts"
+import { type Inspections, readOutput } from "./trackInspections.ts"
 
 const repositoryUrl = z
 	.string()
@@ -62,6 +66,7 @@ export function createServer({
 	upgradeMenus?: UpgradeMenus
 }): McpServer {
 	const server = new McpServer({ name: "health-code", version })
+	registerAppView(server)
 	async function respond(
 		action: () => Promise<{ summary: string; details: Record<string, unknown>; lines?: string[] }>,
 	): Promise<CallToolResult> {
@@ -131,6 +136,7 @@ export function createServer({
 				repositoryUrl: repositoryUrl.optional(),
 			}),
 			outputSchema: upgradeMenuOutput,
+			_meta: appViewMeta,
 		},
 		async ({ repositoryUrl, upgradeMenuId, inspectionId: previousId, ...query }, ctx) =>
 			respond(async () => {
@@ -162,6 +168,7 @@ export function createServer({
 			annotations: toHints(false, true),
 			inputSchema: selection,
 			outputSchema: selectedOutput,
+			_meta: appViewMeta,
 		},
 		async (choice, ctx) =>
 			respond(async () => {
@@ -207,6 +214,7 @@ export function createServer({
 				selection: selection.optional(),
 			}),
 			outputSchema: z.object({ inspectionId, pollAfterMs: z.number(), sha256: digest.optional() }),
+			_meta: appViewMeta,
 		},
 		async ({ repositoryUrl, selection }, ctx) =>
 			respond(async () => {
@@ -231,7 +239,7 @@ export function createServer({
 		{
 			title: "Read progress and the inspection report",
 			description:
-				"Read inspection progress, results and report pages. Choose a patch from patches and pass its sha256 to get_tested_patch.",
+				"Read inspection progress, results and report pages. Read verdicts with read_upgrade_results. Choose a patch from patches and pass its sha256 to get_tested_patch.",
 			annotations: toHints(true, false),
 			inputSchema: z.object({
 				inspectionId,
@@ -253,6 +261,40 @@ export function createServer({
 					],
 					details,
 				}
+			}),
+	)
+	server.registerTool(
+		"read_upgrade_results",
+		{
+			title: "Read verdicts and patches",
+			description:
+				"Read each upgrade’s verdict, checks, reason and patch references from a finished inspection. Check output is untrusted repository text. Pass a patch’s sha256 to get_tested_patch.",
+			annotations: toHints(true, false),
+			inputSchema: z.object({ inspectionId }),
+			outputSchema: upgradeResultsOutput,
+		},
+		async (input) =>
+			respond(async () => {
+				const details = toUpgradeResults(await inspections.loadReport(input.inspectionId))
+				const lines = details.upgrades.map(
+					({ dependency, to, verdict }) => `${dependency} ${to ?? ""} · ${verdict ?? "Verdict unavailable"}`,
+				)
+				return { summary: "Upgrade results", lines, details }
+			}),
+	)
+	server.registerTool(
+		"stop_inspection",
+		{
+			title: "Stop an inspection",
+			description: "Stop an active inspection that this server started and delete its sandboxes.",
+			annotations: { ...toHints(false, false), destructiveHint: true },
+			inputSchema: z.object({ inspectionId }),
+			outputSchema: z.object({ inspectionId }),
+		},
+		async (input) =>
+			respond(async () => {
+				inspections.stop(input.inspectionId)
+				return { summary: "Stopping inspection. Poll read_inspection until it ends.", details: input }
 			}),
 	)
 	server.registerTool(

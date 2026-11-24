@@ -9,10 +9,14 @@
 	},
 	"description": "Inspect public repositories from a local coding agent using your Runta account.",
 	"scripts": {
-		"build": "tsc -p tsconfig.build.json"
+		"build": "tsc -p tsconfig.build.json && bun build view/client.tsx --target=browser --format=iife --minify --define process.env.NODE_ENV='\"production\"' --outdir=../../packages/health-code/dist/mcp/view && cp view/style.css ../../packages/health-code/dist/mcp/view/"
 	},
 	"devDependencies": {
 		"@modelcontextprotocol/client": "2.4.0",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
+		"react": "19.3.1",
+		"react-dom": "19.3.1",
 		"smol-toml": "1.9.1"
 	},
 	"version": "0.1.0",
