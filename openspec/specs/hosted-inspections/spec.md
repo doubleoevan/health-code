@@ -78,7 +78,7 @@ The service SHALL persist each Inspection Event before delivering it and replay 
 
 ### Requirement: Stop an Inspection
 
-The live page SHALL let the visitor who started an Inspection stop it after one confirmation while no other submission has joined it. Local sites SHALL let any visitor stop an Inspection. Leaving the page SHALL keep the Inspection running.
+The live page SHALL let the visitor who started an Inspection stop it with one click while no other submission has joined it. The link back to the upgrade menu SHALL appear once the Inspection ends. Local sites SHALL let any visitor stop an Inspection. Leaving the page SHALL keep the Inspection running.
 
 #### Scenario: Stop queued work
 
@@ -88,7 +88,12 @@ The live page SHALL let the visitor who started an Inspection stop it after one 
 #### Scenario: Stop running work
 
 - **WHEN** the starting visitor stops a running Inspection
-- **THEN** the library cancels its work, deletes its sandbox and settles recorded costs. The page keeps the recorded timeline and shows Inspection stopped
+- **THEN** the library cancels its work, deletes its sandbox and settles recorded costs. Its URL keeps the recorded timeline and shows Inspection stopped
+
+#### Scenario: Return to the upgrade menu
+
+- **WHEN** an Inspection chosen from an upgrade menu is stopped
+- **THEN** its open live page returns to that upgrade menu after the stop finishes
 
 #### Scenario: Joined work
 
@@ -159,7 +164,7 @@ The site SHALL enforce the approved challenge, daily visitor allowance, concurre
 #### Scenario: Launch admission defaults
 
 - **WHEN** the site uses its launch settings
-- **THEN** each visitor can start five new Inspections per UTC day, at most two Inspections execute concurrently, and each eligible repository is at most 100 MiB with up to two upgrades
+- **THEN** each visitor can start ten new Inspections per UTC day, at most two Inspections execute concurrently, and each eligible repository is at most 100 MiB with up to two upgrades
 
 #### Scenario: Attempt and Inspection ceilings
 

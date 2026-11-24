@@ -196,7 +196,7 @@ test("launch settings retain the last valid snapshot and pause after three minut
 	try {
 		// Apply a complete replacement during the next refresh.
 		assert.equal(settings.available, false)
-		assert.equal(settings.current.dailyVisitorInspections, 5)
+		assert.equal(settings.current.dailyVisitorInspections, 10)
 		await settings.refresh()
 		assert.equal(settings.current.dailyVisitorInspections, 7)
 		const snapshot = settings.current

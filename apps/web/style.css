@@ -274,6 +274,7 @@ label {
 .field,
 .pager,
 .button-row,
+.repository-row,
 .stop-inspection,
 article header {
 	display: flex;
@@ -283,11 +284,17 @@ article header {
 .field,
 .pager,
 .button-row,
+.repository-row,
 .stop-inspection {
 	gap: var(--inline-gap) var(--block-gap);
 }
-.button-row {
+.pager,
+.button-row,
+.repository-row,
+.stop-inspection {
 	flex-wrap: wrap;
+}
+.button-row {
 	margin-block: var(--inline-gap);
 }
 :where(.field) input {
@@ -574,7 +581,17 @@ td ul {
 	overflow-y: auto;
 	scrollbar-gutter: stable;
 }
-.stop-inspection {
-	flex-wrap: wrap;
-	justify-content: center;
+.repository-row {
+	justify-content: space-between;
+	width: 0;
+	min-width: 100%;
+	margin-block: var(--block-gap);
+}
+.repository-row > p {
+	min-width: 0;
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+.repository-row > p > span {
+	display: inline-block;
 }

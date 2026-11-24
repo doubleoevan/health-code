@@ -49,7 +49,6 @@
 }
 
 .pager {
-	flex-wrap: wrap;
 	margin-block: var(--section-gap) 0;
 }
 .sort-select {

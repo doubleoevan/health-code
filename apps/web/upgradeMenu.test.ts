@@ -46,16 +46,20 @@ test("browse an inspected upgrade menu, choose one release and reopen its licens
 		const result = await (await submit({ ...choice, repositoryUrl: repositoryUrl + ".git/" })).json()
 		const selectedPage = await (await app.request(`/r/${result.id}`)).text()
 		expect(selectedPage).toContain('<h1 class="shimmer">Testing widget upgrade...</h1>')
-		expect(selectedPage).toContain(" · widget 1.2.0 → 1.3.0")
+		expect(selectedPage).toContain(" · <span>widget 1.2.0 → 1.3.0</span>")
 
-		// verify the link back to the upgrade menu and the chosen target
-		expect(selectedPage).toContain(`<a href="/r/${upgradeMenu.id}"><span aria-hidden="true">← `)
+		// hide the link back while the inspection waits and store the chosen target
+		expect(selectedPage).not.toContain("Back to upgrades")
 		expect(store.choice(result.id)?.upgrade).toEqual({ dependency: "widget", to: "1.3.0", from: { ".": "1.2.0" } })
 		expect(store.choice(result.id)?.revision).toBe(menuReport.report.repository.commit)
 
 		// Reopen the verified patch without queuing a second test.
 		const checked = await replay.inspect(repositoryUrl, () => {}, store.choice(result.id))
 		store.finish(result.id, publishReport(checked, "MIT"))
+
+		// show the link back on the finished report
+		const reportPage = await (await app.request(`/r/${result.id}`)).text()
+		expect(reportPage).toContain(`<a href="/r/${upgradeMenu.id}"><span aria-hidden="true">← `)
 
 		// A later report that withholds downloads must preserve the published patch reference.
 		const other = store.enqueue(repositoryUrl, store.choice(result.id))

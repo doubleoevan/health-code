@@ -26,7 +26,7 @@ export function toLaunchLimits(environment: Record<string, string | undefined>):
 
 	// Validate the complete replacement before exposing it to admission.
 	const limits = {
-		dailyVisitorInspections: number("DAILY_DEMO_LIMIT", 5),
+		dailyVisitorInspections: number("DAILY_DEMO_LIMIT", 10),
 		concurrency: number("CONCURRENCY", 2),
 		dailyMicros: Math.floor(number("DAILY_COST_USD", 10) * 1e6),
 		maxSizeKiB: number("MAX_REPO_MIB", 100) * 1024,

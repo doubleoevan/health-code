@@ -252,16 +252,22 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 			setEvents((previous) => (event.sequence > (previous.at(-1)?.sequence ?? 0) ? [...previous, event] : previous))
 		})
 
-		// load the final report when the stream ends
-		stream.addEventListener("terminal", () => {
+		// return to the upgrade menu after a stop, or load the final report
+		stream.addEventListener("terminal", (message) => {
 			stream.close()
-			window.location.reload()
+			if (message.data === "stopped" && snapshot.upgradeMenuId) {
+				window.location.assign(`/r/${snapshot.upgradeMenuId}`)
+			} else {
+				window.location.reload()
+			}
 		})
 		return () => stream.close()
-	}, [live, snapshot.id, snapshot.events])
-	const status =
-		snapshot.message ??
-		(position ? `Queue position: ${position}` : live && !events.length ? "Queued for inspection" : null)
+	}, [live, snapshot.id, snapshot.events, snapshot.upgradeMenuId])
+
+	// show the queue position only while the inspection waits
+	const isWaiting = live && !events.length
+	const queueStatus = position ? `Queue position: ${position}` : "Queued for inspection"
+	const status = snapshot.message ?? (isWaiting ? queueStatus : null)
 	const finished = events.findLast((event) => event.type === "inspection.finished")
 	const isShimmering = live && (snapshot.selectedDependencyUpgrade || snapshot.mode === "listUpgrades")
 	return (
@@ -277,18 +283,26 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 				/>
 			) : (
 				<header className="inspection-heading">
-					{/* link back, inspection title and repository */}
-					<UpgradeMenuLink id={snapshot.upgradeMenuId} repositoryUrl={snapshot.repositoryUrl} />
+					{/* link back after the inspection ends, and inspection title */}
+					{!live && <UpgradeMenuLink id={snapshot.upgradeMenuId} repositoryUrl={snapshot.repositoryUrl} />}
 					<h1 className={isShimmering ? "shimmer" : undefined}>{toInspectionHeading(snapshot, live)}</h1>
-					<p className="mono">
-						<Link href={snapshot.repositoryUrl}>{snapshot.repositoryUrl}</Link>
-						{snapshot.selectedDependencyUpgrade &&
-							` · ${snapshot.selectedDependencyUpgrade.dependency} ${toVersionChange(snapshot.selectedDependencyUpgrade)}`}
-					</p>
 
-					{/* queue status, stop control and troubleshooting prompt */}
+					{/* repository and stop control */}
+					<div className="repository-row">
+						<p className="mono">
+							<Link href={snapshot.repositoryUrl}>{snapshot.repositoryUrl}</Link>
+							{snapshot.selectedDependencyUpgrade && (
+								<>
+									{" · "}
+									<span>{`${snapshot.selectedDependencyUpgrade.dependency} ${toVersionChange(snapshot.selectedDependencyUpgrade)}`}</span>
+								</>
+							)}
+						</p>
+						<StopInspection id={snapshot.id} canStop={snapshot.canStop} />
+					</div>
+
+					{/* queue status and troubleshooting prompt */}
 					{status && <p role="status">{status}</p>}
-					<StopInspection id={snapshot.id} canStop={snapshot.canStop} />
 					{snapshot.investigationPrompt && <TroubleshootingPrompt text={snapshot.investigationPrompt} />}
 				</header>
 			)}

@@ -1,11 +1,11 @@
 import { type ReactElement, useState } from "react"
 
 export function StopInspection({ id, canStop }: { id: string; canStop?: boolean }): ReactElement | null {
-	const [stopStep, setStopStep] = useState<"idle" | "confirming" | "stopping">("idle")
+	const [isStopping, setIsStopping] = useState(false)
 	const [errorMessage, setErrorMessage] = useState("")
 	async function handleStop(): Promise<void> {
 		// show progress until the stream reports the stop
-		setStopStep("stopping")
+		setIsStopping(true)
 		setErrorMessage("")
 		try {
 			const response = await fetch(`/api/inspections/${id}/stop`, { method: "POST" })
@@ -17,33 +17,21 @@ export function StopInspection({ id, canStop }: { id: string; canStop?: boolean 
 			}
 		} catch (failure) {
 			setErrorMessage(failure instanceof Error && failure.message ? failure.message : "Could not stop the inspection.")
-			setStopStep("idle")
+			setIsStopping(false)
 		}
 	}
 	if (!canStop) {
 		return null
 	}
-	if (stopStep === "stopping") {
+	if (isStopping) {
 		return <p role="status">Stopping the inspection and deleting its sandbox…</p>
 	}
 	return (
 		<div className="stop-inspection">
-			{/* stop request and its confirmation */}
-			{stopStep === "idle" ? (
-				<button type="button" className="secondary" onClick={() => setStopStep("confirming")}>
-					Stop inspection
-				</button>
-			) : (
-				<>
-					<span role="status">Stop this inspection? Costs so far still count.</span>
-					<button type="button" className="secondary" onClick={handleStop}>
-						Stop inspection
-					</button>
-					<button type="button" className="secondary" onClick={() => setStopStep("idle")}>
-						Keep running
-					</button>
-				</>
-			)}
+			{/* stop control and refusal message */}
+			<button type="button" className="secondary" onClick={handleStop}>
+				Stop inspection
+			</button>
 			{errorMessage && <p role="alert">{errorMessage}</p>}
 		</div>
 	)
