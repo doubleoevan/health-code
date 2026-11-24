@@ -237,7 +237,7 @@ test("large raw output is fetched only when the licensed detail is opened", asyn
 	store.append(id, { ...detail, text })
 	const path = `/api/inspections/${id}/details/${detail.sequence}`
 	expect((await app.request(path)).status).toBe(404)
-	expect(JSON.stringify(store.publicEvents(id, 0))).toContain("verified after inspection completes...")
+	expect(JSON.stringify(store.publicEvents(id, 0))).toContain("until GitHub confirms an open source license")
 
 	// expose live output while the license found at the start stands
 	store.saveInspectedLicense(id, "MIT")

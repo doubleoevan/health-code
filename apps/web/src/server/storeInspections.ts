@@ -308,7 +308,7 @@ export class InspectionStore {
 		// withhold raw command output from the initial page and event stream
 		const events = this.database.query<{ payload: string }, [string, number, number]>(`
    SELECT CASE WHEN json_extract(payload,'$.type')='detail' THEN json_set(payload,'$.text',CASE WHEN ${licenseColumn} IS NOT NULL THEN ''
-        WHEN state IN ('queued','running') THEN 'Output withheld until an open source license is verified after inspection completes...'
+        WHEN state IN ('queued','running') THEN 'Output is hidden until GitHub confirms an open source license for this repo...'
         ELSE '${withheldReason}' END)
      ELSE payload END AS payload
    FROM events JOIN inspections USING(id) WHERE id=? AND sequence>? ORDER BY sequence LIMIT ?
