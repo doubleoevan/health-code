@@ -38,7 +38,7 @@ Your model key stays outside the sandbox.
 
 **On the web:** paste a public JavaScript or TypeScript repository at [runhealthcode.dev](https://runhealthcode.dev).
 
-**In Claude Code or Codex:** needs [Node.js](https://nodejs.org/) 22.18+ or 24.11+, a [Runta](https://dashboard.runta.com) account and a model key. [Use a checkout](apps/mcp/README.md#unpublished-checkout) until the next npm release.
+**In Claude Code or Codex:** needs [Node.js](https://nodejs.org/) 22.18+ or 24.11+, a [Runta](https://dashboard.runta.com) account and a model key.
 
 ```sh
 export RUNTA_TOKEN=...
