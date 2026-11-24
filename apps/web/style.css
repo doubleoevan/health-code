@@ -562,3 +562,10 @@ td ul {
 	overflow-y: auto;
 	scrollbar-gutter: stable;
 }
+.stop-inspection {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: var(--inline-gap);
+}

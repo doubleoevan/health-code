@@ -92,7 +92,7 @@ export type PublishedReport = {
 	upgrades: UpgradeCard[]
 }
 
-type InspectionState = "queued" | "running" | "interrupted" | "failed" | "complete"
+type InspectionState = "queued" | "running" | "interrupted" | "stopped" | "failed" | "complete"
 
 // combine persisted state with the events and report visible to visitors
 export type Snapshot = {
@@ -106,6 +106,9 @@ export type Snapshot = {
 	position?: number | null
 	state: InspectionState
 	message: string | null
+
+	// whether this visitor can stop the inspection
+	canStop?: boolean
 
 	// the repository's newest upgrade menu
 	upgradeMenuId?: string

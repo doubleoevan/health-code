@@ -53,7 +53,7 @@ export class AdmissionLedger {
 	constructor(private readonly database: Database) {
 		// Index outstanding holds and settled days independently, including on existing volumes.
 		database.exec(
-			"CREATE INDEX IF NOT EXISTS admission_unsettled ON admissions(settled,hold) WHERE settled IS NULL; CREATE INDEX IF NOT EXISTS admission_settlement ON admissions(settledDay,settled);",
+			"CREATE INDEX IF NOT EXISTS admission_unsettled ON admissions(settled,hold) WHERE settled IS NULL; CREATE INDEX IF NOT EXISTS admission_settlement ON admissions(settledDay,settled); CREATE TABLE IF NOT EXISTS joined_inspections(id TEXT PRIMARY KEY);",
 		)
 	}
 	count(kind: string, day: string): void {
@@ -77,7 +77,24 @@ export class AdmissionLedger {
 			return null
 		}
 		this.count("cache", day)
+
+		// record that another submission follows this inspection
+		this.database.query("INSERT OR IGNORE INTO joined_inspections VALUES(?)").run(id)
 		return { id, reused: true }
+	}
+
+	// match the visitor who started an inspection nobody else submitted
+	isOnlySubmitter(id: string, visitor: string): boolean {
+		return (
+			this.database
+				.query("SELECT 1 FROM admissions WHERE id=? AND visitor=? AND id NOT IN (SELECT id FROM joined_inspections)")
+				.get(id, visitor) !== null
+		)
+	}
+
+	// start fresh work for later submissions of the same inspection
+	preventReuse(id: string): void {
+		this.database.query("UPDATE admissions SET cacheKey=NULL WHERE id=?").run(id)
 	}
 
 	handleRejection(input: { key: string; day: string; error: unknown }): { id: string; reused: true } {
@@ -200,7 +217,7 @@ export class AdmissionLedger {
 		// Charge the reserved maximum once inventory confirms all prior allocations are gone.
 		this.database
 			.query(
-				"UPDATE admissions SET settled=hold,settledDay=date('now') WHERE settled IS NULL AND id IN(SELECT id FROM inspections WHERE state IN ('interrupted','failed') AND unixepoch(updated)*1000<=?)",
+				"UPDATE admissions SET settled=hold,settledDay=date('now') WHERE settled IS NULL AND id IN(SELECT id FROM inspections WHERE state IN ('interrupted','stopped','failed') AND unixepoch(updated)*1000<=?)",
 			)
 			.run(before)
 	}

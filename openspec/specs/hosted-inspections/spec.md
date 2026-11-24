@@ -76,6 +76,25 @@ The service SHALL persist each Inspection Event before delivering it and replay 
 - **WHEN** a visitor reloads a completed Inspection or reconnects after its last library event
 - **THEN** the visitor can reach its persisted Inspection Report without starting another Inspection
 
+### Requirement: Stop an Inspection
+
+The live page SHALL let the visitor who started an Inspection stop it after one confirmation while no other submission has joined it. Local sites SHALL let any visitor stop an Inspection. Leaving the page SHALL keep the Inspection running.
+
+#### Scenario: Stop queued work
+
+- **WHEN** the starting visitor stops a queued Inspection
+- **THEN** it leaves the queue, releases its spend reservation and shows Inspection stopped at its existing URL
+
+#### Scenario: Stop running work
+
+- **WHEN** the starting visitor stops a running Inspection
+- **THEN** the library cancels its work, deletes its sandbox and settles recorded costs. The page keeps the recorded timeline and shows Inspection stopped
+
+#### Scenario: Joined work
+
+- **WHEN** another submission has joined the Inspection
+- **THEN** the site offers no stop control and refuses a stop request
+
 ### Requirement: Live progress and sandbox evidence
 
 The live page SHALL update one active step in place with a spinner and elapsed time. It SHALL keep finished steps in a rolling log, put buffered output behind Show details and pin visually distinct Sandbox Events.

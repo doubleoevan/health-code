@@ -14,6 +14,7 @@ import {
 	type Snapshot,
 	toVersionChange,
 } from "./report.ts"
+import { StopInspection } from "./StopInspection.tsx"
 import { Timeline } from "./Timeline.tsx"
 import { UpgradeMenu, type UpgradeMenuView } from "./UpgradeMenu.tsx"
 
@@ -217,6 +218,9 @@ function toInspectionHeading(snapshot: Snapshot, live: boolean): string {
 		}
 		return snapshot.mode === "listUpgrades" ? "Finding upgrades..." : "Inspecting repository..."
 	}
+	if (snapshot.state === "stopped") {
+		return "Inspection stopped"
+	}
 	return snapshot.state === "interrupted" ? "Inspection interrupted" : "Inspection failed"
 }
 
@@ -282,8 +286,9 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 							` · ${snapshot.selectedDependencyUpgrade.dependency} ${toVersionChange(snapshot.selectedDependencyUpgrade)}`}
 					</p>
 
-					{/* queue status and troubleshooting prompt */}
+					{/* queue status, stop control and troubleshooting prompt */}
 					{status && <p role="status">{status}</p>}
+					<StopInspection id={snapshot.id} canStop={snapshot.canStop} />
 					{snapshot.investigationPrompt && <TroubleshootingPrompt text={snapshot.investigationPrompt} />}
 				</header>
 			)}

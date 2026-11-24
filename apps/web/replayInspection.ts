@@ -99,6 +99,9 @@ export function createReplaySource(
 			for (const event of report.timeline) {
 				const time = Date.parse(event.timestamp)
 				await sleep(Math.max(0, time - previous))
+				options.signal?.throwIfAborted()
+
+				// shift the event to the start of this replay
 				event.timestamp = new Date(start + time - first).toISOString()
 				emit(event)
 				previous = time

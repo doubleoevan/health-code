@@ -191,6 +191,23 @@ export class InspectionStore {
 			.run(id)
 	}
 
+	// remove a waiting inspection and release its reservation
+	stopQueued(id: string, message: string): boolean {
+		return this.database.transaction(() => {
+			const { changes } = this.database
+				.query(
+					"UPDATE inspections SET state='stopped',message=?,updated=CURRENT_TIMESTAMP WHERE state='queued' AND id=?",
+				)
+				.run(message, id)
+
+			// free the budget held for the removed inspection
+			if (changes) {
+				this.admission.release(id)
+			}
+			return changes > 0
+		})()
+	}
+
 	// mark jobs left running by a previous process
 	interrupt(): { id: string; repositoryUrl: string; durationMs: number }[] {
 		return this.database
@@ -355,8 +372,14 @@ export class InspectionStore {
 	}
 
 	// record the terminal failure message for reconnecting clients
-	fail(input: { id: string; message: string; dispatched: boolean; failure?: InspectionError }): void {
-		const { id, message, dispatched, failure } = input
+	fail(input: {
+		id: string
+		message: string
+		dispatched: boolean
+		state?: "failed" | "stopped"
+		failure?: InspectionError
+	}): void {
+		const { id, state = "failed", message, dispatched, failure } = input
 
 		// Commit accounting, missing events and the terminal state together for safe retries.
 		this.database.transaction(() => {
@@ -373,8 +396,8 @@ export class InspectionStore {
 
 			// Store only the message intended for public display.
 			this.database
-				.query("UPDATE inspections SET state='failed',message=?,updated=CURRENT_TIMESTAMP WHERE id=?")
-				.run(message, id)
+				.query("UPDATE inspections SET state=?,message=?,updated=CURRENT_TIMESTAMP WHERE id=?")
+				.run(state, message, id)
 		})()
 	}
 

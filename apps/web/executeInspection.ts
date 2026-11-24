@@ -8,11 +8,13 @@ import { logInspection } from "./logInspection.ts"
 import { type InspectionOutput, publishReport } from "./publishReport.ts"
 import { AdmissionError, toUtcDay } from "./recordAdmissions.ts"
 import type { SiteEvent } from "./report.ts"
+import { InspectionStops, stoppedMessage } from "./stopInspections.ts"
 import type { InspectionStore } from "./storeInspections.ts"
 
 // coordinate queued inspections and notify subscribers when their state changes
 export class Inspections {
 	readonly changes = new EventEmitter()
+	readonly stops: InspectionStops
 	private timers: ReturnType<typeof setInterval>[] = []
 
 	// Share pending release requests for the same package versions.
@@ -36,6 +38,7 @@ export class Inspections {
 		if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
 			throw new Error("Invalid inspection concurrency")
 		}
+		this.stops = new InspectionStops(store)
 		this.changes.setMaxListeners(0)
 	}
 
@@ -228,6 +231,13 @@ export class Inspections {
 		}
 	}
 
+	// stop one inspection and wake its subscribers
+	stopInspection(id: string): void {
+		this.stops.stop(id)
+		this.changes.emit(id)
+		this.changes.emit("queue")
+	}
+
 	stop(): void {
 		this.lifecycle++
 		this.ready = false
@@ -327,6 +337,7 @@ export class Inspections {
 		const lifecycle = this.lifecycle
 		let libraryId: string | undefined
 		let dispatched = false
+		const stopSignal = this.stops.register(row.id)
 		const emit = (event: SiteEvent): void => {
 			// Register the library identity as soon as its first event arrives.
 			if (event.type === "inspection.started") {
@@ -351,6 +362,9 @@ export class Inspections {
 			// Show live output when GitHub confirms the license at the inspected commit.
 			const inspectedLicense = await this.recordInspectedLicense(row, revision)
 
+			// honor a stop requested before the sandbox starts
+			stopSignal.throwIfAborted()
+
 			// Recheck a claimed job if admission changed while GitHub verified its repository.
 			if (!this.canStartVerified(lifecycle, settings)) {
 				// Keep the reservation while the job waits for current settings.
@@ -360,7 +374,7 @@ export class Inspections {
 				return
 			}
 			dispatched = true
-			const signal = AbortSignal.timeout(this.source.maxDurationMs ?? 1800000)
+			const deadlineSignal = AbortSignal.timeout(this.source.maxDurationMs ?? 1800000)
 
 			// Verify checkout identity before publishing a cached report.
 			let output: InspectionOutput
@@ -369,7 +383,7 @@ export class Inspections {
 					...choice,
 					revision,
 					settings: limits,
-					signal,
+					signal: AbortSignal.any([deadlineSignal, stopSignal]),
 					reuseUpgrade: this.store.upgrades.reader(row.id),
 				})
 			} finally {
@@ -404,6 +418,8 @@ export class Inspections {
 		} catch (error) {
 			await this.recordFailure({ row, error, started, dispatched, lifecycle })
 		} finally {
+			// forget the stop request before waking subscribers
+			this.stops.unregister(row.id)
 			this.changes.emit(row.id)
 		}
 	}
@@ -415,13 +431,12 @@ export class Inspections {
 		dispatched: boolean
 		lifecycle: number
 	}): Promise<void> {
-		// Keep internal diagnostics out of the public failure message.
 		const { row, error, started, dispatched, lifecycle } = input
+
+		// name the outcome before any write can release this slot
 		const failure = error instanceof InspectionError ? error : undefined
-		const message =
-			error instanceof SiteError
-				? error.message
-				: "The inspection could not finish. Review the recorded steps and start a new inspection."
+		const state = this.stops.isStopping(row.id) ? "stopped" : "failed"
+		const message = toFailureMessage(error, state)
 
 		// Invalidate inventory before any fallible writes can release this slot.
 		if (failure && (failure.cleanupId || failure.runtimeUsage?.runtimes.some((item) => !item.deleted))) {
@@ -432,13 +447,13 @@ export class Inspections {
 		let delay = 1000
 		while (lifecycle === this.lifecycle) {
 			try {
-				this.store.fail({ id: row.id, dispatched, failure, message })
+				this.store.fail({ id: row.id, state, dispatched, failure, message })
 
 				// Emit the terminal log after the transaction commits.
 				if (this.launch) {
 					logInspection({
 						row,
-						state: "failed",
+						state,
 						durationMs: Date.now() - started,
 						usage: failure?.runtimeUsage,
 					})
@@ -452,4 +467,14 @@ export class Inspections {
 			}
 		}
 	}
+}
+
+// keep internal diagnostics out of the public message
+function toFailureMessage(error: unknown, state: "failed" | "stopped"): string {
+	if (state === "stopped") {
+		return stoppedMessage
+	}
+	return error instanceof SiteError
+		? error.message
+		: "The inspection could not finish. Review the recorded steps and start a new inspection."
 }

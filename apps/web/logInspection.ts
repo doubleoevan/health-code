@@ -2,7 +2,7 @@ import type { InspectionError } from "health-code"
 
 export function logInspection(input: {
 	row: { id: string; repositoryUrl: string }
-	state: "failed" | "complete" | "interrupted"
+	state: "failed" | "stopped" | "complete" | "interrupted"
 	durationMs: number
 	upgrades?: { verdict?: string }[]
 	usage?: InspectionError["runtimeUsage"]

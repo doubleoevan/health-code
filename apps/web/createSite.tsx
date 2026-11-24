@@ -221,6 +221,19 @@ export function createSite(options: {
 			return undefined
 		}
 	}
+
+	// let anyone stop a local inspection and only its submitter stop a hosted one
+	function canVisitorStop(context: Context, id: string): boolean {
+		if (!launch) {
+			return inspections.stops.canStop(id)
+		}
+		try {
+			const { identity } = identifyVisitor(context.req.raw, launch.visitorKey, replay)
+			return inspections.stops.canStop(id, identity.visitor)
+		} catch {
+			return false
+		}
+	}
 	app.get("/health/live", (context) => context.json({ live: true }))
 	app.get("/health/ready", (context) => {
 		try {
@@ -337,10 +350,34 @@ export function createSite(options: {
 				: undefined
 		const url = `${options.origin}/r/${id}`
 		snapshot.investigationPrompt = buildReportInvestigationPrompt(snapshot, url)
+		snapshot.canStop = canVisitorStop(context, id)
 		const demoCallsLeft = readDemoCallsLeft(context)
 		return context.html(
 			render({ snapshot: upgradeMenu ? null : snapshot, upgradeMenu, siteMode, demoCallsLeft, url }, assets),
 		)
+	})
+
+	// stop an inspection from its own page
+	app.post("/api/inspections/:id/stop", (context) => {
+		const id = context.req.param("id")
+		if (context.req.header("origin") !== options.origin) {
+			return context.json({ message: "Stop this inspection on the Health Code site." }, 403)
+		}
+		if (!inspections.store.state(id)) {
+			return context.notFound()
+		}
+
+		// refuse finished and shared inspections
+		if (!canVisitorStop(context, id)) {
+			return context.json(
+				{ message: "This inspection can’t be stopped. It may have finished or someone else may have joined it." },
+				409,
+			)
+		}
+
+		// accept the request while the sandbox is deleted
+		inspections.stopInspection(id)
+		return context.body(null, 202)
 	})
 
 	// Load version-specific upstream features for each visible target on the dependency page.
