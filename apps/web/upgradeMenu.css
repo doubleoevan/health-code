@@ -29,6 +29,24 @@
 .upgrade-menu-filters select[name="order"] {
 	padding-inline-end: 2rem;
 }
+.dependency-heading {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	align-items: baseline;
+	gap: var(--block-gap) var(--inline-gap);
+}
+.dependency-heading > * {
+	margin: 0;
+}
+.dependency-heading span {
+	font:
+		700 1.3rem / 1.08 "Space Grotesk",
+		system-ui,
+		sans-serif;
+}
+.dependency-heading p {
+	grid-column: 2;
+}
 
 .pager {
 	flex-wrap: wrap;

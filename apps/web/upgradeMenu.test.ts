@@ -94,12 +94,12 @@ test("dependency pages sort and filter the whole upgrade menu before loading vis
 		const page = async (query: string): Promise<string> => (await app.request(`/r/${id}?${query}`)).text()
 		const first = await page("order=alphabetical")
 		expect(first).toContain("Dependencies 1–5 of 6")
-		expect(first).toContain("<h2>alpha</h2>")
+		expect(first).toContain("<span>1.</span><h2>alpha</h2>")
 		expect(first).not.toContain("foxtrot")
 
 		// Out-of-range pages stay within the filtered result set.
 		const last = await page("order=alphabetical&page=2")
-		expect(last).toContain("<h2>foxtrot</h2>")
+		expect(last).toContain("<span>6.</span><h2>foxtrot</h2>")
 		expect(last).toContain("Dependencies 6–6 of 6")
 		expect(last).not.toContain("<h2>alpha</h2>")
 

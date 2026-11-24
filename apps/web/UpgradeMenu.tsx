@@ -52,16 +52,15 @@ export function UpgradeMenu({
 						</select>
 					</span>
 				</label>
+				<button type="submit" className="secondary">
+					Search
+				</button>
 				{hasTestedPatch && (
 					<label>
 						<input type="checkbox" name="ready" defaultChecked={readyOnly} onChange={handleFilterChange} /> Tested patch
 						available
 					</label>
 				)}
-
-				<button type="submit" className="secondary">
-					Search
-				</button>
 			</form>
 			{issue && (
 				<p className="upgrade-menu-warning" role="status">
@@ -70,10 +69,11 @@ export function UpgradeMenu({
 			)}
 
 			{/* one choice per dependency with each available target version */}
-			{dependenciesOnPage.map((group) => (
+			{dependenciesOnPage.map((group, index) => (
 				<DependencyVersions
 					key={group.dependency}
 					group={group}
+					dependencyNumber={view.firstDependencyNumber + index}
 					upgradeMenuId={upgradeMenuId}
 					pending={pending}
 					onSelect={onSelect}
@@ -112,21 +112,29 @@ export function UpgradeMenu({
 
 function DependencyVersions({
 	group,
+	dependencyNumber,
 	upgradeMenuId,
 	pending,
 	onSelect,
 }: {
 	group: DependencyChoice
+	dependencyNumber: number
 	upgradeMenuId: string
 	pending: boolean
 	onSelect: (target: UpgradeMenuTarget) => void
 }): ReactElement {
 	return (
 		<article>
-			<h2>{group.dependency}</h2>
-			<p>
-				{group.workspaces} {group.workspaces === 1 ? "workspace" : "workspaces"}
-			</p>
+			{/* dependency number, name and workspace count */}
+			<div className="dependency-heading">
+				<span>{`${dependencyNumber}.`}</span>
+				<h2>{group.dependency}</h2>
+				<p>
+					{group.workspaces} {group.workspaces === 1 ? "workspace" : "workspaces"}
+				</p>
+			</div>
+
+			{/* available target versions */}
 			<ul>
 				{group.targets.map((target) => (
 					<li key={target.to}>

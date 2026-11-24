@@ -145,7 +145,8 @@ main {
 	filter: url("/assets/logo-filter.svg#dark-logo");
 }
 .wordmark-accent,
-.steps li::marker {
+:is(.steps, .timeline) li::marker,
+.dependency-heading span {
 	color: var(--brand-green);
 }
 @media (prefers-color-scheme: light) {
@@ -443,6 +444,13 @@ aside ul {
 article {
 	padding: clamp(1rem, 3vw, 2rem);
 	margin-bottom: var(--block-gap);
+}
+article > :first-child {
+	margin-block-start: 0;
+}
+article > :last-child,
+article > ul:last-child > li:last-child :last-child {
+	margin-block-end: 0;
 }
 article header {
 	justify-content: space-between;
