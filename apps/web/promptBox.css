@@ -20,33 +20,93 @@
 	inset-inline-end: 0.6rem;
 }
 .patch-preview {
-	margin-bottom: var(--inline-gap);
+	width: min(69rem, calc(100vw - 2rem));
+	max-width: none;
+	max-height: none;
+	overflow: hidden;
+	padding: 0;
+	background: var(--paper);
+	color: var(--ink);
+	border: 1px solid var(--rule);
+	border-radius: 0.5rem;
+}
+.patch-preview::backdrop {
+	background: rgb(0 0 0 / 60%);
+}
+.patch-preview-content {
+	display: flex;
+	flex-direction: column;
+	max-height: calc(100dvh - 2rem);
+	padding: clamp(1rem, 3vw, 1.5rem);
+}
+.patch-preview header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--inline-gap);
+	margin-bottom: var(--block-gap);
+}
+.patch-preview h2 {
+	flex: 1 1 12rem;
+	margin: 0;
+}
+.patch-preview .button-link a {
+	padding: 0.5rem 0.85rem;
+	background: var(--brand-green);
+	color: #fff;
+}
+.patch-preview .close {
+	width: 2.75rem;
+	height: 2.75rem;
+	padding: 0;
+	background: transparent;
+	color: var(--ink);
+	font-size: 1.5rem;
+	line-height: 1;
+}
+.patch-preview .prompt-box {
+	display: flex;
+	min-height: 0;
 }
 .patch-preview pre {
-	max-height: 28rem;
+	flex: 1;
+	max-height: none;
 	padding: 1rem;
 }
+.patch-preview :is(.added, .removed) {
+	display: block;
+}
 .patch-preview .added {
-	color: light-dark(#116329, #7ee2a0);
+	background: light-dark(#e6f6ea, #16351f);
 }
 .patch-preview .removed {
+	background: light-dark(#fdebec, #431d20);
+}
+.patch-preview .added .change-marker {
+	color: light-dark(#116329, #7ee2a0);
+}
+.patch-preview .removed .change-marker {
 	color: light-dark(#a40e26, #ff9c96);
 }
 .patch-preview .heading {
 	color: light-dark(#0a5c8a, #8cc8f0);
 }
-.patch-preview .folded {
+.patch-preview .folded,
+.patch-preview .comment {
 	color: var(--muted);
 	font-style: italic;
 }
+.patch-preview :is(.keyword, .operator) {
+	color: light-dark(#8250df, #c9a5ff);
+}
+.patch-preview :is(.function, .class-name) {
+	color: light-dark(#0a5c8a, #8cc8f0);
+}
 @media (hover: none) {
-	.patch-preview .prompt-box {
-		padding-top: 1rem;
-	}
-	.prompt-box {
+	.prompt .prompt-box {
 		padding-top: 3.5rem;
 	}
-	.prompt-box pre {
+	.prompt .prompt-box pre {
 		padding: 0 1rem 1rem;
 	}
 }

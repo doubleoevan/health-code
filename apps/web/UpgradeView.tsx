@@ -173,9 +173,8 @@ function PatchDetails({
 					</>
 				)}
 			</dl>
-
 			{/* verified patch text and download */}
-			<PatchPreview digest={patch.digest} />
+			<PatchPreview digest={patch.digest} title={`${upgrade.dependency} ${patch.role} patch`} />{" "}
 			<Link href={toPatchPath(patch.digest)}>Download patch</Link>
 		</section>
 	)

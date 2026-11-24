@@ -1,12 +1,9 @@
-import { Highlight } from "prism-react-renderer"
 import { Fragment, memo, type ReactElement, useState } from "react"
+import { HighlightedLine } from "./HighlightedLine.tsx"
 import { Link } from "./ReportControls.tsx"
 
 // Destinations keyed by the exact prompt text they link.
 export type PromptLinks = Record<string, string>
-
-// Leave token colors to the stylesheet so they follow the page theme.
-const theme = { plain: {}, styles: [] }
 
 export function TroubleshootingPrompt({ text }: { text: string }): ReactElement {
 	return <PromptBox title="Troubleshooting prompt for your coding agent" text={text} />
@@ -86,23 +83,6 @@ function LinkedLine({ line, links }: { line: string; links: PromptLinks }): Reac
 				</Fragment>
 			))}
 		</>
-	)
-}
-
-function HighlightedLine({ line, language }: { line: string; language: string }): ReactElement {
-	return (
-		<Highlight code={line} language={language} theme={theme}>
-			{({ tokens, getTokenProps }) => (
-				<>
-					{tokens.flat().map((token, index) => (
-						// biome-ignore lint/suspicious/noArrayIndexKey: Prompt text keeps its order.
-						<span key={`${index}:${token.content}`} className={getTokenProps({ token }).className}>
-							{token.empty ? "" : token.content}
-						</span>
-					))}
-				</>
-			)}
-		</Highlight>
 	)
 }
 
