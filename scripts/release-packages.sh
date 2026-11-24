@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Keep the npm token away from the build and test commands.
+npm_token="${NPM_TOKEN:-}"
+unset NPM_TOKEN
+
 # Match both manifests and the launcher's dependency to the same public release.
 version=$(node -p 'require("./packages/health-code/package.json").version')
 test "$version" = "$(node -p 'require("./apps/mcp/package.json").version')"
@@ -44,7 +48,10 @@ if [[ "${1:-}" == "--stage" ]]; then
 else
   test "${1:-}" = "--verify-public"
 fi
-test -z "${NODE_AUTH_TOKEN:-}${NPM_TOKEN:-}"
+test -z "${NODE_AUTH_TOKEN:-}"
+
+# Accept a token only to stage.
+[[ "$1" == "--stage" || -z "$npm_token" ]]
 registry=https://registry.npmjs.org
 
 pending=()
@@ -90,7 +97,13 @@ for name in health-code mcp; do
     and any(.resolvedDependencies[]; .digest.gitCommit==$sha)' "$artifacts/build.json" >/dev/null
 done
 
+# npm rejects this repository's trusted publishing sign-in (npm/cli#9969).
+if [[ -n "$npm_token" ]]; then
+  printf '%s\n' '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' > "$artifacts/npmrc"
+  export npm_config_userconfig="$artifacts/npmrc"
+fi
+
 # Stop after staging. The maintainer approves each version on npmjs.com.
 for archive in "${pending[@]}"; do
-  npm stage publish --registry="$registry" --provenance --access public "$artifacts/$archive"
+  NPM_TOKEN="$npm_token" npm stage publish --registry="$registry" --provenance --access public "$artifacts/$archive"
 done

@@ -37,6 +37,8 @@ jobs:
           package-manager-cache: false
       - run: npm install --global --ignore-scripts npm@11.20.0
       - run: bash scripts/release-packages.sh --stage
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   verify-public:
     if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v')
