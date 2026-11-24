@@ -141,8 +141,8 @@ main {
 	gap: var(--inline-gap);
 	font-family: "JetBrains Mono", monospace;
 }
-.mark {
-	filter: url("/assets/logo-filter.svg#dark-logo");
+.logo-cross {
+	fill: var(--brand-green);
 }
 .wordmark-accent,
 :is(.steps, .timeline) li::marker,
@@ -152,9 +152,6 @@ main {
 @media (prefers-color-scheme: light) {
 	.mast a {
 		color: #000;
-	}
-	.mark {
-		filter: url("/assets/logo-filter.svg#light-logo");
 	}
 }
 

@@ -353,7 +353,13 @@ export function Page(props: PageProps): ReactElement {
 			{/* home link, inspection mode, project links and report link */}
 			<div className="mast">
 				<Link href="/">
-					<img className="mark" src="/assets/healthcode.png" width="40" height="40" alt="" />
+					<svg width="40" height="40" viewBox="0 0 96 96" aria-hidden="true">
+						<path fill="none" stroke="currentColor" strokeWidth="5.3" d="m28 31-17 17 17 17m40-34 17 17-17 17" />
+						<path
+							className="logo-cross"
+							d="M43 29h10q1 0 1 1v12h12q1 0 1 1v10q0 1-1 1H54v12q0 1-1 1H43q-1 0-1-1V54H30q-1 0-1-1V43q0-1 1-1h12V30q0-1 1-1Z"
+						/>
+					</svg>
 					<span>
 						<span className="wordmark-accent">Health</span>Code
 					</span>
