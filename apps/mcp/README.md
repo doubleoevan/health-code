@@ -10,9 +10,36 @@ Follow the printed client instructions. Claude and other clients with MCP Apps s
 
 To start the stdio server directly, run `npx @health-code/mcp`. Each release runs the executable from the matching version of the `health-code` package.
 
-See the [account setup guide](https://github.com/doubleoevan/health-code#mcp-setup) for credentials and client configuration.
+## Setup
 
-MIT licensed.
+You need Node 22.18 or later on the 22.x line. Node 24.11 or later also works.
+
+| Required | Value |
+| --- | --- |
+| `RUNTA_TOKEN` | Token from your [Runta account](https://dashboard.runta.com). It needs access to runtimes and secrets and the model-provider list. |
+| `MODEL_API_KEY` | Model provider key. Only setup needs it. Setup stores it in Runta. |
+| `HEALTH_CODE_MODEL_HOST` | Model provider address such as `https://api.anthropic.com`. |
+| `HEALTH_CODE_MODEL` | Model ID such as `claude-opus-5-5`. |
+
+1. Set these variables and run `npx health-code mcp setup` from your home directory.
+2. Paste the printed entry inside `mcpServers` in `.mcp.json` for Claude Code. For Codex paste it at the top level of `~/.codex/config.toml`.
+3. Remove `MODEL_API_KEY` and restart your client with `RUNTA_TOKEN` set. The entry includes your model settings.
+4. Ask your agent to **list upgrades for this repository**. Choose one and ask it to **test that upgrade and apply its verified patch**.
+
+| Optional | Use |
+| --- | --- |
+| `HEALTH_CODE_SUMMARY_MODEL` | Model that summarizes release notes. Defaults to `HEALTH_CODE_MODEL`. |
+| `HEALTH_CODE_MATCH_MODEL` | Model that matches new features to your code. Defaults to `HEALTH_CODE_MODEL`. |
+| `HEALTH_CODE_REPAIR_MODEL` | Model that repairs checks an upgrade breaks. Defaults to `HEALTH_CODE_MODEL`. |
+| `HEALTH_CODE_ADOPTION_MODEL` | Model that applies a new feature to your code. Defaults to `HEALTH_CODE_MODEL`. |
+| `HEALTH_CODE_MODEL_PROTOCOL` | `anthropic` or `openai-compatible`. Defaults to `anthropic` for `https://api.anthropic.com` and `openai-compatible` for other hosts. Set `anthropic` for a proxy that uses the Anthropic API. |
+| `HEALTH_CODE_INPUT_USD_PER_MILLION` | Highest price per million input tokens. Defaults to `10`. |
+| `HEALTH_CODE_OUTPUT_USD_PER_MILLION` | Highest price per million output tokens. Defaults to `50`. |
+| `GITHUB_TOKEN` | Release notes for public repositories. Add it to the client entry. |
+
+The prices apply to every model you set and drive the spend limits. Set them when your model costs more than the defaults or to use more of each limit with a cheaper model. Run setup again after changing the host or protocol.
+
+## Tools
 
 Call `list_upgrades({ repositoryUrl })` to see eligible versions and their documented features. Choose one and call `get_upgrade({ upgradeMenuId, dependency, to })` to get its verified patch or the check results explaining why none was produced. Starting discovery or testing a selected upgrade sends ordered events to clients that display MCP progress. A saved upgrade menu reuses the discovered versions and fetches release notes for the visible page. A saved patch opens from local storage. Use the inspection ID with `read_inspection` to replay the log. To browse another page or sort the same upgrade menu, pass its `upgradeMenuId` to `list_upgrades` with `offset`, `order` (minor, alphabetical or workspaces), `search` or `readyOnly`.
 
@@ -51,3 +78,5 @@ Your pipeline can apply a patch with `git am` and open a pull request with its o
 ## Unpublished checkout
 
 To use an unpublished checkout, build the library with `bun run --cwd packages/health-code build`, then run `bun run --cwd apps/mcp build`. Use `node packages/health-code/dist/mcp/cli.js mcp setup` in your secret environment. In the printed client entry, use `node` as the command and pass the absolute path to that file followed by `mcp` as the arguments.
+
+MIT licensed.

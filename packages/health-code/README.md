@@ -22,7 +22,7 @@ Registry lookup has its own three-minute timeout. Set `limits.timeouts.registry`
 
 The sandbox timeline counts distinct stored model credentials across roles. After project detection, the Runta provider also reports how many distinct repository environment variables it supplied as placeholders. Both counts omit names and values. Older reports can lack either measurement.
 
-For the local MCP server, run `npx health-code mcp setup`. See the [project README](https://github.com/doubleoevan/health-code#mcp-setup) for account setup and supported Node releases.
+For the local MCP server, run `npx health-code mcp setup`. See the [MCP guide](https://github.com/doubleoevan/health-code/blob/main/apps/mcp/README.md#setup) for account setup and supported Node releases.
 
 Pass complete versioned Markdown templates in the optional `prompts` map. Each Inspection Report lists the name, version and SHA-256 of the prompts used. Its `promptVersions.model` list identifies distinct dispatched templates. Its `promptVersions.handoff` list identifies distinct templates used to prepare Patch instructions. Pass an OpenTelemetry `Tracer` in `telemetry` to record call timing, status and usage. Tracing is off by default.
 

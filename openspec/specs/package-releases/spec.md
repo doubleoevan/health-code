@@ -26,7 +26,7 @@ A version tag SHALL stage matching versions of health-code and @health-code/mcp 
 
 ### Requirement: Give reviewers a runnable introduction
 
-The root README SHALL describe the product in two lines, name the hosted URL, show site and MCP quick starts, offline replay, architecture, Runta controls, real and mocked behavior, tests and license.
+The root README SHALL describe the product in a few lines, name the hosted URL and show site and MCP quick starts, packages, architecture and license. The guides it links SHALL cover every MCP setting, offline replay, Runta controls and tests.
 
 #### Scenario: Reviewer without credentials
 

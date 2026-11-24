@@ -30,9 +30,20 @@ Every module keeps its own AGENTS.md current with the README. For an approved ch
 
 Preflight needs no credentials. Doppler project `health-code`, config `dev`, holds application secrets. See [AGENTS.md](AGENTS.md) for module ownership, test rules, and the shipping workflow.
 
+## Run the site locally
+
+Build the library and play the mocked recording without credentials:
+
+```sh
+bun run --cwd packages/health-code build
+bun run --cwd apps/web replay
+```
+
+Open `http://localhost:3000`. Run `bun run --cwd apps/web dev` for live inspections. It uses the required settings from MCP setup. Run setup once so Runta holds your key and leave `MODEL_API_KEY` set for the site. The [site guide](apps/web/AGENTS.md) covers hosting.
+
 ## Model inspections
 
-Run `bun run test:credential` with the sandbox token and the model settings from the README to verify the live gateway. Run `bun run eval --case removed-apis` to score a pinned repair against the default budgets. The `baseline-test-counts` case supports `--record` for a new measurement. Scoring requires reviewed counts and test file errors.
+Run `bun run test:credential` with the sandbox token and the model settings from the [MCP guide](apps/mcp/README.md#setup) to verify the live gateway. Run `bun run eval --case removed-apis` to score a pinned repair against the default budgets. The `baseline-test-counts` case supports `--record` for a new measurement. Scoring requires reviewed counts and test file errors.
 
 ## Release and hosted verification
 
