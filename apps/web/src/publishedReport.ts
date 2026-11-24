@@ -206,7 +206,7 @@ function toMissingPatchReason({ upgrades, license, baseline, stoppedReason }: Pu
 	// Distinguish a withheld patch from an upgrade without one.
 	const successes: (Verdict | undefined)[] = ["Passes as is", "Fixed", "Fixed with test changes"]
 	if (!license && verdicts.some((verdict) => successes.includes(verdict))) {
-		return "The upgrade was tested, but its patch can’t be published without a confirmed open-source license."
+		return "A tested patch works but can’t be shown here because GitHub found no confirmed open-source license. Use the MCP to get a patch."
 	}
 
 	// Explain the check that kept the upgrades from a tested patch.

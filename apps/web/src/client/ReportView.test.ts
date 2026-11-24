@@ -192,6 +192,12 @@ test("the summary names the outcome and whether a patch is available", async () 
 	const incomplete = { ...card, upgrades: [{ ...tested, verdict: "Untested" as const }] }
 	expect(toSummary(incomplete)).toBe("No patch. The health inspector couldn’t finish testing this upgrade.")
 
+	// Point to the MCP when a working patch is withheld for its license.
+	const withheld = { ...card, license: null, upgrades: [{ ...tested, verdict: "Fixed" as const }] }
+	expect(toSummary(withheld)).toBe(
+		"A tested patch works but can’t be shown here because GitHub found no confirmed open-source license. Use the MCP to get a patch.",
+	)
+
 	// Count the upgrades without a patch beside a ready one.
 	const mixed = { ...card, upgrades: [{ ...upgrade, observation, patches: upgrade.patches.slice(0, 1) }, skipped] }
 	expect(toSummary(mixed)).toBe("Your tested patch is ready. No patch for 1 of 2 upgrades.")
@@ -355,7 +361,7 @@ test("a partial report shows the interrupted step, skipped upgrades and reused e
 	expect(html).toContain("Where this fits in your code")
 
 	// Show unfinished work alongside the link to the previous inspection.
-	expect(html).toContain("its patch can’t be published")
+	expect(html).toContain("can’t be shown here because GitHub found no confirmed open-source license")
 	expect(html).toContain("Skipped before checking this upgrade.")
 	expect(html).toContain("Last step: tests")
 	expect(html).toContain("outside-limit@")
