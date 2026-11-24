@@ -285,7 +285,7 @@ test("a timed-out final check settles before its caller can publish", async () =
 
 test("later project reads outlive the initial detection deadline", async () => {
 	const { InspectionContext } = await import("../src/collectEvents.ts")
-	const { NodeAdapter } = await import("../src/checkProject.ts")
+	const { NodeAdapter } = await import("../src/inspection/checkProject.ts")
 	const sandboxProvider = offline()
 	sandboxProvider.executeCommand = async () => ({
 		exitCode: 0,

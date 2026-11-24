@@ -2,7 +2,7 @@ import { isAbsolute, normalize } from "node:path"
 import { stripVTControlCharacters } from "node:util"
 import { XMLParser } from "fast-xml-parser"
 import type { TestCase, TestCounts, TestInventory } from "../src/contracts.ts"
-import { jsonCaseName, xmlCaseName } from "../src/testCaseName.ts"
+import { jsonCaseName, xmlCaseName } from "../src/patches/testCaseName.ts"
 
 type Suite = {
 	file?: string

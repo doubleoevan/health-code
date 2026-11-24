@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { readReleases } from "../src/readReleases.ts"
-import { readUpgradeFeatures } from "../src/readUpgradeFeatures.ts"
+import { readReleases } from "../src/upgrades/readReleases.ts"
+import { readUpgradeFeatures } from "../src/upgrades/readUpgradeFeatures.ts"
 
 test("a public dependency cannot publish release text from a private upstream", async () => {
 	const paths: string[] = []

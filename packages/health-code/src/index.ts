@@ -49,7 +49,6 @@ export type {
 	UpgradeReportV2,
 	Verdict,
 } from "./agentContracts.ts"
-export { buildInvestigationPrompt } from "./buildPrompt.ts"
 export type {
 	Baseline,
 	CheckResult,
@@ -76,14 +75,15 @@ export type {
 	UpgradeReport,
 } from "./contracts.ts"
 export { InspectionError, SandboxUnavailableError } from "./contracts.ts"
-export { createFakeSandboxProvider, type FixtureCommand, type SandboxFixture } from "./createFakeSandboxProvider.ts"
-export { inspectRepository } from "./inspectRepository.ts"
+export { inspectRepository } from "./inspection/inspectRepository.ts"
 export {
 	getUpgrade,
 	listUpgrades,
 	readUpgradeMenuFeatures,
 	readUpgradeMenuFeatures as readMenuFeatures,
-} from "./listUpgrades.ts"
+} from "./inspection/listUpgrades.ts"
+export { testInventorySummarySchema } from "./inspection/testInventorySummary.ts"
+export { buildInvestigationPrompt } from "./models/buildPrompt.ts"
 export type {
 	ModelRequestSandbox,
 	ModelRequestSandboxEvent,
@@ -96,26 +96,30 @@ export type {
 	RuntimeUsage,
 	SandboxModelRequest,
 	SandboxModelRoutes,
-} from "./modelRequestSandbox.ts"
-export { isModelRequestSandboxName, toModelRequestSandboxName } from "./modelRequestSandbox.ts"
+} from "./models/modelRequestSandbox.ts"
+export { isModelRequestSandboxName, toModelRequestSandboxName } from "./models/modelRequestSandbox.ts"
 export {
 	createHostModel,
 	modelSettingNames,
 	readModelOrigin,
 	readModelRoutes,
 	toModelSecretName,
-} from "./readModelRoutes.ts"
+} from "./models/readModelRoutes.ts"
+export {
+	createFakeSandboxProvider,
+	type FixtureCommand,
+	type SandboxFixture,
+} from "./sandbox/createFakeSandboxProvider.ts"
+export { createSandboxProvider, type ProviderOptions } from "./sandbox/createSandboxProvider.ts"
+export { reconcileSandboxes } from "./sandbox/reconcileSandboxes.ts"
+export { type InspectionMode, toInspectionMode } from "./toInspectionMode.ts"
+export { toRepositoryUrl } from "./toRepositoryUrl.ts"
 export {
 	type ReleaseFeaturePage,
 	readUpgradeFeatures,
 	toFeaturePage,
 	type UpgradeFeatures,
-} from "./readUpgradeFeatures.ts"
-export { createSandboxProvider, type ProviderOptions } from "./sandbox/createSandboxProvider.ts"
-export { reconcileSandboxes } from "./sandbox/reconcileSandboxes.ts"
-export { testInventorySummarySchema } from "./testInventorySummary.ts"
-export { type InspectionMode, toInspectionMode } from "./toInspectionMode.ts"
-export { toRepositoryUrl } from "./toRepositoryUrl.ts"
+} from "./upgrades/readUpgradeFeatures.ts"
 export {
 	type DependencyChoice,
 	dependenciesPerPage,
@@ -125,4 +129,4 @@ export {
 	type UpgradeMenuOrder as MenuOrder,
 	type UpgradeMenuTarget,
 	type UpgradeMenuTarget as MenuTarget,
-} from "./upgradeMenu.ts"
+} from "./upgrades/toUpgradeMenu.ts"

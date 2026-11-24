@@ -9,7 +9,7 @@ import {
 	type SandboxProvider,
 	SandboxUnavailableError,
 } from "../src/index.ts"
-import { preservePartialReport, retainCompletedChecks } from "../src/preservePartialReport.ts"
+import { preservePartialReport, retainCompletedChecks } from "../src/inspection/preservePartialReport.ts"
 import { fixtureCommit, fixtureUrl } from "./providerContract.ts"
 import { base, command, provider, report, scripts } from "./replayProjectChecks.ts"
 

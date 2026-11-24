@@ -13,10 +13,10 @@ import {
 	type SandboxProvider,
 	SandboxUnavailableError,
 } from "../contracts.ts"
-import { confirmNetworkPolicy, validateRegistryHosts } from "../networkPolicy.ts"
 import { toRepositoryUrl } from "../toRepositoryUrl.ts"
 import { createModelRequestSandbox } from "./createModelRequestSandbox.ts"
 import { executeCommand, type Instance } from "./executeCommand.ts"
+import { confirmNetworkPolicy, validateRegistryHosts } from "./networkPolicy.ts"
 import { openCredentialSession } from "./openCredentialSession.ts"
 import { readProjectFile, writeProjectFile } from "./projectFiles.ts"
 import { checkout, provision, restore } from "./provision.ts"
@@ -340,7 +340,7 @@ export function connectProvider(
 				const remaining = remainingOperation(operation)
 				await checked(runtime, ["sh", "-c", provision()], remaining())
 				for (const [local, remote] of [
-					["guest.mjs", "project.mjs"],
+					["project.mjs", "project.mjs"],
 					["observe.mjs", "observe.mjs"],
 					["agent.mjs", "agent.mjs"],
 					["patch.mjs", "patch.mjs"],

@@ -21,7 +21,7 @@
 	"homepage": "https://runhealthcode.dev",
 	"bugs": "https://github.com/doubleoevan/health-code/issues",
 	"scripts": {
-		"build": "tsc -p tsconfig.build.json && bun build view/client.tsx --target=browser --format=iife --minify --define process.env.NODE_ENV='\"production\"' --outdir=../../packages/health-code/dist/mcp/view && cp view/style.css ../../packages/health-code/dist/mcp/view/"
+		"build": "rm -rf ../../packages/health-code/dist/mcp && tsc -p tsconfig.build.json && bun build src/view/client.tsx --target=browser --format=iife --minify --define process.env.NODE_ENV='\"production\"' --outdir=../../packages/health-code/dist/mcp/view && cp src/view/style.css ../../packages/health-code/dist/mcp/view/"
 	},
 	"devDependencies": {
 		"@modelcontextprotocol/client": "2.4.0",

@@ -7,8 +7,8 @@ import { fetchRegistryVersions } from "../guest/fetchRegistryVersions.ts"
 import { readReleaseAge } from "../guest/readReleaseAge.ts"
 
 import { type CommandResult, createFakeSandboxProvider, inspectRepository } from "../src/index.ts"
-import { buildTestCommand } from "../src/sandbox/executeTests.ts"
-import { selectUpgrades } from "../src/selectUpgrades.ts"
+import { buildTestCommand } from "../src/sandbox/buildTestCommand.ts"
+import { selectUpgrades } from "../src/upgrades/selectUpgrades.ts"
 import { fixtureCommit, fixtureUrl } from "./providerContract.ts"
 
 test("a 200-package registry lookup keeps sixteen workers busy and retains every result", async () => {

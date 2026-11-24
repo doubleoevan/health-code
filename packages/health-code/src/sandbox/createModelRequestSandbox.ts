@@ -9,10 +9,10 @@ import {
 	isModelRequestSandboxName,
 	type ModelRequestSandbox,
 	snapshotSandboxModelRequest,
-} from "../modelRequestSandbox.ts"
-import { confirmNetworkPolicy } from "../networkPolicy.ts"
+} from "../models/modelRequestSandbox.ts"
+import { confirmNetworkPolicy } from "./networkPolicy.ts"
 import { type Runtime, refusedAllocation, remainingOperation, runtimeCost } from "./requestRuntime.ts"
-import { confirmGateway, sendSandboxModelRequest } from "./sandboxModelRequest.ts"
+import { confirmGateway, sendSandboxModelRequest } from "./sendSandboxModelRequest.ts"
 import { credentialTarget, setCredentialBinding } from "./setCredentialBinding.ts"
 
 type Binding = Awaited<ReturnType<typeof setCredentialBinding>>

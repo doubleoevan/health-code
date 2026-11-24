@@ -79,7 +79,7 @@ assert.equal(migrating.limits.agent.repair.maxTurns,1)
 assert.equal(migrating.limits.agent.featureAdoption.maxTurns,0)
 assert.deepEqual(replay,reportV2.timeline)
 assert.equal(replay.at(-1).type,"inspection.finished")
-for(const asset of ["dist/guest.mjs","dist/observe.mjs","dist/agent.mjs","dist/patch.mjs","dist/nodeTestReporter.mjs",
+for(const asset of ["dist/project.mjs","dist/observe.mjs","dist/agent.mjs","dist/patch.mjs","dist/nodeTestReporter.mjs",
   ...["repair","featureAdoption","releaseSummary","featureMatch"].map(role=>"prompts/"+role+".md")]) {
   assert.ok(readFileSync("node_modules/health-code/"+asset).length)
 }
@@ -87,12 +87,12 @@ JS
 
 # Exercise the guest bundles without workspace module resolution.
 mkdir -p standalone/project
-cp node_modules/health-code/dist/{guest,observe}.mjs standalone/
+cp node_modules/health-code/dist/{project,observe}.mjs standalone/
 cp "$root/packages/health-code/test/fixtures/recorded/npm/"{package.json,package-lock.json} standalone/project/
-(cd standalone/project && node ../guest.mjs detect | node -e 'const data=JSON.parse(require("node:fs").readFileSync(0));if(data.manager!=="npm"||data.sources.widget["."]!=="1.2.0")process.exit(1)')
+(cd standalone/project && node ../project.mjs detect | node -e 'const data=JSON.parse(require("node:fs").readFileSync(0));if(data.manager!=="npm"||data.sources.widget["."]!=="1.2.0")process.exit(1)')
 
 # replay the same inspection under node and bun
-cp "$root/scripts/fixtures/recorded/inspection.json" fixture.json
+cp "$root/packages/health-code/test/fixtures/recorded/npm/sandbox.json" fixture.json
 node consumer.mjs
 bun consumer.mjs
 

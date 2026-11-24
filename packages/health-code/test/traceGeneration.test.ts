@@ -3,7 +3,7 @@ import { test } from "node:test"
 import { createAnthropic } from "@ai-sdk/anthropic"
 import type { Tracer } from "@opentelemetry/api"
 import { generateText } from "ai"
-import { traceGeneration } from "../src/traceGeneration.ts"
+import { traceGeneration } from "../src/models/traceGeneration.ts"
 
 test("per-call SDK telemetry is isolated and excludes raw content", async () => {
 	const payload = "fixture-private-user-text"
@@ -63,7 +63,7 @@ test("per-call SDK telemetry is isolated and excludes raw content", async () => 
 })
 
 test("a cancelled paid request closes only its caller span and records the dispatched prompt", async () => {
-	const { paidRequest } = await import("../src/modelBudget.ts")
+	const { paidRequest } = await import("../src/models/modelBudget.ts")
 	const { InspectionContext } = await import("../src/collectEvents.ts")
 	const { createFakeSandboxProvider } = await import("../src/index.ts")
 	const events: string[] = []

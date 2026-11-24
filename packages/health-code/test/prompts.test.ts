@@ -2,9 +2,9 @@ import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { test } from "node:test"
-import { buildInvestigationPrompt, buildPrompt } from "../src/buildPrompt.ts"
-import { fitAgentPrompt } from "../src/fitAgentPrompt.ts"
 import { createFakeSandboxProvider, inspectRepository } from "../src/index.ts"
+import { buildInvestigationPrompt, buildPrompt } from "../src/models/buildPrompt.ts"
+import { fitAgentPrompt } from "../src/patches/fitAgentPrompt.ts"
 import { InspectionPrompts, type PromptOverrides } from "../src/readPrompt.ts"
 
 const source = readFileSync(new URL("../prompts/featureMatch.md", import.meta.url), "utf8")

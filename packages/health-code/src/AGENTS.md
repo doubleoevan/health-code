@@ -1,5 +1,16 @@
 # Inspection engine
 
+| Folder | Responsibility |
+| --- | --- |
+| root | The public entry, the report and event contracts, the inspection context, prompt templates and input normalization that every folder imports. |
+| `inspection/` | Repository and project orchestration, the model engine, the Node Ecosystem Adapter and check comparison. |
+| `upgrades/` | Registry targets, release notes, release features and the upgrade menu. |
+| `models/` | Model budget, routes, prompt building, tracing and the Model Request Sandbox contract. |
+| `patches/` | Agent Attempts, source and dependency edits, test-edit review and Patch verification. |
+| `sandbox/` | The production and fake Sandbox Providers and the network policy. |
+
+Folders import in one direction: root, `models/`, `sandbox/`, `upgrades/` and `patches/`, then `inspection/`. The file names below sit in these folders.
+
 `index.ts` is the public library entry. `contracts.ts` owns the JSON report and event types, provider interface, and typed errors. `openRepositoryRuntime.ts` owns repository runtime allocation, checkout, network lockdown and replacement admission. `inspectRepository.ts` owns one bounded recovery attempt and final cleanup. `inspectProject.ts` runs the Baseline and serial upgrade checks.
 
 `checkProject.ts` drives the Node Ecosystem Adapter and compares check evidence. `parseRegistryVersions.ts` separates completed registry lookups from timeouts and explains failed lookups. `selectUpgrades.ts` orders registry targets. `collectEvents.ts` owns per-inspection deadlines and callback delivery. `createFakeSandboxProvider.ts` replays caller-supplied fixtures. The `sandbox/` module owns the production provider.
@@ -8,9 +19,9 @@ Verify with the library tests and the root packed-package check. Keep the public
 
 The public entry also exports Repository URL normalization and deployment-scoped startup cleanup.
 
-`readModelRoutes.ts` resolves caller model settings for Anthropic and OpenAI-compatible hosts without choosing a model. `agentContracts.ts` defines the version 2 envelope. `inspectModels.ts` dispatches reading, matching and Agent Attempts. `modelBudget.ts` reserves per-request charges. `verifyPatch.ts` reconstructs and checks proposed source edits before exporting the mailbox. Each proposed dependency is checked for newly introduced lifecycle hooks before its commit is accepted.
+`readModelRoutes.ts` resolves caller model settings for Anthropic and OpenAI-compatible hosts without choosing a model. `agentContracts.ts` defines the version 2 envelope. `inspectModels.ts` dispatches reading, matching and Agent Attempts. `modelBudget.ts` reserves per-request charges. `evaluatePatch.ts` reconstructs and checks proposed source edits before exporting the mailbox. Each proposed dependency is checked for newly introduced lifecycle hooks before its commit is accepted.
 
-`attemptUpgrade.ts` drives repair and feature adoption. `requestAgentTurn.ts` verifies the scoped credential and accounts for each model turn. `fitAgentPrompt.ts` keeps each prompt within its route bound and lists omitted sources. `applyAgentEdits.ts` checks source scope and test edits. `changeDependencies.ts` upgrades declared dependencies as one set and verifies additions and removals. Dependency additions and removals start from the committed tree so the observer sees links as the package manager creates them. The guest and supervisor share the structured edit schema in `proposeEdits.ts`. `verifyCandidate.ts` compares final installs, destinations, lifecycle hooks and test identities. `verifyPatch.ts` publishes a mailbox only after replay. A changed existing expectation needs a separate flagged commit and independent checks on the current and upgraded versions. Added coverage must appear in the final test inventory. For repeated Baseline titles, every invocation must pass before and after, and the number of invocations must match.
+`attemptUpgrade.ts` drives repair and feature adoption. `requestAgentTurn.ts` verifies the scoped credential and accounts for each model turn. `fitAgentPrompt.ts` keeps each prompt within its route bound and lists omitted sources. `applyAgentEdits.ts` checks source scope and test edits. `prepareDependencies.ts` upgrades declared dependencies as one set and verifies additions and removals. Dependency additions and removals start from the committed tree so the observer sees links as the package manager creates them. The guest and supervisor share the structured edit schema in `proposeEdits.ts`. `verifyCandidate.ts` compares final installs, destinations, lifecycle hooks and test identities. `evaluatePatch.ts` publishes a mailbox only after replay. A changed existing expectation needs a separate flagged commit and independent checks on the current and upgraded versions. Added coverage must appear in the final test inventory. For repeated Baseline titles, every invocation must pass before and after, and the number of invocations must match.
 
 `rankFeatureMatches.ts` verifies cited source locations. Direct replacements with a release quotation connecting the used symbol to the replacement rank first, followed by the number of distinct affected locations. Ties use dependency, source path, line, feature and release source. Only one adoption is attempted per upgrade. A declined match retains its source and disposition.
 
@@ -22,7 +33,7 @@ A confirmed install failure can enter repair after a clean observation. The supe
 
 `testInventorySummary.ts` reads current and historical test counts and test file errors. The web report and evaluation grader use the same schema.
 
-`modelRequestSandbox.ts` defines model request sandbox options and serializes lazy allocation. `runtimeUsage.ts` measures each allocation through acknowledged deletion and combines runtime upper bounds with model receipts. Incomplete cleanup retains every unresolved identity on the Inspection error.
+`modelRequestSandbox.ts` defines model request sandbox options and serializes lazy allocation. `runtimeMeter.ts` measures each allocation through acknowledged deletion and combines runtime upper bounds with model receipts. Incomplete cleanup retains every unresolved identity on the Inspection error.
 
 `readPrompt.ts` validates each Inspection’s bundled or caller-supplied Markdown and identifies effective templates by name, version and SHA-256. `buildPrompt.ts` fences bounded, redacted evidence at call time. `traceGeneration.ts` adapts an optional caller-owned tracer to the SDK’s per-call interface.
 

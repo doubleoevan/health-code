@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { collectBunInventory } from "../guest/collectTestInventory.ts"
-import { buildPrompt } from "../src/buildPrompt.ts"
-import { attemptBudget, paidRequest } from "../src/modelBudget.ts"
+import { buildPrompt } from "../src/models/buildPrompt.ts"
+import { attemptBudget, paidRequest } from "../src/models/modelBudget.ts"
 import { setCredentialBinding } from "../src/sandbox/setCredentialBinding.ts"
 
 test("credential updates use the runtime revision and verify exact scope", async () => {
@@ -104,7 +104,7 @@ test("Bun counts case failures separately from files which failed to load", () =
 })
 
 test("test edits preserve existing assertions and identify a single changed expectation", async () => {
-	const { reviewTestEdit: reviewEdit } = await import("../src/reviewTestEdit.ts")
+	const { reviewTestEdit: reviewEdit } = await import("../src/patches/reviewTestEdit.ts")
 	const reviewTestEdit = (
 		before: string,
 		after: string,
@@ -170,7 +170,7 @@ test("test edits preserve existing assertions and identify a single changed expe
 })
 
 test("a repair can move a mocked path within the upgraded package", async () => {
-	const { reviewTestEdit } = await import("../src/reviewTestEdit.ts")
+	const { reviewTestEdit } = await import("../src/patches/reviewTestEdit.ts")
 	const before = `vi.mock("@novnc/novnc/lib/rfb.js", () => ({ default: class {} }))
 test("existing", () => { expect(read()).toEqual("old") })`
 	const review = (search: string, replacement: string, mockDependency?: string): string =>
@@ -192,7 +192,7 @@ test("existing", () => { expect(read()).toEqual("old") })`
 })
 
 test("release intervals and host credentials stay scoped across pages and the package fallback", async () => {
-	const { readReleases } = await import("../src/readReleases.ts")
+	const { readReleases } = await import("../src/upgrades/readReleases.ts")
 	const tokens: string[] = []
 	const packageName = "@scope/tool"
 
@@ -260,7 +260,7 @@ test("release intervals and host credentials stay scoped across pages and the pa
 })
 test("a fake credential never admits a model or repository work outside its phase", async () => {
 	// start the fake sandbox with registry access
-	const { createFakeSandboxProvider } = await import("../src/createFakeSandboxProvider.ts")
+	const { createFakeSandboxProvider } = await import("../src/sandbox/createFakeSandboxProvider.ts")
 	const provider = createFakeSandboxProvider({ commit: "a".repeat(40), commands: [] })
 	const sandbox = await provider.createSandbox("fixture", { timeoutMs: 50 })
 	const op = { timeoutMs: 100 }
@@ -293,7 +293,7 @@ test("a fake credential never admits a model or repository work outside its phas
 })
 test("formatting-only changes cannot qualify as an adopted feature", async () => {
 	// compare formatting and production edits against the same source
-	const { measureFeature } = await import("../src/measureFeature.ts")
+	const { measureFeature } = await import("../src/patches/measureFeature.ts")
 	const before = new Map([["main.ts", "const value =\n  wrapper(\n    item\n  )"]])
 	const score = (source: string): ReturnType<typeof measureFeature> =>
 		measureFeature({ before, after: new Map([["main.ts", source]]), tests: new Set() })

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { protectedTestFiles } from "../guest/protectTestSupport.ts"
-import { reviewTestEdit } from "../src/reviewTestEdit.ts"
+import { reviewTestEdit } from "../src/patches/reviewTestEdit.ts"
 
 function protect(config: string, extra: Record<string, string> = {}): Set<string> {
 	const files: Record<string, string> = { "vite.config.ts": config, "src/a.test.ts": 'import "@/a"', ...extra }

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict"
 import type { CodeFeatureMatch, InspectionModels, UpgradeReportV2 } from "../src/agentContracts.ts"
-import { NodeAdapter } from "../src/checkProject.ts"
 import { InspectionContext } from "../src/collectEvents.ts"
 import type { CheckResult, InspectionReport } from "../src/contracts.ts"
-import { createFakeSandboxProvider } from "../src/createFakeSandboxProvider.ts"
-import { ModelInspection } from "../src/inspectModels.ts"
-import { registryHosts } from "../src/networkPolicy.ts"
-import type { PatchEvidence, PatchVerificationInputs } from "../src/verifyCandidate.ts"
-import { evaluatePatch } from "../src/verifyPatch.ts"
+import { NodeAdapter } from "../src/inspection/checkProject.ts"
+import { ModelInspection } from "../src/inspection/inspectModels.ts"
+import { evaluatePatch } from "../src/patches/evaluatePatch.ts"
+import type { PatchEvidence, PatchVerificationInputs } from "../src/patches/verifyCandidate.ts"
+import { createFakeSandboxProvider } from "../src/sandbox/createFakeSandboxProvider.ts"
+import { registryHosts } from "../src/sandbox/networkPolicy.ts"
 
 const base = "a".repeat(40)
 const oldTest = 'test("behavior", () => expect(api()).toBe("old"))'

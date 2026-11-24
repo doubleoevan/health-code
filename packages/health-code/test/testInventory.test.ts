@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { mergeTestInventory } from "../src/mergeTestInventory.ts"
-import { type PatchVerificationInputs, readPatchVerificationInputs, verifyCases } from "../src/verifyCandidate.ts"
+import { mergeTestInventory } from "../src/inspection/mergeTestInventory.ts"
+import {
+	type PatchVerificationInputs,
+	readPatchVerificationInputs,
+	verifyCases,
+} from "../src/patches/verifyCandidate.ts"
 
 test("final discovery preserves every comparable case and loaded suite", () => {
 	const initial: PatchVerificationInputs = {
@@ -57,7 +61,7 @@ test("repeated Baseline titles retain every passing invocation", () => {
 })
 
 test("runner suite and case titles retain their boundaries", async () => {
-	const { jsonCaseName, caseMatchesTitle } = await import("../src/testCaseName.ts")
+	const { jsonCaseName, caseMatchesTitle } = await import("../src/patches/testCaseName.ts")
 	const left = jsonCaseName({ ancestorTitles: ["outer", "inner"], title: "example" })
 	const right = jsonCaseName({ ancestorTitles: ["outer"], title: "inner > example" })
 	assert.notEqual(left, right)

@@ -11,13 +11,13 @@ import {
 	inspectRepository,
 	type ModelRequestSandboxOptions,
 } from "../src/index.ts"
-import { ModelInspection } from "../src/inspectModels.ts"
-import { type Ledger, paidRequest } from "../src/modelBudget.ts"
-import { ModelRequestSandboxAllocation } from "../src/modelRequestSandbox.ts"
-import { requestHostModel } from "../src/requestHostModel.ts"
-import { RuntimeMeter } from "../src/runtimeUsage.ts"
+import { ModelInspection } from "../src/inspection/inspectModels.ts"
+import { requestHostModel } from "../src/inspection/requestHostModel.ts"
+import { RuntimeMeter } from "../src/inspection/runtimeMeter.ts"
+import { type Ledger, paidRequest } from "../src/models/modelBudget.ts"
+import { ModelRequestSandboxAllocation } from "../src/models/modelRequestSandbox.ts"
 import type { Runtime } from "../src/sandbox/requestRuntime.ts"
-import { confirmGateway, sendSandboxModelRequest } from "../src/sandbox/sandboxModelRequest.ts"
+import { confirmGateway, sendSandboxModelRequest } from "../src/sandbox/sendSandboxModelRequest.ts"
 
 const route: ModelRoute = {
 	protocol: "anthropic",

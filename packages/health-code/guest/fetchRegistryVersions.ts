@@ -1,4 +1,4 @@
-import { readBoundedJson } from "../src/readBoundedJson.ts"
+import { readBoundedJson } from "../src/upgrades/readBoundedJson.ts"
 import { isExcluded, type ReleaseAge } from "./readReleaseAge.ts"
 import { selectRegistryVersions } from "./selectRegistryVersions.ts"
 

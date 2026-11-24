@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import type { UpgradeReportV2, Verdict } from "../src/agentContracts.ts"
-import { selectFeatureMatches } from "../src/rankFeatureMatches.ts"
+import { selectFeatureMatches } from "../src/inspection/rankFeatureMatches.ts"
 import { type PatchReplay, replayPatch } from "./replayPatch.ts"
 
 const verdicts: Record<PatchReplay, Verdict> = {

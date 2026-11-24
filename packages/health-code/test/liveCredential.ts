@@ -1,9 +1,9 @@
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { test } from "node:test"
-import { registryHosts } from "../src/networkPolicy.ts"
-import { readModelRoutes } from "../src/readModelRoutes.ts"
+import { readModelRoutes } from "../src/models/readModelRoutes.ts"
 import { connectProvider } from "../src/sandbox/createSandboxProvider.ts"
+import { registryHosts } from "../src/sandbox/networkPolicy.ts"
 
 test("the live gateway authenticates only while the scoped model stub is attached", {
 	skip: !process.env.RUNTA_TOKEN || !process.env.HEALTH_CODE_MODEL,

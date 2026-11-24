@@ -5,11 +5,11 @@ import { parse as parseClassicLock } from "@yarnpkg/lockfile"
 import { applyEdits, parse as jsonc, modify } from "jsonc-parser/lib/esm/main.js"
 import { valid, validRange } from "semver"
 import { parse as yaml } from "yaml"
-import { applyManifestChanges } from "../src/applyManifestChanges.ts"
-import { bumpManifest, lockfiles, type Manifest, sections } from "../src/bumpManifest.ts"
 import type { PackageManager, Project } from "../src/contracts.ts"
+import { applyManifestChanges } from "../src/patches/applyManifestChanges.ts"
+import { bumpManifest, lockfiles, type Manifest, sections } from "../src/patches/bumpManifest.ts"
 
-export type { Manifest } from "../src/bumpManifest.ts"
+export type { Manifest } from "../src/patches/bumpManifest.ts"
 
 const ignore = new Set([".git", "node_modules", ".health-code", ".yarn", ".pnpm-store"])
 

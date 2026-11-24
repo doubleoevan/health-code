@@ -33,6 +33,7 @@ An **Inspection** targets a **Repository** at one inspected commit. An **Ecosyst
 | Model Request Sandbox | An isolated provider runtime that sends release-summary and Code Feature Match requests through a verified stored credential. | One per Inspection on first use. It contains no Repository checkout. Its verified startup is a Sandbox Event. |
 | Sandbox Provider | The interface checks use to create a sandbox, execute commands in it, and destroy it. | Runta is the shipped provider. Unit tests use a fake. |
 | Ecosystem Adapter | Language support behind one interface to detect the package manager, install, bump a dependency, typecheck, test, and list upgrades. | The Node adapter covers JavaScript and TypeScript. |
+| Guest | The code that runs inside the sandbox beside the Repository checkout. | The Ecosystem Adapter commands, installation observer, agent request and patch tools in `guest/`. The host controls them through the Sandbox Provider. |
 
 ## Inspection Report labels
 

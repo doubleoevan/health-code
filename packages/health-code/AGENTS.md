@@ -4,8 +4,8 @@ The public ESM package `health-code` owns Repository inspections. Its single ent
 
 | Module | Responsibility |
 | --- | --- |
-| `src/` | Public contract, inspection orchestration, checks, and fake provider. |
-| `src/sandbox/` | Production sandbox lifecycle and guest controls. |
+| `src/` | Public contract and the `src/inspection/`, `src/upgrades/`, `src/models/` and `src/patches/` folders. |
+| `src/sandbox/` | Production sandbox lifecycle, guest controls, and the fake provider. |
 | `guest/` | Node Ecosystem Adapter commands and installation evidence collection inside the sandbox. |
 | `prompts/` | Versioned instructions for four model roles, credential verification and Patch handoff. |
 | `test/` | Offline tests, shared provider contract, and live fixture harness. |

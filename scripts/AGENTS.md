@@ -5,14 +5,14 @@ Run these commands from the repository root. The root package manifest names the
 | Entry point | Scope |
 | --- | --- |
 | `evaluate.ts`, `evaluateUpgrade.ts` | Development runners for the cases in `../evals/`. Record one Baseline or score pinned inputs with the public library. |
-| `inspect.ts` | Developer CLI for `bun run inspect <repo-url> [--fake]`. Uses the library’s public entry, renders progress, and saves JSON to the root logs directory. Fake mode reads `fixtures/recorded/`. |
+| `inspect.ts` | Developer CLI for `bun run inspect <repo-url> [--fake]`. Uses the library’s public entry, renders progress, and saves JSON to the root logs directory. Fake mode reads `packages/health-code/test/fixtures/recorded/npm/sandbox.json`. |
 | `check-comment-groups.sh` | Check tracked TypeScript, JavaScript and shell files with `--tracked`, one path as an argument, or a Claude Code edit event on stdin. The project hook lives in `../.claude/settings.json`. |
 | `preflight.sh` | Runs the offline checks in order. CI, /ship, and `bun run check` invoke this file. |
 | `check-packed-library.sh` | Packs the release through its prepack hook and checks Node, Bun, and declaration consumers. |
 | `check-structure.sh` | Checks tracked and untracked package manifests with Git. |
-| `check-package-boundaries.ts` | Discovers app and package workspaces. Checks literal imports, declarations, and project references. The bundled app view can import development dependencies. |
-| `check-dependency-pins.ts` | Compares the package manager with the Bun version file. Verifies each patched dependency exists at the specified version in the lockfile. |
-| `check-dependency-advisories.ts` | Validates Bun's registry response and the reviewed advisory exceptions. Runs in its own CI job. |
+| `checkPackageBoundaries.ts` | Discovers app and package workspaces. Checks literal imports, declarations, and project references. The bundled app view can import development dependencies. |
+| `checkDependencyPins.ts` | Compares the package manager with the Bun version file. Verifies each patched dependency exists at the specified version in the lockfile. |
+| `checkDependencyAdvisories.ts` | Validates Bun's registry response and the reviewed advisory exceptions. Runs in its own CI job. |
 
 `readImports.ts` uses Oxc to read literal imports, re-exports, type imports, and require calls. `readWorkspace.ts` uses get-tsconfig to read JSONC, follow `extends`, and resolve inherited path mappings. Project references belong to the workspace that declares them.
 

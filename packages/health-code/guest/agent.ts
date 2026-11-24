@@ -4,7 +4,7 @@ import { createAnthropic } from "@ai-sdk/anthropic"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { generateText, tool } from "ai"
 import type { ModelRoute } from "../src/agentContracts.ts"
-import { decision } from "../src/proposeEdits.ts"
+import { decision } from "../src/patches/proposeEdits.ts"
 
 type Input = {
 	// describe the model route and request payload

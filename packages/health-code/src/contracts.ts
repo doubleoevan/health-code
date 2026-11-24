@@ -128,7 +128,7 @@ export type Command = {
 export type CommandResult = Evidence & { observationId?: string; timedOut?: boolean; placeholderVariableCount?: number }
 export type Operation = { timeoutMs: number; signal?: AbortSignal; modelCallId?: string }
 export interface SandboxProvider {
-	modelRequestSandbox?: import("./modelRequestSandbox.ts").ModelRequestSandbox
+	modelRequestSandbox?: import("./models/modelRequestSandbox.ts").ModelRequestSandbox
 	openCredentialSession?: AgentCapability
 	patchWorkspace?(sandbox: Sandbox, request: PatchOperation, operation: Operation): Promise<string | null>
 	checkAvailability(options?: Operation): Promise<void>
@@ -249,12 +249,12 @@ export type InspectionReport = {
 
 export class InspectionError extends Error {
 	promptVersions?: InspectionReport["promptVersions"]
-	timeline: InspectionEvent[] | import("./modelRequestSandbox.ts").ModelRequestSandboxEvent[] = []
+	timeline: InspectionEvent[] | import("./models/modelRequestSandbox.ts").ModelRequestSandboxEvent[] = []
 
 	// preserve cleanup state on typed inspection failures
 	cleanupId?: string
 	cleanupIds?: string[]
-	runtimeUsage?: import("./modelRequestSandbox.ts").RuntimeUsage
+	runtimeUsage?: import("./models/modelRequestSandbox.ts").RuntimeUsage
 	constructor(
 		readonly code: string,
 		message: string,

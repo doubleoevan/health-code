@@ -18,8 +18,8 @@
 	},
 	"scripts": {
 		"build": "vite build",
-		"start": "bun server.ts",
-		"replay": "HEALTH_CODE_REPLAY=1 bun --watch developSite.ts",
-		"dev": "HEALTH_CODE_REPLAY=0 bun --watch developSite.ts"
+		"start": "bun src/server/server.ts",
+		"replay": "HEALTH_CODE_REPLAY=1 bun --watch src/server/developSite.ts",
+		"dev": "HEALTH_CODE_REPLAY=0 bun --watch src/server/developSite.ts"
 	}
 }

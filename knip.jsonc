@@ -8,7 +8,10 @@
 		},
 		"packages/*": {},
 		"apps/*": {},
-		"apps/mcp": { "entry": ["cli.ts", "view/client.tsx", "*.test.ts"], "project": ["*.ts", "view/**/*.{ts,tsx}"] },
+		"apps/mcp": {
+			"entry": ["src/cli.ts", "src/view/client.tsx", "src/*.test.ts"],
+			"project": ["*.ts", "src/*.ts", "src/view/**/*.{ts,tsx}"]
+		},
 		"packages/health-code": {
 			"entry": [
 				"src/index.ts",

@@ -76,7 +76,7 @@ export type PreviousInspectionOptions = Omit<InspectionOptionsV2, "models" | "li
 
 type VersionTwo<T> = T extends unknown
 	? Omit<T, "version"> & { version: 2; attemptId?: string; role?: ModelRole } & (T extends { type: "inspection.failed" }
-				? { cleanupIds?: string[]; runtimeUsage?: import("./modelRequestSandbox.ts").RuntimeUsage }
+				? { cleanupIds?: string[]; runtimeUsage?: import("./models/modelRequestSandbox.ts").RuntimeUsage }
 				: unknown)
 	: never
 
@@ -214,7 +214,7 @@ export type UpgradeReportV2 = UpgradeReport & {
 export type InspectionReportV2 = Omit<InspectionReport, "version" | "timeline" | "upgrades"> & {
 	version: 2
 	limits?: { maxDurationMs: number; maxCostUsd: number; agent: Record<AgentRole, AttemptLimits> }
-	runtimeUsage?: import("./modelRequestSandbox.ts").RuntimeUsage
+	runtimeUsage?: import("./models/modelRequestSandbox.ts").RuntimeUsage
 	timeline: InspectionEventV2[]
 	upgrades: UpgradeReportV2[]
 }

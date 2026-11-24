@@ -8,8 +8,8 @@ import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { Client } from "@modelcontextprotocol/client"
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio"
-import { modelSettings } from "./fixtures/inspectionSettings.ts"
-import { toHash } from "./storeInspection.ts"
+import { modelSettings } from "./src/fixtures/inspectionSettings.ts"
+import { toHash } from "./src/storeInspection.ts"
 
 const expectedTools = [
 	"discover_upgrades",
@@ -64,7 +64,7 @@ test("packed Node MCP tools support offline inspection and durable results", { t
 		MODEL_API_KEY: modelKey,
 		RUNTA_TOKEN: "fixture-token",
 	}
-	const fixture = new URL("./fixtures/modelRequestSandboxInspection.ts", import.meta.url).href
+	const fixture = new URL("./src/fixtures/modelRequestSandboxInspection.ts", import.meta.url).href
 
 	async function connect({
 		command,

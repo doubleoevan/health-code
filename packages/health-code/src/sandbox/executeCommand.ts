@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { type Command, type CommandResult, InspectionError, type Observation, type Operation } from "../contracts.ts"
-import { buildTestCommand } from "./executeTests.ts"
+import { buildTestCommand } from "./buildTestCommand.ts"
 import { checked, exec, type Runtime, remainingOperation } from "./requestRuntime.ts"
 
 export type Instance = {

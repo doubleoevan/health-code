@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { registryHosts } from "../src/networkPolicy.ts"
+import { registryHosts } from "../src/sandbox/networkPolicy.ts"
 import { openCredentialSession } from "../src/sandbox/openCredentialSession.ts"
 import type { Runtime } from "../src/sandbox/requestRuntime.ts"
 

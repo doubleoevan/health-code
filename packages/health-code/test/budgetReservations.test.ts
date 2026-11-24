@@ -3,7 +3,7 @@ import { test } from "node:test"
 import type { ModelReply } from "../src/agentContracts.ts"
 import { InspectionContext } from "../src/collectEvents.ts"
 import { createFakeSandboxProvider, InspectionError } from "../src/index.ts"
-import { attemptBudget, type Ledger, paidRequest } from "../src/modelBudget.ts"
+import { attemptBudget, type Ledger, paidRequest } from "../src/models/modelBudget.ts"
 
 test("budget admission considers turns, elapsed time, cancellation and both cost ceilings before dispatch", async () => {
 	// price a fixture response against separate role and inspection balances

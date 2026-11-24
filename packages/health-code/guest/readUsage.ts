@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { parse } from "@babel/parser"
-import { isPackagePath } from "../src/isPackagePath.ts"
+import { isPackagePath } from "../src/patches/isPackagePath.ts"
 import { filesUnder, readText, workspaceDirectories } from "./inventory.ts"
 import { isSyntax } from "./readSyntax.ts"
 

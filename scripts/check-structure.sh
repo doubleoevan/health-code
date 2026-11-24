@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Include new manifests before they reach the index.
-paths=$(git ls-files --cached --others --exclude-standard -- 'package.json' '*/package.json' ':!.agents/**' ':!.claude/**' ':!.opencode/**' ':(exclude,glob)**/fixtures/recorded/**')
+paths=$(git ls-files --cached --others --exclude-standard -- 'package.json' '*/package.json' ':!.agents/**' ':!.claude/**' ':(exclude,glob)**/fixtures/recorded/**')
 status=0
 
 # report every manifest outside a supported workspace

@@ -7,9 +7,9 @@ import {
 	inspectRepository,
 	type SandboxFixture,
 } from "../src/index.ts"
-import { confirmNetworkPolicy, validateRegistryHosts } from "../src/networkPolicy.ts"
+import { buildTestCommand } from "../src/sandbox/buildTestCommand.ts"
 import { guestArguments } from "../src/sandbox/executeGuest.ts"
-import { buildTestCommand } from "../src/sandbox/executeTests.ts"
+import { confirmNetworkPolicy, validateRegistryHosts } from "../src/sandbox/networkPolicy.ts"
 import { fixtureCommit, fixtureUrl } from "./providerContract.ts"
 
 test("verifies the complete allowlist before any repository-controlled command", async () => {

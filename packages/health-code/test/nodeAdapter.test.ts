@@ -14,14 +14,14 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
-import { inspectSandboxActivity } from "../guest/observe.ts"
+import { inspectSandboxActivity } from "../guest/inspectSandboxActivity.ts"
 import { pageFileAndHookEntries } from "../guest/readPatchVerificationInputs.ts"
 import { readSystemCallLogLines } from "../guest/readSystemCallLogLines.ts"
-import { confirm } from "../src/confirmCheck.ts"
 import type { CheckResult, Project } from "../src/contracts.ts"
-import { formatManifest } from "../src/formatManifest.ts"
+import { confirm } from "../src/inspection/confirmCheck.ts"
+import { formatManifest } from "../src/patches/formatManifest.ts"
 import { maxSystemCallLogBytes } from "../src/sandbox/maxSystemCallLogBytes.ts"
-import { selectUpgrades } from "../src/selectUpgrades.ts"
+import { selectUpgrades } from "../src/upgrades/selectUpgrades.ts"
 
 const recorded = fileURLToPath(new URL("./fixtures/recorded/", import.meta.url))
 const entry = fileURLToPath(new URL("../guest/project.ts", import.meta.url))

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { inspectRepository } from "../src/inspectRepository.ts"
+import { inspectRepository } from "../src/inspection/inspectRepository.ts"
 import { connectProvider } from "../src/sandbox/createSandboxProvider.ts"
 import { fixtureCommit, fixtureUrl, providerContract } from "./providerContract.ts"
 

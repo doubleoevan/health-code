@@ -2,7 +2,7 @@ import { closeSync, fstatSync, openSync, readFileSync, readSync, rmSync, statSyn
 import { posix } from "node:path"
 import { StringDecoder } from "node:string_decoder"
 import { maxSystemCallLogBytes } from "../src/sandbox/maxSystemCallLogBytes.ts"
-import { inspectSandboxActivity } from "./observe.ts"
+import { inspectSandboxActivity } from "./inspectSandboxActivity.ts"
 
 class CaptureLimitError extends Error {}
 

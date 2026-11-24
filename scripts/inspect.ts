@@ -116,7 +116,7 @@ async function main(args: string[]): Promise<void> {
 
 	// select the recorded or live sandbox provider
 	const fake = flag === "--fake"
-	const recording = new URL("./fixtures/recorded/inspection.json", import.meta.url)
+	const recording = new URL("../packages/health-code/test/fixtures/recorded/npm/sandbox.json", import.meta.url)
 	const sandboxProvider = fake ? createFakeSandboxProvider(await Bun.file(recording).json()) : createSandboxProvider()
 	if (fake) {
 		console.log("Fixture mode · replaying recorded evidence")

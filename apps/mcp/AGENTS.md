@@ -2,6 +2,8 @@
 
 This workspace publishes the scoped launcher and owns the `health-code mcp` and `health-code check` commands, local setup, stdio tools and storage. Import inspection behavior from the public `health-code` entry.
 
+Sources, their tests, `src/view/` and `src/fixtures/` sit in `src/`. `launch.mjs` and `package.test.ts`, which tests the packed release, stay at the workspace root.
+
 | Entry | Responsibility |
 | --- | --- |
 | `cli.ts`, `createServer.ts` | Dispatch setup or stdio, validate tool input, format results and report request-scoped progress. |
@@ -9,11 +11,11 @@ This workspace publishes the scoped launcher and owns the `health-code mcp` and 
 | `setupAccount.ts`, `probeModelRequestSandbox.ts` | Register or reuse the model key. Verify it with a request limited to one output token and confirm model request sandbox deletion before printing the client configuration. |
 | `personalModelRequestSandboxes.ts` | Record each intended model request sandbox allocation by account and host. Use the verified organization ID across token rotations. Recover allocations whose local owner process has exited. |
 | `checkRepository.ts` | Run `health-code check` for CI and write the report and patches. |
-| `appView.ts`, `view/` | Serve and build the interactive page shown by clients with MCP Apps support. Read `view/AGENTS.md`. |
+| `registerAppView.ts`, `src/view/` | Serve and build the interactive page shown by clients with MCP Apps support. Read `src/view/AGENTS.md`. |
 | `readRepository.ts` | Read a repository address and check that GitHub shows it publicly before a sandbox starts. |
 | `toFailureMessage.ts` | Give each failure its cause and next step. |
 | `toEventLine.ts` | Describe one inspection event for tools, CI and the app view. |
-| `fixtures/` | Share recorded Inspection inputs and model replies between the MCP unit and packed stdio tests. |
+| `src/fixtures/` | Share recorded Inspection inputs and model replies between the MCP unit and packed stdio tests. |
 | `trackInspections.ts`, `storeInspection.ts` | Own active tasks, abort on shutdown, page evidence and save private Inspection Reports and application results. |
 | `listPatches.ts` | List dependency targets, patch digests and prerequisites with the inspection report. |
 | `fetchPatch.ts` | Validate saved artifact bytes, order prerequisites and check developer-reported outcomes. |
