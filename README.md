@@ -54,7 +54,7 @@ Paste the printed entry into your client and restart it. Then ask:
 List upgrades for https://github.com/owner/repository
 ```
 
-See the [MCP guide](apps/mcp/README.md#setup) for every setting.
+See the [MCP guide](apps/mcp/README.md#setup) for settings.
 
 ## Packages
 
