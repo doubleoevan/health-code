@@ -16,6 +16,11 @@ import {
 	workspace,
 } from "./verifyCandidate.ts"
 
+/**
+ * Ends an attempt whose agent chose to leave the code unchanged.
+ */
+export class NoEditsError extends Error {}
+
 type DependencyRequest = { name: string; version: string; reason: string }
 
 /**
@@ -34,7 +39,7 @@ export async function prepareDependencies({
 }): Promise<void> {
 	// require at least one actionable edit
 	if (!edit.edits.length && !edit.dependency && !edit.dependencies?.length && !edit.removeDependency) {
-		throw new Error("Agent returned a diagnosis without edits")
+		throw new NoEditsError(match ? "The feature adoption made no edits" : "Agent returned a diagnosis without edits")
 	}
 
 	// reject a dependency requested twice in one turn
@@ -152,11 +157,12 @@ async function refreshDependencies(evidence: PatchEvidence, label: string): Prom
 	// require a clean install that contacts only Baseline destinations
 	const install = await adapter.refreshInstallation()
 	if (install.check.status !== "passed" || !cleanInstall(install.observation, baseInstall)) {
+		// keep both ends of the output. npm names a conflict first and other failures last
+		const installOutput = install.check.evidence.map((entry) => entry.stderr).join(" ")
+		const installExcerpt =
+			installOutput.length > 1500 ? `${installOutput.slice(0, 900)} … ${installOutput.slice(-600)}` : installOutput
 		throw new Error(
-			`Dependency change ${label} could not be installed: ${install.check.status}, ${install.observation.reason ?? (install.observation.findings.length ? "installation finding" : "destination comparison")}. ${install.check.evidence
-				.map((entry) => entry.stderr.slice(-450))
-				.join(" ")
-				.slice(-600)}`,
+			`Dependency change ${label} could not be installed: ${install.check.status}, ${install.observation.reason ?? (install.observation.findings.length ? "installation finding" : "destination comparison")}. ${installExcerpt}`,
 		)
 	}
 

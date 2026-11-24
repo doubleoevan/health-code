@@ -1,3 +1,4 @@
+import { posix } from "node:path"
 import { untested } from "./confirmCheck.ts"
 import type { CheckResult, CommandResult, Evidence } from "./contracts.ts"
 import { testInventorySummarySchema } from "./testInventorySummary.ts"
@@ -36,13 +37,22 @@ export function mergeTestInventory({
 		return untested("incomplete-test-report", [evidence])
 	}
 
-	// represent file loading errors as additional test failures
-	const failures = summary.data.testFileErrors.map(({ file }) => ({ workspace: ".", file }))
-	if (failures.length) {
+	// add file loading errors missing from the reported failures
+	const { testFileErrors } = summary.data
+	const reportedFailures = check.status === "failed" ? check.failingTests : []
+	const reportedFileErrors = new Set(
+		reportedFailures.filter(({ name }) => !name).map(({ workspace, file }) => posix.join(workspace, file)),
+	)
+
+	// compare files by repository path
+	const addedFileErrors = testFileErrors
+		.filter(({ file }) => !reportedFileErrors.has(posix.normalize(file)))
+		.map(({ file }) => ({ workspace: ".", file }))
+	if (testFileErrors.length) {
 		check = {
 			status: "failed",
 			evidence: [evidence],
-			failingTests: [...(check.status === "failed" ? check.failingTests : []), ...failures],
+			failingTests: [...reportedFailures, ...addedFileErrors],
 		}
 	}
 	check.inventory = summary.data

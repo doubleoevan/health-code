@@ -65,6 +65,12 @@ test("a minimum release age selects the newest release the repository would inst
 	assert.equal(accepted["@scope/exempt"], "application/vnd.npm.install-v1+json")
 })
 
+test("a deprecated release is never offered as an upgrade", async () => {
+	const versions = { "0.88.0": {}, "0.88.1": { deprecated: "" }, "1000.0.0": { deprecated: "Accidentally published" } }
+	const result = await fetchRegistryVersions(["native"], { request: async () => Response.json({ versions }) })
+	assert.deepEqual({ ...result }, { native: ["0.88.1"] })
+})
+
 test("release age reads each package manager's effective setting", () => {
 	const read = (
 		manager: "npm" | "pnpm" | "yarn",

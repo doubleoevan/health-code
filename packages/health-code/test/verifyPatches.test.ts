@@ -9,6 +9,7 @@ const verdicts: Record<PatchReplay, Verdict> = {
 	linked: "Fixed",
 	"linked-downgrade": "Can't fix",
 	"linked-duplicate": "Can't fix",
+	"linked-conflict": "Can't fix",
 	"install-break": "Fixed",
 	"unresolved-lock": "Can't fix",
 	"new-test": "Fixed",
@@ -20,6 +21,13 @@ const verdicts: Record<PatchReplay, Verdict> = {
 	decline: "Can't fix",
 	binding: "Untested",
 	"new-host": "Untested",
+}
+
+// the failure text a rejected linked upgrade must keep
+const linkedUpgradeErrors: Record<string, RegExp> = {
+	"linked-downgrade": /must be newer than its installed version/,
+	"linked-duplicate": /can be requested once per turn/,
+	"linked-conflict": /Conflicting peer dependency: linked-b@3\.0\.0/,
 }
 for (const [mode, verdict] of Object.entries(verdicts)) {
 	test(`candidate replay ${mode} yields ${verdict}`, async () => {
@@ -61,12 +69,9 @@ for (const [mode, verdict] of Object.entries(verdicts)) {
 				["linked-a", "linked-b"].map((name) => [name, { ".": "1.0.0" }, commit?.sha]),
 			)
 		}
-		if (mode === "linked-downgrade") {
-			assert.match(report.diagnosis?.actions.join() ?? "", /must be newer than its installed version/)
-		}
-		if (mode === "linked-duplicate") {
-			assert.match(report.diagnosis?.actions.join() ?? "", /can be requested once per turn/)
-		}
+
+		// check the failure each linked attempt reports to the next agent turn
+		assert.match(report.diagnosis?.actions.join() ?? "", linkedUpgradeErrors[mode] ?? /^/)
 
 		// check that unexpected egress and unverified credentials limit the attempt
 		if (mode === "new-host") {

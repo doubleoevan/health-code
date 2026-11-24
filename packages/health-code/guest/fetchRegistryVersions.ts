@@ -44,12 +44,17 @@ async function fetchPackage(name: string, options: RegistryOptions): Promise<Reg
 			return "unavailable"
 		}
 
+		// Exclude deprecated releases.
+		const undeprecatedVersions = Object.entries(versions)
+			.filter(([, release]) => !release?.deprecated)
+			.map(([version]) => version)
+
 		// Drop releases that are too new before choosing the latest of each major.
 		const published = record?.time
-		const names = Object.keys(versions).filter(
+		const eligibleVersions = undeprecatedVersions.filter(
 			(version) => !releaseAge || Date.parse(String(published?.[version])) <= releaseAge.publishedBefore,
 		)
-		return selectRegistryVersions(names, options.includePrevious ?? false)
+		return selectRegistryVersions(eligibleVersions, options.includePrevious ?? false)
 	} catch {
 		return options.signal?.aborted ? "stage-timed-out" : timeout.aborted ? "timed-out" : "unavailable"
 	}

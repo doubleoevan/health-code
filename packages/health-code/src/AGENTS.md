@@ -30,4 +30,4 @@ A confirmed install failure can enter repair after a clean observation. The supe
 
 `listUpgrades.ts` exposes the two operations to discover an upgrade menu with release features and test one selected upgrade. `readUpgradeFeatures.ts` extracts bounded, source-linked feature entries from release notes for a chosen target. Set `mode: "listUpgrades"` to list eligible upgrades and release the sandbox before installation. Pass an exact `upgrade` and `revision` to test a chosen target. The public `health-code` entry groups, searches and sorts eligible versions.
 
-`requestHostModel.ts` dispatches summaries and feature matching. `mergeTestInventory.ts` combines test inventory and command results. `isPackagePath.ts` checks whether a module path names a package or one of its subpaths.
+`requestHostModel.ts` dispatches summaries and feature matching. It omits release notes from the end until the prompt fits its route bound. `mergeTestInventory.ts` combines test inventory and command results. `isPackagePath.ts` checks whether a module path names a package or one of its subpaths.

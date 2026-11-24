@@ -40,7 +40,7 @@ The Baseline SHALL use frozen installation and the selected manager's normal lif
 
 ### Requirement: Discover stable registry targets
 
-The adapter SHALL query the public npm registry for direct dependencies and return the latest eligible minor and major targets. It SHALL record unsupported dependency sources or missing version evidence in discovery. When the repository's package manager applies a minimum release age, the adapter SHALL return only targets old enough to install, honoring the repository's exempt package names without caller configuration.
+The adapter SHALL query the public npm registry for direct dependencies and return the latest eligible minor and major targets. It SHALL exclude deprecated releases. It SHALL record unsupported dependency sources or missing version evidence in discovery. When the repository's package manager applies a minimum release age, the adapter SHALL return only targets old enough to install, honoring the repository's exempt package names without caller configuration.
 
 #### Scenario: Stable targets
 

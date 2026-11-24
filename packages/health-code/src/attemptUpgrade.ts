@@ -3,6 +3,7 @@ import { type AgentRole, agentRoleLabels, type CodeFeatureMatch } from "./agentC
 import { applyDecision } from "./applyAgentEdits.ts"
 import { buildPrompt, parseAnswer } from "./buildPrompt.ts"
 import { sections } from "./bumpManifest.ts"
+import { NoEditsError } from "./changeDependencies.ts"
 import { redact, rethrowInspectionFailure } from "./collectEvents.ts"
 import { SandboxUnavailableError } from "./contracts.ts"
 import { fitAgentPrompt } from "./fitAgentPrompt.ts"
@@ -165,7 +166,7 @@ async function reportRejectedTurn({
 			truncated: lastEvidence.length > 400,
 		})
 	}
-	if (lastEvidence === "Agent returned a diagnosis without edits") {
+	if (error instanceof NoEditsError) {
 		throw error
 	}
 	return proposedEdit ? lastEvidence + (await collectDiagnostics(evidence, state)) : lastEvidence

@@ -307,6 +307,19 @@ test("local and model request sandbox requests use equivalent fenced evidence, v
 		[{ name: "featureMatch", version: 41 }],
 	)
 	assert.equal(caller.ledger.usage[0]?.costUsd, modelRequestSandbox.ledger.usage[0]?.costUsd)
+
+	// keep the first release notes and recorded usage inside the route's input bound
+	const notes = Array.from({ length: 40 }, (_, index) => ({ source: `note-${index}`, text: "x".repeat(4000) }))
+	const usage = ["import from 'widget'"]
+	await requestHostModel({ engine: caller, role: "featureMatch", evidence: { notes, usage }, context })
+
+	// compare the omitted and retained evidence
+	const fittedPrompt = localPrompts.at(-1) ?? ""
+	assert.ok(Buffer.byteLength(fittedPrompt) <= local.pricing.maxInputTokens)
+	assert.match(fittedPrompt, /note-0"/)
+	assert.match(fittedPrompt, /omittedNoteCount/)
+	assert.match(fittedPrompt, /import from 'widget'/)
+	assert.doesNotMatch(fittedPrompt, /note-39"/)
 })
 
 test("a provider-assigned sandbox ID closes the original runtime charge", async () => {

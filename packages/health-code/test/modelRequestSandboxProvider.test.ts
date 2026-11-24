@@ -118,8 +118,8 @@ test("the production capability replaces and verifies the complete route before 
 			await open
 
 			// Reject an output ceiling above the configured limit.
-			const input = { role: "featureMatch" as const, route: first, prompt: "data", output: 1024 }
-			await assert.rejects(provider.send(name, { ...input, output: 1025 }, operation), /Invalid sandbox model request/)
+			const input = { role: "featureMatch" as const, route: first, prompt: "data", output: 4096 }
+			await assert.rejects(provider.send(name, { ...input, output: 4097 }, operation), /Invalid sandbox model request/)
 
 			// Changing the caller's object must not change the binding already cached by the provider.
 			first.credential.name = "unknown"
@@ -130,7 +130,7 @@ test("the production capability replaces and verifies the complete route before 
 			first.credential.name = "registered"
 			await provider.open(name, first, operation)
 			for (const selected of [first, route("https://two.example/v2")]) {
-				await provider.send(name, { role: "featureMatch", route: selected, prompt: "data", output: 1024 }, operation)
+				await provider.send(name, { role: "featureMatch", route: selected, prompt: "data", output: 4096 }, operation)
 			}
 			assert.deepEqual(transitions, ["one.example", "revoke", "one.example", "revoke", "two.example"])
 			assert.equal(paid, 2)

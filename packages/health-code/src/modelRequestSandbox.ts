@@ -39,8 +39,9 @@ export interface ModelRequestSandbox {
 	close(name: string, operation: Operation & { creationPending?: boolean }): Promise<void>
 }
 
-export const callerOutputTokens = 1024
-export const sandboxModelCallTimeoutMs = 120000
+// leave room for reasoning before the structured answer
+export const callerOutputTokens = 4096
+export const callerModelCallTimeoutMs = 120000
 
 /**
  * Names the model request sandbox sibling of a repository sandbox.

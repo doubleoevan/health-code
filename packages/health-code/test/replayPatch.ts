@@ -35,9 +35,12 @@ export type PatchReplay =
 	| "unresolved-lock"
 	| "new-test"
 	| "dependency"
+
+	// select dependencies that move together
 	| "linked"
 	| "linked-downgrade"
 	| "linked-duplicate"
+	| "linked-conflict"
 
 	// select unsafe dependency changes
 	| "undeclared"
@@ -334,6 +337,13 @@ export async function replayPatch(
 				...JSON.parse(tree["package.json"] ?? "{}"),
 				dependencies: { widget: "2.0.0", surprise: "1.0.0" },
 			})
+		}
+
+		// name the conflict before npm's closing advice
+		if (mode === "linked-conflict") {
+			const stderr = `npm error Conflicting peer dependency: linked-b@3.0.0\n${"npm error advice\n".repeat(60)}`
+			const command = { stdout: "", stderr, exitCode: 1, durationMs: 1, stdoutTruncated: false, stderrTruncated: false }
+			return { check: { ...failed, evidence: [command] }, observation: scope }
 		}
 		return { check: green, observation: scope }
 	}

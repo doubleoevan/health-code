@@ -2,7 +2,7 @@ import type { AgentRole, InspectionOptionsV2, ModelReply, ModelRole, ModelUsage,
 import { bounded, checkOperation, type InspectionContext } from "./collectEvents.ts"
 import { InspectionError, type Operation } from "./contracts.ts"
 
-import { sandboxModelCallTimeoutMs } from "./modelRequestSandbox.ts"
+import { callerModelCallTimeoutMs } from "./modelRequestSandbox.ts"
 
 import { type GenerationTelemetry, traceGeneration } from "./traceGeneration.ts"
 
@@ -71,8 +71,8 @@ export async function paidRequest(request: Request): Promise<string> {
 	const { ledger, attempt } = request
 	const reserve = reserveCost(request)
 	const started = Date.now()
-	const ceiling = request.execution === "modelRequestSandbox" ? sandboxModelCallTimeoutMs : 45000
-	const duration = Math.min(ledger.end, attempt?.end ?? Infinity, attempt ? Infinity : started + ceiling) - started
+	const duration =
+		Math.min(ledger.end, attempt?.end ?? Infinity, attempt ? Infinity : started + callerModelCallTimeoutMs) - started
 
 	// require sufficient time, money and turns before dispatch
 	if (

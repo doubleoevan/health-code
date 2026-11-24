@@ -5,9 +5,9 @@ import type { ModelReply, ModelRoute } from "../agentContracts.ts"
 import { bounded, checkOperation } from "../collectEvents.ts"
 import { InspectionError, type Operation } from "../contracts.ts"
 import {
+	callerModelCallTimeoutMs,
 	isModelRequestSandboxName,
 	type ModelRequestSandbox,
-	sandboxModelCallTimeoutMs,
 	snapshotSandboxModelRequest,
 } from "../modelRequestSandbox.ts"
 import { confirmNetworkPolicy } from "../networkPolicy.ts"
@@ -177,7 +177,7 @@ export function createModelRequestSandbox({
 			const modelRequest = snapshotSandboxModelRequest(input)
 			credentialTarget(modelRequest.route)
 			const signal = operation.signal ? AbortSignal.any([operation.signal, state.stop.signal]) : state.stop.signal
-			const timeoutMs = Math.min(sandboxModelCallTimeoutMs, operation.timeoutMs)
+			const timeoutMs = Math.min(callerModelCallTimeoutMs, operation.timeoutMs)
 			const previous = state.busy
 
 			// Queue the actual dispatch so an expired caller cannot send a late request.

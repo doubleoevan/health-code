@@ -127,10 +127,16 @@ test("default budget acceptance checks measured turns, wall time, output and cha
 		},
 	}
 
+	// accept a caller role at its output and time limits
+	const callerReceipt = { ...receipt, role: "featureMatch" as const, durationMs: 120000, outputTokens: 4096 }
+	assert.equal(scoreBudget({ ...fixture, modelUsage: [receipt, callerReceipt] }), true)
+
 	// reject each budget violation independently
 	assert.equal(scoreBudget(fixture), true)
 	for (const change of [
 		{ modelUsage: [{ ...receipt, outputTokens: 8193 }] },
+		{ modelUsage: [receipt, { ...callerReceipt, outputTokens: 4097 }] },
+		{ modelUsage: [receipt, { ...callerReceipt, durationMs: 120001 }] },
 		{ modelUsage: [{ ...receipt, costUsd: 4.01 }] },
 		{ modelUsage: [{ ...receipt, costUsd: undefined, reservedUsd: 4.01 }] },
 		{ modelUsage: [{ ...receipt, outputTokens: undefined }] },

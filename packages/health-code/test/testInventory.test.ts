@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import { mergeTestInventory } from "../src/mergeTestInventory.ts"
 import { type PatchVerificationInputs, readPatchVerificationInputs, verifyCases } from "../src/verifyCandidate.ts"
 
 test("final discovery preserves every comparable case and loaded suite", () => {
@@ -103,4 +104,30 @@ test("reads every patch verification input from an existing sandbox provider", a
 		cases: [["widget.test.ts", "loads", "passed"]],
 		testFileErrors: [],
 	})
+})
+
+test("a test file that fails to load is listed once", () => {
+	const file = "packages/app/src/App.test.tsx"
+	const counts = { passed: 1, failed: 0, skipped: 0, todo: 0 }
+	const stdout = JSON.stringify({ counts, testFileErrors: [{ file, reason: "Load failed" }] })
+	const commandResult = {
+		exitCode: 1,
+		stdout,
+		stderr: "",
+		durationMs: 1,
+		stdoutTruncated: false,
+		stderrTruncated: false,
+	}
+
+	// keep a named failure beside the same file's load error
+	const reported = [
+		{ workspace: "packages/app", file: "src/App.test.tsx" },
+		{ workspace: "packages/app", file: "src/App.test.tsx", name: "renders" },
+	]
+	const check = mergeTestInventory({
+		check: { status: "failed", evidence: [], failingTests: reported },
+		commandResult: commandResult as Parameters<typeof mergeTestInventory>[0]["commandResult"],
+		evidence: {} as Parameters<typeof mergeTestInventory>[0]["evidence"],
+	})
+	assert.deepEqual(check.status === "failed" && check.failingTests, reported)
 })
