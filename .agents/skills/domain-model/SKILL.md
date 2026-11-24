@@ -5,12 +5,12 @@ description: Names Health Code entities when writing or reviewing types, files, 
 
 # Health Code domain model
 
-An **Inspection** targets a **Repository** at a pinned commit. An **Ecosystem Adapter** supplies the language-specific commands, and a **Sandbox Provider** supplies the environment. The **Baseline** establishes which tests already fail. For each **Upgrade**, the **Install Check** observes installation and the **Upgrade Check** compares the changed dependency against the Baseline. Each check yields a **Check Result**. An **Agent Attempt** can repair a broken Upgrade or adopt a **Code Feature Match** and produce a tested **Patch**. The **Inspection Report** records the per-upgrade **Verdict**, evidence, patches, and timeline of **Inspection Events**, highlighting each **Sandbox Event**.
+An **Inspection** targets a **Repository** at one inspected commit. An **Ecosystem Adapter** supplies the language-specific commands, and a **Sandbox Provider** supplies the environment. The **Baseline** establishes which tests already fail. For each **Upgrade**, the **Install Check** observes installation and the **Upgrade Check** compares the changed dependency against the Baseline. Each check yields a **Check Result**. An **Agent Attempt** can repair a broken Upgrade or adopt a **Code Feature Match** and produce a tested **Patch**. The **Inspection Report** records the per-upgrade **Verdict**, evidence, patches, and timeline of **Inspection Events**, highlighting each **Sandbox Event**.
 
 | Entity | What it is | Notes |
 | --- | --- | --- |
 | Repository | A public GitHub repository an Inspection targets. | Pin the commit for each Inspection. |
-| Inspection | One end-to-end check of a Repository at a pinned commit. | Produces one Inspection Report. |
+| Inspection | One end-to-end check of a Repository at an inspected commit. | Produces one Inspection Report. |
 | Baseline | The install, typecheck, and tests on the Repository before any change. | Exclude tests that fail here when attributing failures to an Upgrade. |
 | Upgrade | Moving one dependency from its current version to a newer one. | Identify the dependency and both versions. |
 | Upgrade menu | The eligible versions of direct dependencies at a Repository commit. | Use upgrade menu in copy and upgradeMenuId when a caller opens, pages or selects from a saved upgrade menu. |
@@ -24,7 +24,7 @@ An **Inspection** targets a **Repository** at a pinned commit. An **Ecosystem Ad
 | Test file error | A test runner error attributed to a file outside a named test case, such as a module-load or setup error. | Show **Test file errors** and record each file and reason under `testFileErrors`. Failed and skipped cases keep their own counts. |
 | Code Feature Match | A new feature in an Upgrade's release notes matched to code it could replace in the Repository. | Cite the release notes and the code. Use CodeFeatureMatch in the library and “Where this fits in your code” in the report. |
 | Agent Attempt | One execution of a coding agent inside the sandbox to fix a broken Upgrade or adopt a Code Feature Match. | Bound the attempt by time and cost. |
-| Patch | A git format-patch file of tested commits, pinned to the commit it was tested on. | Apply the upgrade patch first. The feature patch applies on top of it. |
+| Patch | A git format-patch file of tested commits, tied to the commit it was tested on. | Apply the upgrade patch first. The feature patch applies on top of it. |
 | Verdict | The final result for one Upgrade. | Passes as is, Fixed, Fixed with test changes, Can't fix, or Untested. |
 | Inspection Report | The result of the Inspection. | Include the Baseline, per-upgrade findings, Verdicts, Patches, and event timeline. |
 | Inspection Event | A typed event emitted as an Inspection progresses. | Step started, step finished, detail, inspection finished, or inspection failed. |
@@ -53,7 +53,7 @@ In the daily admin view, **share rate** is the fraction of completed Inspection 
 
 | Avoid | Use |
 | --- | --- |
-| “Safe” for an Upgrade | “Passed inspection” plus the evidence, such as which tests passed at the pinned commit. |
+| “Safe” for an Upgrade | “Passed inspection” plus the evidence, such as which tests passed at the inspected commit. |
 | “Run” outside infrastructure code | Inspection for the end-to-end check. Reserve run for infrastructure such as a process or CI job. |
 | Runta in a code identifier outside its provider | Sandbox Provider or Sandbox Event, according to what the identifier represents. Customer copy may name Runta. |
 | Plugin or plug-in for language support | Ecosystem Adapter. |

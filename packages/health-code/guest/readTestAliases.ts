@@ -47,7 +47,7 @@ function resolveImport({ base, mapping }: AliasConfig, name: string): string[] {
 	return [...paths, ...(base ? [posix.join(base, name)] : [])]
 }
 
-// parse the pinned configuration with trailing commas enabled
+// parse the inspected configuration with trailing commas enabled
 function readConfig(contents: string): Config {
 	const errors: ParseError[] = []
 	const config: Config = parse(contents, errors, { allowTrailingComma: true })
@@ -58,7 +58,7 @@ function readConfig(contents: string): Config {
 }
 
 /**
- * Resolves test imports using pinned TypeScript and JavaScript configuration.
+ * Resolves test imports using inspected TypeScript and JavaScript configuration.
  */
 export function createTestAliasResolver(
 	files: Set<string>,

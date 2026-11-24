@@ -44,7 +44,7 @@ export async function inspectProject({
 		timeline: context.timeline,
 	}
 	try {
-		// restore the pinned tree before detecting the project
+		// restore the inspected tree before detecting the project
 		await adapter.resetProject()
 		const project = await adapter.detectProject()
 		inspectionReport.packageManager = { name: project.manager, version: project.version }
@@ -94,7 +94,7 @@ export async function inspectProject({
 	if (previous) {
 		retainCompletedChecks(inspectionReport, previous)
 
-		// Publish targets in discovery order after an out-of-order retry.
+		// Publish targets in upgrade menu order after an out-of-order retry.
 		const order = new Map(inspectionReport.selection.selected.map((target, index) => [toUpgradeKey(target), index]))
 		inspectionReport.upgrades.sort((a, b) => (order.get(toUpgradeKey(a)) ?? 0) - (order.get(toUpgradeKey(b)) ?? 0))
 	}
@@ -116,7 +116,7 @@ async function inspectSelected({
 	engine?: ModelInspection
 	previous?: InspectionReport
 }): Promise<void> {
-	// Require the original installation before running candidate checks.
+	// Require the original installation before running upgrade checks.
 	const installPassed = inspectionReport.baseline.install.status === "passed"
 
 	// Give untouched targets a turn before retrying the upgrade that lost the sandbox.

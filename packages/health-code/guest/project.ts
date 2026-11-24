@@ -112,7 +112,7 @@ async function main(): Promise<void> {
 			console.log(JSON.stringify(readLifecycleHookSignatures()))
 			break
 
-		// return a page of integrity evidence
+		// return a page of patch verification inputs
 		case "integrity": {
 			const [testCaseOffset = Number.NaN, fileAndHookEntryOffset] = args.map(Number)
 			const page = readPatchVerificationInputs(testCaseOffset, fileAndHookEntryOffset)
@@ -148,7 +148,7 @@ async function main(): Promise<void> {
 			console.log(JSON.stringify(detectProject()))
 			break
 
-		// distinguish a bounded historical lookup from upgrade discovery
+		// distinguish a bounded historical lookup from the upgrade menu lookup
 		case "lookup":
 			console.log(JSON.stringify(await fetchRegistryVersions(args.slice(0, 5), { includePrevious: true })))
 			break

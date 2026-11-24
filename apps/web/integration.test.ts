@@ -161,7 +161,8 @@ test("stored version 1 and version 2 reports show agent startup only with explic
 
 		// check the visible startup and patch controls for each version
 		const html = await (await app.request(`/r/${id}`)).text()
-		expect(html.includes("Agent started with its real key withheld")).toBe(report.version === 2)
+		expect(html.includes("Agent started with its model key kept outside the sandbox")).toBe(report.version === 2)
+		expect(html).toMatch(/Inspection time · (<!-- -->)?\d+ (min|sec)/)
 		expect(html.includes("Upgrade prompt for your coding agent")).toBe(report.version === 2)
 	}
 
@@ -333,7 +334,7 @@ test("a hosted retry runs a fresh baseline and only installs outstanding targets
 
 			// Let the original installation finish before interrupting the new target.
 			if (command.argv.length > 3) {
-				// Keep the pinned selection for the replacement checkout.
+				// Keep the selected target for the replacement checkout.
 				if (commands[1]?.argv[2] === "registry") {
 					commands.splice(1, 1)
 				}

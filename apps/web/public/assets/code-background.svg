@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="280" viewBox="0 0 960 280">
+  <title>Code background</title>
+  <style>
+    text {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 9px;
+      fill: #7d8597;
+    }
+    .kw  { fill: #9b72cf; }
+    .fn  { fill: #4f94d4; }
+    .str { fill: #4aa376; }
+    .num { fill: #d48943; }
+    .cmt { fill: #8b92a1; font-style: italic; }
+
+    .col { animation: fade var(--d, 16s) ease-in-out var(--delay, 0s) infinite; }
+    .c1  { --d: 15s; --delay: -2s; }
+    .c2  { --d: 21s; --delay: -9s; }
+    .c3  { --d: 17s; --delay: -13s; }
+    .c4  { --d: 23s; --delay: -6s; }
+
+    @keyframes fade {
+      0%, 100% { opacity: 0.15; }
+      50%      { opacity: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .col { animation: none; opacity: 0.7; }
+    }
+  </style>
+
+  
+  <g class="col c1">
+    <text x="12" y="18"><tspan class="cmt">// runhealthcode.dev :: loop</tspan></text>
+    <text x="12" y="33"><tspan class="kw">import</tspan> { hr, vo2 } <tspan class="kw">from</tspan> <tspan class="str">'health'</tspan>;</text>
+    <text x="12" y="48"><tspan class="kw">const</tspan> run = <tspan class="kw">await</tspan> <tspan class="fn">track</tspan>({ z: <tspan class="num">2</tspan> });</text>
+    <text x="12" y="63"><tspan class="kw">if</tspan> (run.stamina &gt; <tspan class="num">0.75</tspan>) {</text>
+    <text x="22" y="78">pace.<tspan class="fn">adjust</tspan>(target - <tspan class="num">0.05</tspan>);</text>
+    <text x="12" y="93">} <tspan class="kw">else</tspan> {</text>
+    <text x="22" y="108">recovery.<tspan class="fn">queue</tspan>(<tspan class="str">'active'</tspan>);</text>
+    <text x="12" y="123">}</text>
+    <text x="12" y="146"><tspan class="kw">const</tspan> split = <tspan class="fn">calcPace</tspan>(<tspan class="num">5.0</tspan>, <tspan class="num">1320</tspan>);</text>
+    <text x="12" y="161"><tspan class="kw">while</tspan> (<tspan class="fn">isHealthy</tspan>(runner)) {</text>
+    <text x="22" y="176"><tspan class="kw">const</tspan> s = <tspan class="kw">await</tspan> <tspan class="fn">sample</tspan>(<tspan class="num">60</tspan>);</text>
+    <text x="22" y="191">log.<tspan class="fn">push</tspan>({ spm: s.cadence });</text>
+    <text x="22" y="206"><tspan class="kw">if</tspan> (s.bpm &gt; <tspan class="num">175</tspan>) <tspan class="fn">easeOff</tspan>();</text>
+    <text x="12" y="221">}</text>
+    <text x="12" y="244"><tspan class="kw">export const</tspan> state = <tspan class="str">'optimal'</tspan>;</text>
+    <text x="12" y="259"><tspan class="cmt">// streak: 42 days active</tspan></text>
+  </g>
+
+  
+  <g class="col c2">
+    <text x="252" y="18"><tspan class="kw">type</tspan> <tspan class="fn">Vitals</tspan> = {</text>
+    <text x="262" y="33">bpm: <tspan class="fn">number</tspan>;</text>
+    <text x="262" y="48">hrv: <tspan class="fn">number</tspan>;</text>
+    <text x="262" y="63">spO2: <tspan class="fn">number</tspan>;</text>
+    <text x="252" y="78">};</text>
+    <text x="252" y="101"><tspan class="kw">export function</tspan> <tspan class="fn">isReady</tspan>(v: <tspan class="fn">Vitals</tspan>) {</text>
+    <text x="262" y="116"><tspan class="kw">return</tspan> v.hrv &gt;= <tspan class="num">62</tspan> &amp;&amp; v.bpm &lt; <tspan class="num">58</tspan>;</text>
+    <text x="252" y="131">}</text>
+    <text x="252" y="154"><tspan class="cmt">// baseline calibrated @ 60Hz</tspan></text>
+    <text x="252" y="169"><tspan class="kw">const</tspan> zones = [<tspan class="num">128</tspan>, <tspan class="num">145</tspan>, <tspan class="num">162</tspan>, <tspan class="num">178</tspan>];</text>
+    <text x="252" y="184"><tspan class="kw">const</tspan> z = <tspan class="fn">getZone</tspan>(latest.bpm, zones);</text>
+    <text x="252" y="199"><tspan class="kw">if</tspan> (z === <tspan class="num">2</tspan>) {</text>
+    <text x="262" y="214">aerobic.<tspan class="fn">increment</tspan>(<tspan class="num">1</tspan>);</text>
+    <text x="252" y="229">}</text>
+    <text x="252" y="252"><tspan class="fn">emit</tspan>(<tspan class="str">'vitals:ok'</tspan>, { z, ok: <tspan class="kw">true</tspan> });</text>
+  </g>
+
+  
+  <g class="col c3">
+    <text x="492" y="18"><tspan class="cmt">// telemetry stream pipeline</tspan></text>
+    <text x="492" y="33"><tspan class="kw">async function</tspan> <tspan class="fn">syncSplit</tspan>(km: <tspan class="fn">number</tspan>) {</text>
+    <text x="502" y="48"><tspan class="kw">const</tspan> load = <tspan class="fn">strain</tspan>(km, <tspan class="num">1.15</tspan>);</text>
+    <text x="502" y="63"><tspan class="kw">return</tspan> { km, load, tag: <tspan class="str">'tempo'</tspan> };</text>
+    <text x="492" y="78">}</text>
+    <text x="492" y="101"><tspan class="kw">const</tspan> buf = <tspan class="kw">new</tspan> <tspan class="fn">RingBuffer</tspan>(<tspan class="num">256</tspan>);</text>
+    <text x="492" y="116">sensor.<tspan class="fn">on</tspan>(<tspan class="str">'stride'</tspan>, (e) =&gt; {</text>
+    <text x="502" y="131">buf.<tspan class="fn">write</tspan>(e.gct, e.oscillation);</text>
+    <text x="502" y="146"><tspan class="kw">if</tspan> (buf.size % <tspan class="num">64</tspan> === <tspan class="num">0</tspan>) {</text>
+    <text x="512" y="161"><tspan class="fn">flush</tspan>(buf.<tspan class="fn">drain</tspan>());</text>
+    <text x="502" y="176">}</text>
+    <text x="492" y="191">});</text>
+    <text x="492" y="214"><tspan class="kw">const</tspan> vo2 = <tspan class="fn">estimateVo2</tspan>(<tspan class="num">19.4</tspan>, <tspan class="num">182</tspan>);</text>
+    <text x="492" y="229"><tspan class="kw">await</tspan> <tspan class="fn">hydrate</tspan>({ ml: <tspan class="num">250</tspan>, na: <tspan class="num">300</tspan> });</text>
+    <text x="492" y="252"><tspan class="cmt">// next interval in 00:45</tspan></text>
+  </g>
+
+  
+  <g class="col c4">
+    <text x="732" y="18"><tspan class="kw">interface</tspan> <tspan class="fn">RunConfig</tspan> {</text>
+    <text x="742" y="33">surface: <tspan class="str">'road'</tspan> | <tspan class="str">'trail'</tspan>;</text>
+    <text x="742" y="48">targetSpm: <tspan class="fn">number</tspan>;</text>
+    <text x="742" y="63">negativeSplit: <tspan class="fn">boolean</tspan>;</text>
+    <text x="732" y="78">}</text>
+    <text x="732" y="101"><tspan class="kw">const</tspan> cfg: <tspan class="fn">RunConfig</tspan> = {</text>
+    <text x="742" y="116">surface: <tspan class="str">'trail'</tspan>,</text>
+    <text x="742" y="131">targetSpm: <tspan class="num">178</tspan>,</text>
+    <text x="742" y="146">negativeSplit: <tspan class="kw">true</tspan>,</text>
+    <text x="732" y="161">};</text>
+    <text x="732" y="184"><tspan class="cmt">// recovery window check</tspan></text>
+    <text x="732" y="199"><tspan class="kw">const</tspan> sleep = <tspan class="fn">getSleepHours</tspan>();</text>
+    <text x="732" y="214"><tspan class="kw">const</tspan> boost = sleep &gt;= <tspan class="num">7.5</tspan> ? <tspan class="num">1.1</tspan> : <tspan class="num">0.9</tspan>;</text>
+    <text x="732" y="229"><tspan class="fn">schedule</tspan>(cfg, { factor: boost });</text>
+    <text x="732" y="252"><tspan class="kw">export default</tspan> { version: <tspan class="str">'2.4.0'</tspan> };</text>
+  </g>
+</svg>

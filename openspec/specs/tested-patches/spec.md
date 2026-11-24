@@ -17,7 +17,7 @@ Before retaining a Patch the engine SHALL reconcile Baseline and final test inve
 #### Scenario: Test setup lives outside a test directory
 
 - **WHEN** a proposed source edit targets a configured setup module or a helper used only by tests
-- **THEN** the engine rejects the edit using the pinned repository’s test configuration and imports. Unresolved setup leaves the source edit unverified. A Vite or Vitest configuration may compute settings that cannot name setup modules, such as plugins. Its local imports stay protected and its path aliases must be readable without running them.
+- **THEN** the engine rejects the edit using the inspected repository’s test configuration and imports. Unresolved setup leaves the source edit unverified. A Vite or Vitest configuration may compute settings that cannot name setup modules, such as plugins. Its local imports stay protected and its path aliases must be readable without running them.
 
 ### Requirement: Review edits to existing tests
 
@@ -60,7 +60,7 @@ The engine SHALL reconstruct the proposed tree from the tested base and recheck 
 #### Scenario: A confirmed install failure needs a repair
 
 - **WHEN** an Install Check fails twice with complete, comparable installation observations
-- **THEN** the supervisor restores the pinned tree, writes the intended version to each declaring manifest, and tries to resolve the lockfile without lifecycle scripts before starting the repair. An unresolved lockfile permits diagnosis and prevents Patch publication until a committed dependency change resolves the lockfile with the target version in every declaring workspace. An incomplete observation prevents the attempt. Manifest edits change only the affected values and keep the file’s formatting. Project reads during patch verification use the verification deadline.
+- **THEN** the supervisor restores the inspected tree, writes the intended version to each declaring manifest, and tries to resolve the lockfile without lifecycle scripts before starting the repair. An unresolved lockfile permits diagnosis and prevents Patch publication until a committed dependency change resolves the lockfile with the target version in every declaring workspace. An incomplete observation prevents the attempt. Manifest edits change only the affected values and keep the file’s formatting. Project reads during patch verification use the verification deadline.
 
 #### Scenario: Declared dependencies must move with the target
 
@@ -84,7 +84,7 @@ The engine SHALL commit inside the sandbox and export each accepted series with 
 #### Scenario: An upgrade and adoption are both accepted
 
 - **WHEN** an upgrade needs one new dependency and a code fix and later gains an accepted adoption
-- **THEN** the first mailbox replays in the declared order at the pinned repository commit and the feature mailbox replays on top to the tested feature tree.
+- **THEN** the first mailbox replays in the declared order at the inspected repository commit and the feature mailbox replays on top to the tested feature tree.
 
 ### Requirement: Return instructions for the consumer's coding agent
 

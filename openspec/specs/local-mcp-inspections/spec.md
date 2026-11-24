@@ -125,7 +125,7 @@ The MCP server SHALL save completed Inspection Reports with their exact Patch ar
 
 The MCP SHALL accept a repository URL in `list_upgrades` and return release features and an upgrade menu ID. A subsequent `get_upgrade` call SHALL return the selected version’s verified patch or recorded checks and reason. When the client requests progress, both tools SHALL forward ordered inspection, step and sandbox events during execution.
 
-#### Scenario: Browse a saved discovery result
+#### Scenario: Browse a saved upgrade menu
 
 - **WHEN** the client uses `discover_upgrades` to inspect the lockfile and registry before installation or model calls, then reopens the upgrade menu with `list_upgrades`
 - **THEN** the upgrade menu groups eligible targets by dependency, supports name search, sorts by minor availability, name or declaring workspace count, and can filter to targets with a verified local upgrade patch.

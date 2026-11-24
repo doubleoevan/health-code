@@ -142,7 +142,7 @@ test("only inventory readers receive the completed read-only snapshot", () => {
 	assert.ok(tests.argv.includes("capture-tests"))
 	assert.equal(tests.argv.includes("/inspection-inventory"), false)
 
-	// verify that only the integrity reader receives the read-only inventory
+	// verify that only the patch verification reader receives the read-only inventory
 	assert.equal(args([...base, "integrity", "0"], tests.capture).maxOutputBytes, 1024 * 1024)
 	assert.equal(args([...base, "integrity", "0"]).maxOutputBytes, undefined)
 	assert.equal(args([...base, "lifecycle"]).maxOutputBytes, 1024 * 1024)

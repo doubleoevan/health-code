@@ -1,4 +1,4 @@
-import { toPinnedUpgradeKey, type Upgrade, type UpgradeFeatures } from "health-code"
+import { toUpgradeTargetKey, type Upgrade, type UpgradeFeatures } from "health-code"
 import { AdmissionError } from "./recordAdmissions.ts"
 
 export class ReleaseFeatureCache {
@@ -7,7 +7,7 @@ export class ReleaseFeatureCache {
 	constructor(private readonly now: () => number = Date.now) {}
 
 	async read(target: Upgrade, load: (target: Upgrade) => Promise<UpgradeFeatures>): Promise<UpgradeFeatures> {
-		const key = toPinnedUpgradeKey(target)
+		const key = toUpgradeTargetKey(target)
 		const saved = this.saved.get(key)
 		if (saved && saved.expires > this.now()) {
 			return saved.features

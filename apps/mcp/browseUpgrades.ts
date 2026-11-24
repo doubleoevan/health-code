@@ -19,7 +19,7 @@ const target = z.object({
 	to: z.string(),
 	kind: z.enum(["minor", "major"]),
 })
-const discovery = z.object({ eligible: z.array(target), registryLookupIssue: z.string().optional() })
+const menuSelection = z.object({ eligible: z.array(target), registryLookupIssue: z.string().optional() })
 export const selection = z.object({
 	upgradeMenuId: inspectionId.optional().describe("The upgradeMenuId returned by list_upgrades."),
 	menuId: inspectionId.optional().describe("Deprecated alias for upgradeMenuId."),
@@ -88,7 +88,7 @@ export class UpgradeMenus {
 		signal?: AbortSignal,
 	): Promise<z.infer<typeof upgradeMenuOutput>> {
 		const report = await this.store.load(query.upgradeMenuId)
-		const parsed = discovery.safeParse(report.selection)
+		const parsed = menuSelection.safeParse(report.selection)
 		if (!parsed.success) {
 			throw new UserError("This report has no upgrade list. Call list_upgrades with the repository URL.")
 		}
@@ -156,8 +156,8 @@ export class UpgradeMenus {
 	}
 
 	private target(report: SavedReport, choice: z.infer<typeof selection>): Upgrade {
-		const candidates = discovery.safeParse(report.selection).data?.eligible ?? []
-		const target = candidates.find((item) => item.dependency === choice.dependency && item.to === choice.to)
+		const targets = menuSelection.safeParse(report.selection).data?.eligible ?? []
+		const target = targets.find((item) => item.dependency === choice.dependency && item.to === choice.to)
 		if (!target) {
 			throw new UserError("Choose a dependency and target version from this repository’s upgrade menu.")
 		}

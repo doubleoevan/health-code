@@ -60,7 +60,7 @@ export async function applyDecision({
 		throw new Error("Edits to test support files require independently comparable assertions")
 	}
 
-	// apply source edits with the pinned test harness protected
+	// apply source edits with the inspected test harness protected
 	for (const [file, contents] of sources) {
 		await workspace(evidence, { kind: "edit", file, contents, protectTests: [...testFiles] })
 	}
@@ -118,7 +118,7 @@ async function proveBehavior({
 				caseMatchesTitle(test.name, name),
 		)
 
-	// find the release evidence named by the model
+	// find the release notes named by the model
 	const note = evidence.releaseNotes?.find(
 		(note) =>
 			behaviorChange &&
@@ -130,7 +130,7 @@ async function proveBehavior({
 	const original = await workspace(evidence, { kind: "read", file, revision: inspectionReport.repository.commit })
 	const symbol = behaviorChange?.symbol
 
-	// require the old source and release evidence to support the change
+	// require the old source and release notes to support the change
 	if (
 		!state.bumpTip ||
 		!hasCase(baselinePatchVerificationInputs, file, name, "passed") ||

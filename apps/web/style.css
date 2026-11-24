@@ -30,6 +30,86 @@
 body {
 	margin: 0;
 }
+
+/* repeat code artwork behind the page */
+body::before,
+main > *::before,
+.mast > :not(a)::before {
+	content: "";
+	position: fixed;
+	inset: 0;
+	z-index: -1;
+	pointer-events: none;
+}
+body::before {
+	background: url("/assets/code-background.svg") top center;
+}
+
+/* keep the wide blur from scrolling the page sideways */
+:has(> main) {
+	overflow-x: clip;
+}
+
+/* blur the artwork around each page section, dissolving on every side */
+main > * {
+	--blur-edge: clamp(1.25rem, 5vw, 5rem);
+	--blur-mask: #000 50%, rgb(0 0 0 / 80%) 64%, rgb(0 0 0 / 30%) 83%, transparent;
+	position: relative;
+}
+main > *::before,
+.mast > :not(a)::before {
+	background: color-mix(in srgb, var(--paper) 72%, transparent);
+	backdrop-filter: blur(32px);
+}
+main > *::before {
+	position: absolute;
+	inset: -5rem calc(-1 * var(--blur-edge));
+
+	/* fade four rounded corners, the top and bottom edges and the full-width middle */
+	--corner: var(--blur-edge) 5rem no-repeat;
+	--edge: calc(100% - 2 * var(--blur-edge)) 5rem no-repeat;
+	mask:
+		radial-gradient(farthest-side at bottom right, #000, transparent) top left / var(--corner),
+		radial-gradient(farthest-side at bottom left, #000, transparent) top right / var(--corner),
+		radial-gradient(farthest-side at top right, #000, transparent) bottom left / var(--corner),
+		radial-gradient(farthest-side at top left, #000, transparent) bottom right / var(--corner),
+		linear-gradient(to top, #000, transparent) top / var(--edge),
+		linear-gradient(#000, transparent) bottom / var(--edge),
+		linear-gradient(to right, transparent, #000 var(--blur-edge) calc(100% - var(--blur-edge)), transparent) center /
+		100% calc(100% - 10rem) no-repeat;
+}
+
+/* fit the blur closely above each page title and below the upgrade menu list */
+main > :is(.home, .inspection-heading)::before {
+	inset-block-start: calc(clamp(3rem, 10vh, 8rem) - 4.75rem);
+}
+main > .home::before {
+	inset-block-end: calc(clamp(3rem, 10vh, 8rem) - 4.75rem);
+}
+
+/* fit an oval blur closely around the logo, the links and each header control */
+.mast > :not(a) {
+	position: relative;
+}
+.mast > :not(a)::before,
+main > .mast::before {
+	position: absolute;
+	inset: -2.5rem -6.5rem;
+	mask: radial-gradient(closest-side, var(--blur-mask));
+}
+
+/* draw the logo's oval outside its link. the hover glow traces the link's contents */
+main > .mast::before {
+	inset: -1.15rem auto auto -6.5rem;
+	width: 23rem;
+	height: 7.5rem;
+}
+
+/* round the blur around the home page heading */
+main > .landing::before {
+	inset: min(-30%, -14rem) -65%;
+	mask: radial-gradient(closest-side, var(--blur-mask));
+}
 :where(p, ul, ol, dl, blockquote, h4) {
 	margin-block: var(--block-gap);
 }
@@ -347,6 +427,9 @@ aside ul {
 	border-bottom: 1px solid var(--rule);
 	padding: 0.5rem;
 }
+.timeline li:last-child {
+	border-bottom: 0;
+}
 .control,
 .positive {
 	color: var(--accent);
@@ -398,6 +481,9 @@ pre {
 	}
 	.landing {
 		max-width: 80rem;
+	}
+	main > .landing::before {
+		inset: -38% calc(50% - 56rem);
 	}
 	.landing h1 {
 		max-width: 100%;

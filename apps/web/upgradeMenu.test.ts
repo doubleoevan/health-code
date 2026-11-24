@@ -4,7 +4,7 @@ import { publishReport } from "./publishReport.ts"
 import { replayRepositoryUrl as repositoryUrl } from "./report.ts"
 import { InspectionStore } from "./storeInspections.ts"
 
-test("browse a pinned upgrade menu, choose one release and reopen its licensed patch", async () => {
+test("browse an inspected upgrade menu, choose one release and reopen its licensed patch", async () => {
 	const store = new InspectionStore(":memory:")
 	const app = createTestSite(store)
 	const submit = (body: Record<string, unknown>): Promise<Response> =>
@@ -16,14 +16,14 @@ test("browse a pinned upgrade menu, choose one release and reopen its licensed p
 			}),
 		)
 	try {
-		// Publish the discovery-only fixture through the durable submission path.
+		// Publish the upgrade menu fixture through the durable submission path.
 		const upgradeMenu = await (await submit({ action: "discover" })).json()
 		expect(await (await app.request(`/r/${upgradeMenu.id}`)).text()).toContain(
 			'<h1 class="shimmer">Finding upgrades...</h1>',
 		)
 		expect(store.choice(upgradeMenu.id)).toEqual({ mode: "listUpgrades" })
-		const discovery = await replay.inspect(repositoryUrl, () => {}, { mode: "listUpgrades" })
-		store.finish(upgradeMenu.id, publishReport(discovery, "MIT"))
+		const menuReport = await replay.inspect(repositoryUrl, () => {}, { mode: "listUpgrades" })
+		store.finish(upgradeMenu.id, publishReport(menuReport, "MIT"))
 		const html = await (await app.request(`/r/${upgradeMenu.id}`)).text()
 		for (const label of ["Test an upgrade", "Search dependencies", "Most workspaces first", "Test upgrade"]) {
 			expect(html).toContain(label)
@@ -48,7 +48,7 @@ test("browse a pinned upgrade menu, choose one release and reopen its licensed p
 		expect(selectedPage).toContain('<h1 class="shimmer">Testing widget upgrade...</h1>')
 		expect(selectedPage).toContain(" · widget 1.2.0 → 1.3.0")
 		expect(store.choice(result.id)?.upgrade).toEqual({ dependency: "widget", to: "1.3.0", from: { ".": "1.2.0" } })
-		expect(store.choice(result.id)?.revision).toBe(discovery.report.repository.commit)
+		expect(store.choice(result.id)?.revision).toBe(menuReport.report.repository.commit)
 
 		// Reopen the verified patch without queuing a second test.
 		const checked = await replay.inspect(repositoryUrl, () => {}, store.choice(result.id))
@@ -76,15 +76,15 @@ test("dependency pages sort and filter the whole upgrade menu before loading vis
 	const store = new InspectionStore(":memory:")
 	try {
 		const id = store.enqueue(repositoryUrl, { mode: "listUpgrades" })
-		const discovery = await replay.inspect(repositoryUrl, () => {}, { mode: "listUpgrades" })
-		const example = discovery.report.selection.eligible[0]!
-		discovery.report.selection.eligible = ["echo", "alpha", "delta", "charlie", "bravo", "foxtrot"].map(
+		const menuReport = await replay.inspect(repositoryUrl, () => {}, { mode: "listUpgrades" })
+		const example = menuReport.report.selection.eligible[0]!
+		menuReport.report.selection.eligible = ["echo", "alpha", "delta", "charlie", "bravo", "foxtrot"].map(
 			(dependency) => ({
 				...example,
 				dependency,
 			}),
 		)
-		store.finish(id, publishReport(discovery, "MIT"))
+		store.finish(id, publishReport(menuReport, "MIT"))
 
 		// Check both the rendered choices and the hydrated upgrade menu.
 		const app = createTestSite(store)
@@ -140,13 +140,13 @@ test("an incomplete registry lookup explains why the upgrade menu is empty", asy
 		const id = store.enqueue(repositoryUrl)
 		const output = await replay.inspect(repositoryUrl, () => {}, { mode: "listUpgrades" })
 
-		// Preserve the lookup failure on the published discovery result.
+		// Preserve the lookup failure on the published upgrade menu.
 		output.report.selection.eligible = []
 		const reason = "Couldn’t list available upgrades: registry lookup timed out after 60s."
 		output.report.selection.registryLookupIssue = reason
 		store.finish(id, publishReport(output, "MIT"))
 
-		// Distinguish incomplete discovery from a successful lookup with no upgrades.
+		// Distinguish an incomplete lookup from a successful lookup with no upgrades.
 		const html = await (await createTestSite(store).request(`/r/${id}`)).text()
 		expect(html).toContain(reason)
 		expect(html).not.toContain("No eligible upgrades were found.")

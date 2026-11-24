@@ -10,7 +10,7 @@ The legacy Bun fixture stores its exact lockfile bytes as Base64. The adapter te
 
 `agentControls.test.ts` checks budget admission, prompt isolation, test inventory and credential binding with fake inputs. `liveCredential.ts` performs the opt-in proof using a stored credential name.
 
-`liveCredential.ts` uses the named stored Anthropic credential for one authenticated token. Run it separately with `bun run test:credential`. The offline suite covers reservations, prompt boundaries, release intervals, test edits and the fake credential lifecycle. `guestModel.test.ts` exercises both wire protocols. `usageMap.test.ts` checks pinned usage and installed bytes. `verifyPatches.test.ts` checks verdicts and ranked adoption with the in-memory project and simulated package manager in `replayPatch.ts`. `patchHistory.test.ts` replays mailboxes with Git.
+`liveCredential.ts` uses the named stored Anthropic credential for one authenticated token. Run it separately with `bun run test:credential`. The offline suite covers reservations, prompt boundaries, release intervals, test edits and the fake credential lifecycle. `guestModel.test.ts` exercises both wire protocols. `usageMap.test.ts` checks inspected usage and installed bytes. `verifyPatches.test.ts` checks verdicts and ranked adoption with the in-memory project and simulated package manager in `replayPatch.ts`. `patchHistory.test.ts` replays mailboxes with Git.
 
 `testInventory.test.ts` checks suite discovery and repeated case identities during final patch verification. `protectTestSupport.test.ts` covers protected test support files and mock edits.
 

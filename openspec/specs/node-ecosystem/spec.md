@@ -12,7 +12,7 @@ The Node Ecosystem Adapter SHALL detect Bun, pnpm, Yarn, or npm from the root lo
 #### Scenario: Package manager and workspace discovery
 
 - **WHEN** a repository contains `bun.lock`, `bun.lockb`, `pnpm-lock.yaml`, `yarn.lock`, or `package-lock.json` and defines workspaces
-- **THEN** the adapter identifies the matching manager and enumerates only workspace manifests inside the pinned checkout, including pnpm workspace patterns
+- **THEN** the adapter identifies the matching manager and enumerates only workspace manifests inside the inspected checkout, including pnpm workspace patterns
 
 #### Scenario: Competing lockfiles
 
@@ -83,11 +83,11 @@ The adapter SHALL derive a usage map in the sandbox identifying importing files,
 #### Scenario: Renamed import in a workspace
 
 - **WHEN** workspace code calls an export through an import alias
-- **THEN** the usage map identifies the dependency export and the pinned call site, even when the local name differs.
+- **THEN** the usage map identifies the dependency export and the inspected call site, even when the local name differs.
 
 #### Scenario: Failure points only into generated upgrade output
 
-- **WHEN** no line in the pinned Repository can be verified for a diagnostic
+- **WHEN** no line in the inspected Repository can be verified for a diagnostic
 - **THEN** the report retains the diagnostic and explains the missing locator.
 
 ### Requirement: Compare installed dependency sizes

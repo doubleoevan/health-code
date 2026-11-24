@@ -36,7 +36,7 @@ export async function providerContract(provider: SandboxProvider): Promise<void>
 	const name = `health-code-${randomUUID()}`
 	let allocated = { id: name }
 	try {
-		// prepare the pinned checkout and restrict egress to the registry
+		// prepare the inspected checkout and restrict egress to the registry
 		await provider.checkAvailability({ timeoutMs: 10000 })
 		allocated = await provider.createSandbox(name, options)
 		assert.equal(await provider.prepareRepository(allocated, fixtureUrl, options), fixtureCommit)

@@ -52,7 +52,7 @@ export class LaunchService {
 			)
 		}
 
-		// Separate discovery and each target from automatic inspections in the cache.
+		// Separate the upgrade menu and each target from automatic inspections in the cache.
 		const scope = [
 			head.repositoryId,
 			head.revision,

@@ -82,7 +82,7 @@ function resolveChoice(input: Submission, inspections: Inspections): InspectionC
 		throw new SiteError("Choose an upgrade from the upgrade menu.")
 	}
 
-	// Resolve the exact version against the server's pinned discovery result.
+	// Resolve the exact version against the server's saved upgrade menu.
 	const report = inspections.store.snapshot(upgradeMenuId)?.card
 	const target = report?.upgradeMenu?.find((item) => item.dependency === input.dependency && item.to === input.to)
 	if (

@@ -96,7 +96,7 @@ test("upgrade and feature mailboxes replay at their exact parent trees", { timeo
 		assert.match(String(upgrade), /\[PATCH 1\/2\] chore: bump dependency/)
 		assert.match(String(adoption), /\[PATCH\] feat: adopt feature/)
 
-		// check the pinned file contents and reject a symlink edit
+		// check the inspected file contents and reject a symlink edit
 		assert.equal(managePatch(root, { kind: "read", file: "index.ts", revision: base }), "export const one = 1\n")
 		symlinkSync(join(source, "index.ts"), join(work, "link"))
 		assert.throws(() => managePatch(root, { kind: "edit", file: "link", contents: "bad" }))

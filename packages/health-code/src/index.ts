@@ -119,8 +119,8 @@ export { toRepositoryUrl } from "./toRepositoryUrl.ts"
 export {
 	type DependencyChoice,
 	dependenciesPerPage,
-	toPinnedUpgradeKey,
 	toUpgradeMenu,
+	toUpgradeTargetKey,
 	type UpgradeMenuOrder,
 	type UpgradeMenuOrder as MenuOrder,
 	type UpgradeMenuTarget,

@@ -23,7 +23,7 @@ An inspection SHALL use the production provider with `RUNTA_TOKEN` when the call
 
 ### Requirement: Isolate setup from repository execution
 
-The provider SHALL allow trusted provisioning and acquisition of the pinned source during setup. Before executing any repository-controlled configuration, install, test or script, it SHALL replace and confirm the complete network policy with trusted package-registry hostnames only. Repository commands SHALL have no application secrets, real control-plane credentials or usable model binding. Only isolated trusted agent inference may temporarily use the separately verified model-host policy.
+The provider SHALL allow trusted provisioning and acquisition of the inspected source during setup. Before executing any repository-controlled configuration, install, test or script, it SHALL replace and confirm the complete network policy with trusted package-registry hostnames only. Repository commands SHALL have no application secrets, real control-plane credentials or usable model binding. Only isolated trusted agent inference may temporarily use the separately verified model-host policy.
 
 #### Scenario: Initial network access ends
 
@@ -109,7 +109,7 @@ A Sandbox Provider MAY offer a Model Request Sandbox. The capability SHALL send 
 #### Scenario: A request uses the developer’s stored credential
 
 - **WHEN** the model request sandbox sends a model request
-- **THEN** the provider has verified the effective egress policy and exact HTTPS destination, path, header and stored-secret reference. Only the gateway supplies the real key. The local MCP, both runtimes, diagnostics and Inspection Report never receive it.
+- **THEN** the provider has verified the effective egress policy and exact HTTPS destination, path, header and stored-secret reference. Only the gateway supplies the model key. The local MCP, both runtimes, diagnostics and Inspection Report never receive it.
 
 #### Scenario: Two roles select different hosts
 

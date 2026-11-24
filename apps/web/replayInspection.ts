@@ -24,7 +24,7 @@ export function createReplaySource(
 			return { repositoryId: "fixture", revision: report.repository.commit, sizeKiB: 1 }
 		},
 		async features(target): Promise<UpgradeFeatures> {
-			// Use the recorded release evidence for this exact replay target.
+			// Use the recorded release notes for this exact replay target.
 			const report: InspectionReportV2 = await Bun.file(recording).json()
 			const upgrade = report.upgrades.find((item) => item.dependency === target.dependency && item.to === target.to)
 			const source = upgrade?.releaseSummary.sources[0]
@@ -60,7 +60,7 @@ export function createReplaySource(
 					runtimes: [],
 				}
 
-				// Replay setup and registry discovery through sandbox teardown.
+				// Replay setup and the registry lookup through sandbox teardown.
 				const boundary = report.timeline.findIndex(
 					(event) => event.type === "step.finished" && event.summary === "registry",
 				)

@@ -59,7 +59,7 @@ Each accepted inspection SHALL emit ordered, JSON-serializable events for inspec
 
 ### Requirement: Versioned evidence
 
-An Inspection Report SHALL include a schema version, repository, pinned commit, package manager or detection reason, Baseline, candidate selection, per-upgrade evidence and Check Results, and the full emitted timeline. Each upgrade SHALL identify its dependency, source versions, target version, install findings, and typecheck and test results. Failed results SHALL carry evidence and untested results SHALL carry a reason.
+An Inspection Report SHALL include a schema version, repository, inspected commit, package manager or detection reason, Baseline, upgrade selection, per-upgrade evidence and Check Results, and the full emitted timeline. Each upgrade SHALL identify its dependency, source versions, target version, install findings, and typecheck and test results. Failed results SHALL carry evidence and untested results SHALL carry a reason.
 
 #### Scenario: Store and replay
 
@@ -153,7 +153,7 @@ An Inspection SHALL budget for both sandboxes, model requests and cleanup. Its v
 
 ### Requirement: Inspect the caller’s resolved commit
 
-Callers SHALL be able to supply an optional full Git commit SHA to the public Inspection options. The library SHALL verify that checkout matches before running project code and return the verified SHA in its Inspection Report. Omitting this option SHALL preserve normal pinned checkout.
+Callers SHALL be able to supply an optional full Git commit SHA to the public Inspection options. The library SHALL verify that checkout matches before running project code and return the verified SHA in its Inspection Report. Omitting this option SHALL preserve normal inspected checkout.
 
 #### Scenario: Requested revision unavailable
 

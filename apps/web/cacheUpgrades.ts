@@ -5,7 +5,7 @@ import type {
 	ModelRequestSandboxInspectionReport,
 	UpgradeReportV2,
 } from "health-code"
-import { toInspectionMode, toPinnedUpgradeKey } from "health-code"
+import { toInspectionMode, toUpgradeTargetKey } from "health-code"
 
 import type { PublishedReport } from "./report.ts"
 
@@ -35,7 +35,7 @@ export class UpgradeCache {
 		const scope = this.scope(id) ?? JSON.stringify(report.repository)
 		const ready = this.patches(scope)
 		for (const target of report.upgradeMenu ?? []) {
-			target.patch = ready.get(toPinnedUpgradeKey(target))
+			target.patch = ready.get(toUpgradeTargetKey(target))
 		}
 	}
 
@@ -43,7 +43,7 @@ export class UpgradeCache {
 		if (!upgrade || typeof upgrade.from === "string") {
 			return undefined
 		}
-		const target = toPinnedUpgradeKey({ dependency: upgrade.dependency, from: upgrade.from, to: upgrade.to })
+		const target = toUpgradeTargetKey({ dependency: upgrade.dependency, from: upgrade.from, to: upgrade.to })
 		return this.patches(scope, target).get(target)?.inspectionId
 	}
 
@@ -79,7 +79,7 @@ export class UpgradeCache {
 			}
 
 			// Index the source upgrade without copying patch bytes.
-			const target = toPinnedUpgradeKey(upgrade)
+			const target = toUpgradeTargetKey(upgrade)
 			const publishesPatch = published.upgrades[position]?.patches.some((patch) => patch.role === "upgrade")
 			if (publishesPatch || !this.patches(scope, target).has(target)) {
 				insert.run(scope, target, id, position)
@@ -101,7 +101,7 @@ export class UpgradeCache {
 				FROM cached_upgrades c JOIN source_reports s ON s.id=c.id
 				WHERE scope=? AND target=? AND json_extract(s.payload,'$.repository.commit')=?
 				AND json_extract(s.payload,'$.repository.url')=?`)
-				.get(scope, toPinnedUpgradeKey(upgrade), repository.commit, repository.url)
+				.get(scope, toUpgradeTargetKey(upgrade), repository.commit, repository.url)
 
 			// Attach the original public report ID only to exact matches.
 			if (!row) {
@@ -132,11 +132,11 @@ export function isReusableReport(report: InspectionReport | ModelRequestSandboxI
 			: report.upgrades.some((upgrade) => upgrade.result.status === "untested")
 
 	// Release only the lookup key after a partial inspection.
-	const incompleteDiscovery = "reason" in report.packageManager || Boolean(report.selection.registryLookupIssue)
+	const incompleteUpgradeMenu = "reason" in report.packageManager || Boolean(report.selection.registryLookupIssue)
 	const incompleteSelection = report.selection.limit === 0 || report.selection.skipped.includes("inspection-deadline")
 	const incompleteUpgrade = untestedUpgrade || report.upgrades.some((upgrade) => upgrade.coverage)
 
 	// Preserve accounting and immutable reports when another submission must retry.
 	const partial = report.stoppedReason || incompleteUpgrade || incompleteBaseline
-	return !(partial || incompleteDiscovery || incompleteSelection)
+	return !(partial || incompleteUpgradeMenu || incompleteSelection)
 }

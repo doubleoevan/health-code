@@ -9,7 +9,7 @@ function getInstallVerificationIssue(observation: Observation): string | undefin
 }
 
 /**
- * Compares the candidate install and repeated checks against the pinned Baseline.
+ * Compares the upgrade install and repeated checks against the Baseline.
  */
 export async function inspectUpgrade({
 	adapter,
@@ -28,7 +28,7 @@ export async function inspectUpgrade({
 		report.typecheck = untested("baseline-typecheck-unavailable")
 	}
 
-	// start each installation check from the pinned project
+	// start each installation check from the inspected project
 	await adapter.resetProject()
 	const initialInstall = await adapter.bumpDependency(report)
 	report.install = initialInstall.check

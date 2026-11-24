@@ -23,7 +23,7 @@ export async function readUpgradeMenuFeatures(
 		options.signal?.throwIfAborted()
 		const page = choices.slice(index, index + 4)
 
-		// Share the remaining discovery deadline across each group of releases.
+		// Share the remaining upgrade menu deadline across each group of releases.
 		const remaining =
 			options.deadline === undefined ? undefined : Math.max(0, Math.floor(options.deadline - Date.now()))
 		const timeout = remaining === undefined ? undefined : AbortSignal.timeout(remaining)
@@ -53,7 +53,7 @@ export async function readUpgradeMenuFeatures(
 }
 
 /**
- * Lists eligible dependency versions and their documented features at a pinned commit.
+ * Lists eligible dependency versions and their documented features at one commit.
  */
 export async function listUpgrades({
 	order,
@@ -68,7 +68,7 @@ export async function listUpgrades({
 	skipped: string[]
 	issue?: string
 }> {
-	// Release the discovery sandbox before fetching public release notes.
+	// Release the sandbox before fetching public release notes.
 	const deadline = Date.now() + (options.limits?.maxDurationMs ?? defaultDurationMs)
 	const report = await inspectRepository({ ...options, mode: "listUpgrades" })
 	const choices = toUpgradeMenu(report.selection.eligible, { order, search })
@@ -89,7 +89,7 @@ export async function listUpgrades({
 type SelectedUpgrade<Options> = Omit<Options, "mode" | "discoveryOnly"> & { revision: string; upgrade: Upgrade }
 
 /**
- * Tests one upgrade menu target at its discovered commit and returns its report and verified patches.
+ * Tests one upgrade menu target at its inspected commit and returns its report and verified patches.
  */
 export function getUpgrade(
 	options: SelectedUpgrade<ModelRequestSandboxOptions>,
@@ -99,7 +99,7 @@ export async function getUpgrade(
 	options: SelectedUpgrade<InspectionOptionsV2> | SelectedUpgrade<ModelRequestSandboxOptions>,
 ): Promise<ModelRequestSandboxInspectionReport> {
 	if (!options.upgrade || !options.revision) {
-		throw new TypeError("Select a dependency version and its discovered commit.")
+		throw new TypeError("Select a dependency version and its inspected commit.")
 	}
 
 	if (options.limits?.maxUpgrades === 0) {

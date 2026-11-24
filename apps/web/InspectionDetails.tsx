@@ -6,7 +6,7 @@ export function InspectionDetails({ report }: { report: PublishedReport }): Reac
 	const { baseline, baselineTestFileErrors } = report
 	return (
 		<section>
-			<h2>Health inspection details</h2>
+			<h2>Inspection details</h2>
 			<table>
 				{/* baseline checks */}
 				<tbody>

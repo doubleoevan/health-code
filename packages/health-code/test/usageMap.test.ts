@@ -10,7 +10,7 @@ import type { Locator } from "../src/agentContracts.ts"
 import { verifyMatch } from "../src/rankFeatureMatches.ts"
 import { locateDiagnostics } from "../src/readUpgradeEvidence.ts"
 
-test("pinned usage distinguishes aliases, shadowed names, generated source and dynamic imports", async () => {
+test("inspected usage distinguishes aliases, shadowed names, generated source and dynamic imports", async () => {
 	const root = mkdtempSync(join(tmpdir(), "usage-fixture-"))
 	const guest = new URL("../guest/readUsage.ts", import.meta.url).href
 	const measure = (expression: string): unknown =>
@@ -38,7 +38,7 @@ test("pinned usage distinguishes aliases, shadowed names, generated source and d
 		writeFileSync(join(root, "apps/a/widget.d.ts"), 'declare module "widget/lib/a.js" {}\n')
 		writeFileSync(join(root, "gen.ts"), '// @generated\nimport "widget"')
 
-		// check the verified call sites against the pinned source
+		// check the verified call sites against the inspected source
 		const data = measure('readUsage("widget")') as {
 			usage: { file: string; symbol: string; workspace: string; line: number }[]
 			unresolved: string[]
@@ -64,7 +64,7 @@ test("pinned usage distinguishes aliases, shadowed names, generated source and d
 		symlinkSync(join(root, "apps/a"), join(root, "node_modules/workspace"))
 		assert.equal(measure("installedBytes()"), 5)
 
-		// resolve diagnostic links only for lines present in the pinned source
+		// resolve diagnostic links only for lines present in the inspected source
 		const locators: Locator[] = [
 			{ file: "my file.ts", line: 2 },
 			{ file: "missing.ts", line: 3 },
@@ -148,7 +148,7 @@ test("feature ranking uses the cited symbol and distinct verified call sites", (
 		"inferred",
 	)
 
-	// verify only call sites supported by pinned usage
+	// verify only call sites supported by inspected usage
 	assert.equal(verified?.replacement, "direct")
 	assert.deepEqual(
 		verified?.callSites?.map((loc) => loc.line),

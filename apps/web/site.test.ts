@@ -66,13 +66,13 @@ test("replay honors every timestamp delta and production refuses fixtures", asyn
 	expect(() => isReplayEnabled({ NODE_ENV: "production", HEALTH_CODE_REPLAY: "1" })).toThrow()
 })
 
-test("GitHub checks visibility and uses the pinned license on mixed-language repositories", async () => {
+test("GitHub checks visibility and uses the inspected license on mixed-language repositories", async () => {
 	for (const license of ["MIT", "AGPL-3.0", "GPL-2.0-only", "MPL-2.0", "NOASSERTION", "BUSL-1.1", null]) {
 		const request = Object.assign(
 			async (input: RequestInfo | URL) => {
 				const url = new URL(String(input))
 
-				// require the license lookup to target the pinned revision
+				// require the license lookup to target the inspected revision
 				if (url.pathname.endsWith("/license")) {
 					expect(url.searchParams.get("ref")).toBe("a".repeat(40))
 					return Response.json({ license: { spdx_id: license } })

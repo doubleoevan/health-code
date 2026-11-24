@@ -213,7 +213,7 @@ export interface EcosystemAdapter {
 	test(): Promise<CheckResult>
 }
 
-// identify the pinned repository and its baseline
+// identify the inspected repository and its baseline
 export type InspectionReport = {
 	stoppedReason?: string
 	sandboxUnavailable?: boolean

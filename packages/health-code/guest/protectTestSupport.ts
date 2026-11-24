@@ -211,7 +211,7 @@ export function protectedTestFiles(files: string[], discovered: string[], read: 
 				? posix.join(posix.dirname(file), rootDir.replace(/^<rootDir>\/?/, ""), "package.json")
 				: file
 
-		// resolve each setup module inside the pinned file set
+		// resolve each setup module inside the inspected file set
 		for (const path of setupPaths(config)) {
 			const target = resolve(base, path)
 			if (target) {
@@ -310,7 +310,7 @@ export function protectedTestFiles(files: string[], discovered: string[], read: 
 				configured.add(file)
 			}
 
-			// resolve relative and aliased imports against pinned files
+			// resolve relative and aliased imports against inspected files
 			edges.set(
 				file,
 				moduleImports(read(file)).flatMap((path) => {

@@ -18,9 +18,9 @@ flowchart LR
   Library --> Runta["Runta sandbox"]
 ```
 
-Health Code installs your project and runs its typecheck and tests at a pinned commit. It repeats those checks with the upgrade. A patch is retested in a fresh checkout.
+Health Code installs your project and runs its typecheck and tests at the inspected commit. It repeats those checks with the upgrade. A patch is retested in a fresh checkout.
 
-Runta restricts installation traffic to package registries and keeps real keys outside the sandbox. The recorded example is mocked and uses no credentials. There are no Health Code accounts or paid tiers.
+Runta restricts installation traffic to package registries and keeps model keys outside the sandbox. The recorded example is mocked and uses no credentials. There are no Health Code accounts or paid tiers.
 
 ## MCP setup
 

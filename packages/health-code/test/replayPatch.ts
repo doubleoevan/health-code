@@ -327,7 +327,7 @@ export async function replayPatch(
 		assert.deepEqual(JSON.parse(tree["package.json"] ?? "{}"), manifest)
 		assert.deepEqual(tree, { ...expected, "package.json": tree["package.json"] })
 
-		// inject an undeclared change for the integrity check
+		// inject an undeclared change for patch verification
 		restoredTip = undefined
 		if (mode === "undeclared") {
 			tree["package.json"] = JSON.stringify({
@@ -370,7 +370,7 @@ export async function replayPatch(
 		return { files: baseline.projectFilePaths, hooks, cases, testFileErrors: baseline.testFileErrors }
 	}
 
-	// assemble pinned usage and baseline integrity for patch evaluation
+	// assemble inspected usage and Baseline inputs for patch evaluation
 	const inspectionReport = { repository: { url: options.repositoryUrl, commit: base } } as InspectionReport
 	const evidence: PatchEvidence = {
 		report,

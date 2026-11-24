@@ -41,12 +41,12 @@ test("live and saved timelines show measured key counts and preserve uncounted e
 	} as const
 	for (const live of [true, false]) {
 		for (const [measurement, label] of [
-			[{ storedModelKeyCount: 1 }, "1 stored model key kept outside the sandbox"],
-			[{ storedModelKeyCount: 2 }, "2 stored model keys kept outside the sandbox"],
+			[{ storedModelKeyCount: 1 }, "1 model key kept outside the sandbox"],
+			[{ storedModelKeyCount: 2 }, "2 model keys kept outside the sandbox"],
 			[{ placeholderVariableCount: 0 }, "0 repository environment variables given placeholder values"],
 			[{ placeholderVariableCount: 1 }, "1 repository environment variable given placeholder values"],
 			[{ placeholderVariableCount: 3 }, "3 repository environment variables given placeholder values"],
-			[{}, "Real keys kept outside the sandbox"],
+			[{}, "Keys kept outside the sandbox"],
 		] as const) {
 			const events: SiteEvent[] = [{ ...event, ...measurement }]
 			const html = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live, events }))
@@ -73,4 +73,30 @@ test("the live and saved timelines label registry lookup and its partial results
 	const saved = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: false, events: [finished] }))
 	expect(saved).toContain("Find available upgrades")
 	expect(saved).toContain("Incomplete · 0.5s")
+})
+
+test("the inspection log stays hidden until it has an entry", () => {
+	const render = (events: SiteEvent[]): string =>
+		renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: true, events }))
+	const base = { version: 1 as const, inspectionId: "recorded", timestamp: new Date(0).toISOString() }
+	expect(render([])).toBe("")
+
+	// show the active step before the log has a finished entry
+	const started: SiteEvent = { ...base, sequence: 1, type: "step.started", label: "registry", stepId: "1" }
+	expect(render([started])).not.toContain("Inspection log")
+	expect(render([{ ...base, sequence: 1, type: "inspection.started" } as SiteEvent])).toContain("Inspection log")
+})
+
+test("saved steps use the current inspected wording", () => {
+	const event: SiteEvent = {
+		version: 1,
+		inspectionId: "recorded",
+		sequence: 1,
+		timestamp: new Date(0).toISOString(),
+		type: "step.started",
+		label: "Restore pinned project",
+		stepId: "1",
+	}
+	const html = renderToStaticMarkup(createElement(Timeline, { id: "recorded", live: false, events: [event] }))
+	expect(html).toContain("Restore inspected project")
 })

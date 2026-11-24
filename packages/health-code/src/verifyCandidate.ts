@@ -232,7 +232,7 @@ export async function verifyTree(evidence: PatchEvidence, state: State): Promise
 		throw new Error("Test process failed without an attributable case or file")
 	}
 
-	// compare lifecycle hooks and cases with the pinned baseline
+	// compare lifecycle hooks and cases with the Baseline
 	verifyLifecycleHooks(baselinePatchVerificationInputs.lifecycleHookSignatures, final.lifecycleHookSignatures)
 	verifyCases(baselinePatchVerificationInputs, final)
 	for (const { file, name } of state.expectedCases) {

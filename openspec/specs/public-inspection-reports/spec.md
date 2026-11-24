@@ -7,7 +7,7 @@ Give a shared link a durable record of what Health Code inspected, what Runta en
 
 ### Requirement: Durable, readable evidence
 
-Each stable Inspection Report URL SHALL show a summary, Repository, pinned commit, Baseline under “Checks before the upgrade”, and one card per Upgrade. Each card SHALL show the dependency, source and target versions, textual Verdict, plain-language changes, Code Feature Matches, Install Check findings, typecheck and deprecation evidence, size difference and available Patches. The report SHALL link supplied GitHub permalinks and identify missing evidence.
+Each stable Inspection Report URL SHALL show a summary, Repository, inspected commit, Baseline under “Checks before the upgrade”, and one card per Upgrade. Each card SHALL show the dependency, source and target versions, textual Verdict, plain-language changes, Code Feature Matches, Install Check findings, typecheck and deprecation evidence, size difference and available Patches. The report SHALL link supplied GitHub permalinks and identify missing evidence.
 
 #### Scenario: Every Verdict and sparse evidence
 
@@ -69,7 +69,7 @@ The site SHALL publish tested Patches for public Repositories when GitHub detect
 
 #### Scenario: Failed inspection of a licensed repository
 
-- **WHEN** an inspection fails after GitHub detected an OSI-approved license at its pinned commit
+- **WHEN** an inspection fails after GitHub detected an OSI-approved license at its inspected commit
 - **THEN** its recorded raw command output stays available
 
 #### Scenario: An inspection stops early without a tested patch

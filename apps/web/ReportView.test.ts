@@ -69,7 +69,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 	for (const verdict of ["Passes as is", "Fixed", "Fixed with test changes", "Can't fix", "Untested"] as const) {
 		upgrade.verdict = verdict
 		if (verdict === "Untested") {
-			upgrade.result = { status: "untested", reason: "The pinned project has no test script.", evidence: [] }
+			upgrade.result = { status: "untested", reason: "The inspected project has no test script.", evidence: [] }
 		}
 
 		// publish and render the saved report
@@ -79,11 +79,11 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 		expect((html.match(/<h2>Upgrade prompt for your coding agent<\/h2>/g) ?? []).length).toBe(1)
 		for (const expected of [
 			verdict.replace("'", "&#x27;"),
-			...(verdict === "Untested" ? ["Why this upgrade was untested", "The pinned project has no test script."] : []),
+			...(verdict === "Untested" ? ["Why this upgrade was untested", "The inspected project has no test script."] : []),
 			"<h1>Inspection complete</h1>",
 			"<p>Your 2 tested patches are ready. 1 connection blocked during install.</p>",
 			"Checks before the upgrade",
-			"<h2>Health inspection details</h2>",
+			"<h2>Inspection details</h2>",
 			"Some install activity could not be recorded. The network trace ended early.",
 			"blocked · example.org",
 			"unknown · example.net",
@@ -276,7 +276,7 @@ test("an empty report explains registry failure on the shared report page", asyn
 	expect(html).toContain("identify the first failed or skipped check")
 	expect(html).not.toContain("SHA-256: ")
 
-	// Keep the requested target in the copied prompt when discovery returned no cards.
+	// Keep the requested target in the copied prompt when the upgrade menu returned no cards.
 	const state = JSON.parse(html.match(/<script id="page-state" type="application\/json">(.*?)<\/script>/s)![1]!)
 	expect(state.snapshot.investigationPrompt).toContain(upgrade.dependency)
 
@@ -365,5 +365,25 @@ test("a partial report shows the interrupted step, skipped upgrades and reused e
 		.query("UPDATE inspections SET report=replace(report,?,?) WHERE id=?")
 		.run('"reusedFromInspectionId"', '"reusedFrom"', id)
 	expect(await (await site(store).request(`/r/${id}`)).text()).toContain('href="/r/original-proof"')
+	store.database.close()
+})
+
+test("the upgrade prompt links public commits, saved patches and the npm release", async () => {
+	const store = new InspectionStore(":memory:")
+	const id = store.enqueue(repository)
+	const { card, ...publication } = publishReport(await replay.inspect(repository, () => {}), "MIT")
+	store.finish(id, { card, ...publication })
+	const html = await (await site(store).request(`/r/${id}`)).text()
+	const prompt = /<pre tabindex="0">(.*?)<\/pre>/is.exec(html)?.[1] ?? ""
+
+	// check each destination against the published report
+	const upgrade = card.upgrades[0]
+	for (const href of [
+		`${card.repository.url}/commit/${card.repository.commit}`,
+		`/patches/${upgrade?.patches[0]?.digest}.patch`,
+		`https://www.npmjs.com/package/${upgrade?.dependency}/v/${upgrade?.to}`,
+	]) {
+		expect(prompt).toContain(`href="${href}"`)
+	}
 	store.database.close()
 })

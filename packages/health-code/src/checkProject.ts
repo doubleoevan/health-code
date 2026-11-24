@@ -72,7 +72,7 @@ export class NodeAdapter implements EcosystemAdapter {
 		private readonly sandbox: Sandbox,
 	) {}
 	async resetProject(): Promise<void> {
-		await this.context.step("setup", "Restore pinned project", (options) =>
+		await this.context.step("setup", "Restore inspected project", (options) =>
 			this.context.options.sandboxProvider.resetProject(this.sandbox, options),
 		)
 	}
@@ -117,7 +117,7 @@ export class NodeAdapter implements EcosystemAdapter {
 		}
 		const target = this.context.options.upgrade
 		if (target) {
-			// require the pinned source version in every declaring workspace
+			// require the inspected source version in every declaring workspace
 			const sources = project.sources[target.dependency] ?? {}
 			const versions = Object.values(sources)
 			const matches =
@@ -127,7 +127,7 @@ export class NodeAdapter implements EcosystemAdapter {
 
 			// Reject a stale workspace pin before scheduling an install.
 			if (!versions.length || !matches) {
-				throw new ProjectEvidenceError("Pinned dependency source version differs")
+				throw new ProjectEvidenceError("Inspected dependency source version differs")
 			}
 			const selection = selectUpgrades(
 				{ ...project, sources: { [target.dependency]: sources } },
@@ -135,16 +135,19 @@ export class NodeAdapter implements EcosystemAdapter {
 				limit,
 			)
 
-			// reject a pinned target that fails upgrade selection
+			// reject a selected target that fails upgrade selection
 			if (!selection.selected.length) {
-				throw new InspectionError("invalid-upgrade", "The pinned target must be a newer stable minor or major version")
+				throw new InspectionError(
+					"invalid-upgrade",
+					"The selected target must be a newer stable minor or major version",
+				)
 			}
 			return selection
 		}
-		return this.discoverUpgrades(project, limit)
+		return this.lookUpUpgrades(project, limit)
 	}
 
-	private async discoverUpgrades(project: Project, limit: number): Promise<InspectionReport["selection"]> {
+	private async lookUpUpgrades(project: Project, limit: number): Promise<InspectionReport["selection"]> {
 		const names = Object.keys(project.sources)
 		const seconds = Math.max(0, Math.ceil(this.context.operation("registry").timeoutMs / 1000))
 		const timeoutReason = `registry lookup timed out after ${seconds}s`

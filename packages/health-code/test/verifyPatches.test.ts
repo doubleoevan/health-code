@@ -103,40 +103,40 @@ for (const adoption of ["simplify", "decline", "no-benefit"] as const) {
 	})
 }
 test("feature adoption ranks all four categories and shares one cap across upgrades", async () => {
-	// rank one candidate from each feature category
+	// rank one upgrade from each feature category
 	const { report } = await replayPatch("passes")
-	const candidates: { report: UpgradeReportV2 }[] = (["option", "workaround", "deprecated", "dependency"] as const).map(
-		(kind, index) => ({
-			report: {
-				...report,
-				dependency: String(index),
-				featureMatches: [
-					{
-						kind,
-						feature: kind,
-						replacement: index === 0 || index === 2 ? "direct" : "inferred",
-						callSites: Array.from({ length: index + 1 }, (_, i) => ({ file: "file", line: i + 1 })),
-						source: "source",
-						location: { file: "file", line: 1 },
-						disposition: "ranked",
-					},
-				],
-			},
-		}),
-	)
+	const rankedUpgrades: { report: UpgradeReportV2 }[] = (
+		["option", "workaround", "deprecated", "dependency"] as const
+	).map((kind, index) => ({
+		report: {
+			...report,
+			dependency: String(index),
+			featureMatches: [
+				{
+					kind,
+					feature: kind,
+					replacement: index === 0 || index === 2 ? "direct" : "inferred",
+					callSites: Array.from({ length: index + 1 }, (_, i) => ({ file: "file", line: i + 1 })),
+					source: "source",
+					location: { file: "file", line: 1 },
+					disposition: "ranked",
+				},
+			],
+		},
+	}))
 
-	// add a competing candidate before applying the shared limit
-	const first = candidates[0]?.report.featureMatches[0]
+	// add a competing match before applying the shared limit
+	const first = rankedUpgrades[0]?.report.featureMatches[0]
 	assert.ok(first)
-	candidates[0]?.report.featureMatches.push({ ...first, feature: "later option" })
+	rankedUpgrades[0]?.report.featureMatches.push({ ...first, feature: "later option" })
 	assert.deepEqual(
-		selectFeatureMatches(candidates, 3).map((entry) => entry.match.kind),
+		selectFeatureMatches(rankedUpgrades, 3).map((entry) => entry.match.kind),
 		["deprecated", "option", "dependency"],
 	)
 
 	// verify that excluded matches retain their limit disposition
-	assert.equal(selectFeatureMatches(candidates, 0).length, 0)
-	assert.equal(candidates[1]?.report.featureMatches[0]?.disposition, "Feature match limit")
+	assert.equal(selectFeatureMatches(rankedUpgrades, 0).length, 0)
+	assert.equal(rankedUpgrades[1]?.report.featureMatches[0]?.disposition, "Feature match limit")
 })
 
 test("two targets of one dependency retain their own verdict, patch and charge", async () => {

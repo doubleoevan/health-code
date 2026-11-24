@@ -74,7 +74,7 @@ export class InspectionStore {
 		)
 	}
 
-	// Recover the pinned revision after a worker restart.
+	// Recover the inspected revision after a worker restart.
 	checkout(id: string): { revision: string; repositoryId: string } | null {
 		return this.database
 			.query<{ revision: string; repositoryId: string }, [string]>(

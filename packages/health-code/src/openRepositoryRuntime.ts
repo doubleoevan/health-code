@@ -46,18 +46,18 @@ export class RepositoryRuntime {
 			action: "credentials-withheld",
 			...(engine && { storedModelKeyCount: engine.storedModelKeyCount }),
 		})
-		const commit = await context.step("setup", "Prepare pinned checkout", (config) =>
+		const commit = await context.step("setup", "Prepare inspected checkout", (config) =>
 			provider.prepareRepository(sandbox, repositoryUrl, { ...config, revision }),
 		)
 		if (!/^[0-9a-f]{40}$/.test(commit) || (revision && revision !== commit)) {
-			throw new InspectionError("repository-unavailable", "Unable to verify pinned repository")
+			throw new InspectionError("repository-unavailable", "Unable to verify inspected repository")
 		}
 		await context.step("setup", "Lock network to registries", (config) =>
 			provider.setNetworkPolicy(sandbox, registryHosts, { ...config, timeoutMs: Math.min(10000, config.timeoutMs) }),
 		)
 		await context.emit({ type: "sandbox.event", sandboxId: sandbox.id, action: "network-locked" })
 
-		// inspect the pinned project under the registry policy
+		// inspect the project under the registry policy
 		context.setupComplete = true
 		return { sandbox, repository: { url: repositoryUrl, commit } }
 	}

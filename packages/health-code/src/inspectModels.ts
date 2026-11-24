@@ -32,7 +32,7 @@ import { type PatchEvidence, workspace } from "./verifyCandidate.ts"
 import { evaluatePatch } from "./verifyPatch.ts"
 
 const summarySchema = z.object({ text: z.string().max(8000), sources: z.array(z.string()) })
-type Candidate = { report: UpgradeReportV2; evidence: PatchEvidence }
+type InspectedUpgrade = { report: UpgradeReportV2; evidence: PatchEvidence }
 export class ModelInspection {
 	// Accumulate evidence in inspection order.
 	readonly timeline: ModelRequestSandboxEvent[] = []
@@ -47,9 +47,9 @@ export class ModelInspection {
 	readonly matchLimit: number
 	attempt?: { attemptId: string; role: AgentRole }
 
-	// keep pinned usage separate from observations after each installation
+	// keep inspected usage separate from observations after each installation
 	private readonly installedEvidence = new Map<string, { changelog: string; bytes?: number }>()
-	private readonly pinnedUsage = new Map<string, UsageEvidence>()
+	private readonly inspectedUsage = new Map<string, UsageEvidence>()
 	baseSize?: number
 	baseInstall?: Observation
 	baseTests?: Observation
@@ -177,7 +177,7 @@ export class ModelInspection {
 		}
 	}
 
-	// capture pinned usage before dependency installation changes the tree
+	// capture inspected usage before dependency installation changes the tree
 	async captureUsage(adapter: NodeAdapter, selected: UpgradeReport["dependency"][]): Promise<void> {
 		for (const dependency of new Set(selected)) {
 			const usage = await adapter
@@ -186,7 +186,7 @@ export class ModelInspection {
 				.catch(() => ({ usage: [], unresolved: ["Source inventory unavailable"], changelog: "" }))
 
 			// cache missing evidence as an explicit usage limitation
-			this.pinnedUsage.set(dependency, usage)
+			this.inspectedUsage.set(dependency, usage)
 		}
 	}
 	async captureInstallation(adapter: NodeAdapter, upgrade: UpgradeReport): Promise<void> {
@@ -209,7 +209,7 @@ export class ModelInspection {
 		const offset = this.ledger.usage.length
 		const report = toUpgradeReport(upgrade)
 		this.upgrades.push(report)
-		const usage = this.pinnedUsage.get(upgrade.dependency) ?? { usage: [], unresolved: [], changelog: "" }
+		const usage = this.inspectedUsage.get(upgrade.dependency) ?? { usage: [], unresolved: [], changelog: "" }
 		const measured = this.installedEvidence.get(toUpgradeKey(upgrade))
 		const changelog = measured?.changelog ?? ""
 		const after = measured?.bytes
@@ -245,7 +245,7 @@ export class ModelInspection {
 				baseTests: this.baseTests,
 			}
 
-			// verify diagnostic locations against the pinned source
+			// verify diagnostic locations against the inspected source
 			await locateDiagnostics({
 				repository: inspectionReport.repository,
 				locators: report.locators,
@@ -315,13 +315,13 @@ export class ModelInspection {
 			recordEvidenceError(report, error, Boolean(this.modelRequestSandbox))
 		}
 	}
-	private async adopt(target: Candidate): Promise<void> {
+	private async adopt(target: InspectedUpgrade): Promise<void> {
 		// evaluate the highest-ranked eligible match for each upgrade
-		for (const { candidate, match } of selectFeatureMatches([target], this.matchLimit - this.adoptionsStarted)) {
+		for (const { upgrade, match } of selectFeatureMatches([target], this.matchLimit - this.adoptionsStarted)) {
 			this.adoptionsStarted++
-			candidate.evidence.context.upgradeId = `${candidate.report.dependency}@${candidate.report.to}`
+			upgrade.evidence.context.upgradeId = `${upgrade.report.dependency}@${upgrade.report.to}`
 
-			await evaluatePatch(this, candidate.evidence, match)
+			await evaluatePatch(this, upgrade.evidence, match)
 		}
 	}
 
@@ -362,7 +362,7 @@ export class ModelInspection {
 function toUpgradeReport(upgrade: UpgradeReport): UpgradeReportV2 {
 	return {
 		...upgrade,
-		releaseSummary: { text: "Release evidence unavailable", sources: [] },
+		releaseSummary: { text: "Release notes unavailable", sources: [] },
 		featureMatches: [],
 		locators: diagnostics([upgrade.install, upgrade.typecheck, upgrade.tests]),
 		installSize: { reason: "Size measurement unavailable" },

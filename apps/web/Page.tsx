@@ -100,8 +100,8 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 						<span>for new features</span>
 					</h1>
 					<p className="intro">
-						AI health inspectors show you new dependency features. Test an upgrade on your codebase inside a Runta
-						sandbox. The network is locked, real keys stay outside and successful upgrades return tested patches.
+						AI health inspectors show you new dependency features and test an upgrade on your codebase inside a Runta
+						sandbox. The network is locked, model keys stay outside and successful upgrades return tested patches.
 					</p>
 
 					{/* repository inspection steps */}
@@ -208,15 +208,12 @@ function useSubmit(
 		[upgradeMenuId, setPending, setError, setOfferMcp, setVerification],
 	)
 }
-// omit the npm scope
-function toShortName(dependency: string): string {
-	return dependency.slice(dependency.indexOf("/") + 1)
-}
 
+// describe the inspection state. package names omit the scope sign
 function toInspectionHeading(snapshot: Snapshot, live: boolean): string {
 	if (live) {
 		if (snapshot.selectedDependencyUpgrade) {
-			return `Testing ${toShortName(snapshot.selectedDependencyUpgrade.dependency)} upgrade...`
+			return `Testing ${snapshot.selectedDependencyUpgrade.dependency.replace(/^@/, "")} upgrade...`
 		}
 		return snapshot.mode === "listUpgrades" ? "Finding upgrades..." : "Inspecting repository..."
 	}
@@ -261,12 +258,18 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 	const status =
 		snapshot.message ??
 		(position ? `Queue position: ${position}` : live && !events.length ? "Queued for inspection" : null)
+	const finished = events.findLast((event) => event.type === "inspection.finished")
 	const isShimmering = live && (snapshot.selectedDependencyUpgrade || snapshot.mode === "listUpgrades")
 	return (
 		<>
 			{/* published report or live inspection status */}
 			{snapshot.card ? (
-				<ReportView report={snapshot.card} url={url} investigationPrompt={snapshot.investigationPrompt} />
+				<ReportView
+					report={snapshot.card}
+					url={url}
+					durationMs={finished?.durationMs}
+					investigationPrompt={snapshot.investigationPrompt}
+				/>
 			) : (
 				<header className="inspection-heading">
 					{/* inspection title and repository */}

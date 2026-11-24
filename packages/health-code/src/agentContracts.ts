@@ -43,7 +43,7 @@ export type InspectionModels = {
 // bound each role by turns, duration and cost
 type AttemptLimits = { maxTurns: number; maxDurationMs: number; maxCostUsd: number }
 export type InspectionOptionsV2 = Omit<InspectionOptions, "models" | "onEvent" | "limits"> & {
-	// Read previously verified results for the pinned repository from the caller's cache.
+	// Read previously verified results for the inspected repository from the caller's cache.
 	reuseUpgrade?: (
 		repository: InspectionReport["repository"],
 		upgrade: import("./contracts.ts").Upgrade,
@@ -210,7 +210,7 @@ export type UpgradeReportV2 = UpgradeReport & {
 	modelUsage: ModelUsage[]
 }
 
-// preserve the pinned report envelope with version two results
+// preserve the report envelope with version two results
 export type InspectionReportV2 = Omit<InspectionReport, "version" | "timeline" | "upgrades"> & {
 	version: 2
 	limits?: { maxDurationMs: number; maxCostUsd: number; agent: Record<AgentRole, AttemptLimits> }

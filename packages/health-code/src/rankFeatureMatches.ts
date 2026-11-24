@@ -55,7 +55,7 @@ export function verifyMatch({
 	const relevant = direct ? cited : eligible
 	const sites = new Map<string, Locator>()
 	for (const site of [hit, ...match.sites]) {
-		// validate each proposed call site against pinned usage
+		// validate each proposed call site against inspected usage
 		if (
 			hit.symbol !== "import" &&
 			usage.usage.some(
@@ -118,43 +118,43 @@ function statesReplacement(quote: string, symbol: string, feature: string): bool
 }
 
 export function selectFeatureMatches<T extends { report: UpgradeReportV2 }>(
-	candidates: T[],
+	upgrades: T[],
 	limit: number,
-): { candidate: T; match: CodeFeatureMatch }[] {
+): { upgrade: T; match: CodeFeatureMatch }[] {
 	// rank matches by evidence strength and affected locations
-	const ordered = candidates
-		.flatMap((candidate) => candidate.report.featureMatches.map((match) => ({ candidate, match })))
+	const ordered = upgrades
+		.flatMap((upgrade) => upgrade.report.featureMatches.map((match) => ({ upgrade, match })))
 		.sort(
 			(a, b) =>
 				Number(b.match.replacement === "direct") - Number(a.match.replacement === "direct") ||
 				(b.match.callSites?.length ?? 0) - (a.match.callSites?.length ?? 0) ||
 				// break ties by dependency, source location and release citation
-				a.candidate.report.dependency.localeCompare(b.candidate.report.dependency) ||
+				a.upgrade.report.dependency.localeCompare(b.upgrade.report.dependency) ||
 				a.match.location.file.localeCompare(b.match.location.file) ||
 				(a.match.location.line ?? 0) - (b.match.location.line ?? 0) ||
 				a.match.feature.localeCompare(b.match.feature) ||
 				a.match.source.localeCompare(b.match.source),
 		)
-	const selected: { candidate: T; match: CodeFeatureMatch }[] = []
+	const selected: { upgrade: T; match: CodeFeatureMatch }[] = []
 	const tried = new Set<UpgradeReportV2>()
 
 	// rank every match while retaining reasons for skipped attempts
-	for (const [index, { candidate, match }] of ordered.entries()) {
+	for (const [index, { upgrade, match }] of ordered.entries()) {
 		match.rank = index + 1
-		if (!candidate.report.patches.length) {
+		if (!upgrade.report.patches.length) {
 			match.disposition = "Upgrade has no verified patch"
 			continue
 		}
 
 		// allow at most one attempt per upgrade within the inspection limit
-		if (tried.has(candidate.report) || selected.length >= limit) {
+		if (tried.has(upgrade.report) || selected.length >= limit) {
 			match.disposition = "Feature match limit"
 			continue
 		}
 
 		// reserve this upgrade's single adoption attempt
-		tried.add(candidate.report)
-		selected.push({ candidate, match })
+		tried.add(upgrade.report)
+		selected.push({ upgrade, match })
 	}
 	return selected
 }

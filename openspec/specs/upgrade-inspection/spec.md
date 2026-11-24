@@ -1,22 +1,22 @@
 # upgrade-inspection Specification
 
 ## Purpose
-Show which upgrades passed at the pinned commit, which introduced reproducible failures, and where the available evidence stops.
+Show which upgrades passed at the inspected commit, which introduced reproducible failures, and where the available evidence stops.
 
 ## Requirements
 
 ### Requirement: Select a bounded set of upgrades
 
-An inspection SHALL select at most six distinct dependency and target pairs by default, permit a caller-supplied cap, and record the eligible, selected, and omitted candidates in deterministic order.
+An inspection SHALL select at most six distinct dependency and target pairs by default, permit a caller-supplied cap, and record the eligible, selected, and omitted upgrades in deterministic order.
 
-#### Scenario: More candidates than slots
+#### Scenario: More upgrades than slots
 
-- **WHEN** the same pinned project and registry metadata yield more eligible candidates than the cap
-- **THEN** repeated selections choose the same candidates, with eligible minor upgrades before major upgrades and dependency name breaking ties
+- **WHEN** the same inspected project and registry metadata yield more eligible upgrades than the cap
+- **THEN** repeated selections choose the same upgrades, with eligible minor upgrades before major upgrades and dependency name breaking ties
 
 ### Requirement: Establish a comparable Baseline
 
-The engine SHALL capture install, applicable typecheck, and test results at the pinned commit before attributing failures to upgrades. A failed Baseline install SHALL prevent upgrade checks. If the install succeeds and the required Baseline build fails, Health Code SHALL retain independent upgrade install and test evidence and mark the overall comparison partial.
+The engine SHALL capture install, applicable typecheck, and test results at the inspected commit before attributing failures to upgrades. A failed Baseline install SHALL prevent upgrade checks. If the install succeeds and the required Baseline build fails, Health Code SHALL retain independent upgrade install and test evidence and mark the overall comparison partial.
 
 #### Scenario: Broken Baseline install
 
@@ -40,25 +40,25 @@ The engine SHALL capture install, applicable typecheck, and test results at the 
 
 ### Requirement: Gate each Upgrade Check on installation evidence
 
-Each Install Check SHALL observe the candidate's install under the registry-only network policy. A connection attempt outside the policy or a file written outside the project SHALL stop that candidate. An incomplete observation SHALL preclude a passed result.
+Each Install Check SHALL observe the upgrade's install under the registry-only network policy. A connection attempt outside the policy or a file written outside the project SHALL stop that upgrade. An incomplete observation SHALL preclude a passed result.
 
 #### Scenario: Unexpected installation activity
 
 - **WHEN** an install succeeds but attempts a connection to an unlisted host or writes outside the project
-- **THEN** the Install Check records the finding, the Upgrade Check is untested with the reason, and other candidates can proceed from a clean state
+- **THEN** the Install Check records the finding, the Upgrade Check is untested with the reason, and other upgrades can proceed from a clean state
 
 #### Scenario: Observation unavailable
 
 - **WHEN** monitoring loses part of the command tree or cannot resolve whether a destination was allowed
-- **THEN** the Install Check and Upgrade Check record the missing evidence and the upgrade is untested. If installation succeeds with no recorded finding, the adapter runs the available candidate checks under the locked network policy and reports the outcome of each check separately.
+- **THEN** the Install Check and Upgrade Check record the missing evidence and the upgrade is untested. If installation succeeds with no recorded finding, the adapter runs the available upgrade checks under the locked network policy and reports the outcome of each check separately.
 
 ### Requirement: Confirm new failures and restore state
 
-An Upgrade Check SHALL bump, install, typecheck, and test a single candidate from the pinned Baseline. It SHALL repeat a newly failing check once on equivalent inputs and attribute only matching failures. A later candidate SHALL start with clean project, process, and writable sandbox state.
+An Upgrade Check SHALL bump, install, typecheck, and test a single upgrade from the Baseline. It SHALL repeat a newly failing check once on equivalent inputs and attribute only matching failures. A later upgrade SHALL start with clean project, process, and writable sandbox state.
 
 #### Scenario: Existing, flaky, and confirmed failures
 
-- **WHEN** the Baseline failed test A, the candidate fails A, B and C, and its rerun fails A and C
+- **WHEN** the Baseline failed test A, the upgrade fails A, B and C, and its rerun fails A and C
 - **THEN** the report attributes only C to the Upgrade, records B as unconfirmed, and preserves both observations
 
 #### Scenario: Opaque baseline test failure
@@ -66,10 +66,10 @@ An Upgrade Check SHALL bump, install, typecheck, and test a single candidate fro
 - **WHEN** the Baseline and upgraded test scripts both fail and the runner supplies only an exit code
 - **THEN** attribution is untested with the reason and both exit results are retained
 
-#### Scenario: Candidate writes to the sandbox
+#### Scenario: Upgrade writes to the sandbox
 
-- **WHEN** a failed candidate changes the lockfile, leaves generated files, or starts a background process
-- **THEN** the next candidate sees the original commit and baseline inputs, without the previous candidate's files or processes
+- **WHEN** a failed upgrade changes the lockfile, leaves generated files, or starts a background process
+- **THEN** the next upgrade sees the original commit and baseline inputs, without the previous upgrade's files or processes
 
 #### Scenario: Deadline interrupts confirmation
 

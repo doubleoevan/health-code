@@ -353,7 +353,7 @@ export function connectProvider(
 					await checked(runtime, ["gzip", "-df", archive], remaining())
 				}
 
-				// enable trusted guest tools and check out the pinned repository
+				// enable trusted guest tools and check out the inspected repository
 				await checked(runtime, ["chmod", "-R", "a+rX", "/opt/health-code"], remaining())
 				try {
 					return (
@@ -366,7 +366,7 @@ export function connectProvider(
 				} catch (error) {
 					// report unavailable repositories separately from provider failures
 					if (error instanceof InspectionError && error.code === "sandbox-command") {
-						throw new InspectionError("repository-unavailable", "Public repository or pinned commit is unavailable")
+						throw new InspectionError("repository-unavailable", "Public repository or inspected commit is unavailable")
 					}
 					throw error
 				}

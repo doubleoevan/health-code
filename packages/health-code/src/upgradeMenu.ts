@@ -48,7 +48,7 @@ export function toUpgradeMenu(
 /**
  * Identifies a target across workspace ordering differences.
  */
-export function toPinnedUpgradeKey(upgrade: Pick<Upgrade, "dependency" | "from" | "to">): string {
+export function toUpgradeTargetKey(upgrade: Pick<Upgrade, "dependency" | "from" | "to">): string {
 	return JSON.stringify([
 		upgrade.dependency,
 		upgrade.to,

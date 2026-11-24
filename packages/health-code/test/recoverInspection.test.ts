@@ -58,7 +58,7 @@ test("the interrupted upgrade uses its own install duration", async () => {
 		timestamp: new Date(0).toISOString(),
 		sequence: inspection.timeline.length + 1,
 		type: "step.finished",
-		stepId: "candidate-install",
+		stepId: "upgrade-install",
 		status: "failed",
 		upgradeId: activeUpgrade,
 		summary: "install",
@@ -123,7 +123,7 @@ function retryFixture(first: FixtureCommand[], replacement: FixtureCommand[]): S
 	return sandbox
 }
 
-test("losing a pinned sandbox preserves the baseline and names the skipped upgrades", async () => {
+test("losing a sandbox preserves the baseline and names the skipped upgrades", async () => {
 	const sandbox = retryFixture(
 		scripts([], [], []),
 		scripts([], [], []).filter((item) => item.argv[2] !== "registry"),
@@ -261,13 +261,13 @@ test("one replacement rebuilds the baseline, inspects untouched targets first an
 		.slice(-4)
 		.map((entry) => ({ ...entry, argv: entry.argv.map((arg) => (arg === "1.3.0" ? "2.0.0" : arg)) }))
 
-	// Reproduce both candidate installations in replacement order.
+	// Reproduce both upgrade installations in replacement order.
 	replacement.splice(replacement.length - 4, 0, ...major)
 	const sandbox = retryFixture(initial, replacement)
 	const execute = sandbox.executeCommand.bind(sandbox)
 	const installs: string[] = []
 
-	// Lose only the first candidate installation.
+	// Lose only the first upgrade installation.
 	sandbox.executeCommand = (runtime, input) => {
 		if (input.argv[2] === "install") {
 			installs.push(input.argv[4] ?? "baseline")

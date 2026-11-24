@@ -164,7 +164,7 @@ test("parses file-load failures and preserves opaque script evidence", () =>
 			{ workspace: ".", file: "suite.ts", name: "case" },
 		])
 	}))
-test("bounds selection deterministically and excludes patch and prerelease candidates", () => {
+test("bounds selection deterministically and excludes patch and prerelease targets", () => {
 	const dependencies = Object.fromEntries("ihgfedcba".split("").map((n) => [n, { ".": "1.0.0" }]))
 	const project: Project = {
 		manager: "npm",

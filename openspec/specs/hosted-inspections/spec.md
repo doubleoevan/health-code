@@ -7,7 +7,7 @@ Let a visitor submit a public Repository anonymously and follow the same Inspect
 
 ### Requirement: Public Repository admission
 
-The home page SHALL offer one Repository URL field, one submit button and a plain explanation that AI agents test dependency upgrades in a Runta sandbox with restricted network access, keep real keys outside and return tested Patches when available. The server SHALL accept only public GitHub HTTPS Repository URLs.
+The home page SHALL offer one Repository URL field, one submit button and a plain explanation that AI agents test dependency upgrades in a Runta sandbox with restricted network access, keep model keys outside and return tested Patches when available. The server SHALL accept only public GitHub HTTPS Repository URLs.
 
 #### Scenario: Invalid input
 
@@ -21,7 +21,7 @@ The home page SHALL offer one Repository URL field, one submit button and a plai
 
 #### Scenario: Unsupported ecosystem
 
-- **WHEN** the pinned project lacks the supported JavaScript or TypeScript project structure
+- **WHEN** the inspected project lacks the supported JavaScript or TypeScript project structure
 - **THEN** the page explains the supported ecosystem and displays the specific detection reason where available
 
 ### Requirement: Durable background execution
@@ -87,7 +87,7 @@ The live page SHALL update one active step in place with a spinner and elapsed t
 
 #### Scenario: Sandbox actions
 
-- **WHEN** the library records creation, network lock, a confirmed block, credential isolation, an agent start with its real key withheld, or deletion
+- **WHEN** the library records creation, network lock, a confirmed block, credential isolation, an agent start with its model key kept outside the sandbox, or deletion
 - **THEN** the viewer can find the observed action after later steps scroll away and distinguish sandbox setup from agent execution
 
 ### Requirement: Offline fixture replay
@@ -173,7 +173,7 @@ The hosted deployment SHALL periodically reconcile all its runtime inventory pag
 
 ### Requirement: Browse before testing
 
-The site SHALL discover eligible upgrade targets at a pinned commit before installing dependencies or invoking an agent. The upgrade menu SHALL show one row per dependency, searchable by name, with the most declaring workspaces first by default. Visitors may choose alphabetical order or minor upgrades first. The Tested patch available filter SHALL appear when the menu has a published upgrade patch and SHALL show only targets with one.
+The site SHALL discover eligible upgrade targets at one commit before installing dependencies or invoking an agent. The upgrade menu SHALL show one row per dependency, searchable by name, with the most declaring workspaces first by default. Visitors may choose alphabetical order or minor upgrades first. The Tested patch available filter SHALL appear when the menu has a published upgrade patch and SHALL show only targets with one.
 
 #### Scenario: Choose one target
 

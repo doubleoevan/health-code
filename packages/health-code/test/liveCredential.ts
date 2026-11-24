@@ -13,7 +13,7 @@ test("the live gateway authenticates only while the scoped model stub is attache
 	const sandbox = { id: `health-code-${randomUUID()}` }
 	const operation = { timeoutMs: 120000 }
 	try {
-		// prepare the pinned checkout under the registry policy
+		// prepare the inspected checkout under the registry policy
 		await provider.createSandbox(sandbox.id, operation)
 		await provider.prepareRepository(sandbox, "https://github.com/doubleoevan/health-code", operation)
 		await provider.setNetworkPolicy(sandbox, registryHosts, operation)

@@ -85,11 +85,11 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 		return path
 	}
 
-	// key the protected test inventory by its pinned test paths
+	// key the protected test inventory by its inspected test paths
 	function protectSource(file: string, tests: string[]): void {
 		const cache = join(root, "test-support-" + createHash("sha256").update(JSON.stringify(tests)).digest("hex"))
 		if (!existsSync(cache)) {
-			// enumerate regular files from the pinned tree
+			// enumerate regular files from the inspected tree
 			const files = git(["ls-tree", "-r", "-z", "HEAD"])
 				.toString()
 				.split("\0")
@@ -102,7 +102,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 				const local = join(source, path)
 				bytes += lstatSync(local).size
 				if (bytes > 16 * 1024 * 1024 || realpathSync(local) !== local || !lstatSync(local).isFile()) {
-					throw new Error("Pinned test support cannot be verified")
+					throw new Error("Inspected test support cannot be verified")
 				}
 				return readFileSync(local, "utf8")
 			})
@@ -181,7 +181,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 		}
 	}
 	function readSource(request: Extract<PatchOperation, { kind: "read" }>): string {
-		// read pinned source only from a tracked regular blob
+		// read inspected source only from a tracked regular blob
 		if (request.revision) {
 			validateFile(request.file)
 			const entry = git(["ls-tree", "-z", sha(request.revision), "--", request.file]).toString()
@@ -249,7 +249,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			.toString()
 			.split("\0")
 			.filter((path) => {
-				// identify private environment files in the pinned index
+				// identify private environment files in the inspected index
 				const name = path.split("/").at(-1) ?? ""
 				return (name === ".env" || name.startsWith(".env.")) && name !== ".env.example"
 			})
@@ -276,7 +276,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			if (
 				!/\.(?:spec|test)\.[cm]?[jt]sx?$/.test(path) ||
 				realpathSync(dirname(path)) !== dirname(path) ||
-				// reject test additions already present in the pinned tree
+				// reject test additions already present in the inspected tree
 				git(["ls-tree", "-z", "HEAD", "--", request.file]).length
 			) {
 				throw new Error("Unsupported new test path")
@@ -311,7 +311,7 @@ export function managePatch(root: string, request: PatchOperation): string | nul
 			return request.tip
 		}
 		case "restore": {
-			// rebuild the working directory from the pinned revision
+			// rebuild the working directory from the inspected revision
 			loadProjectIndex(request.tip)
 			rmSync(work, { recursive: true, force: true })
 			execFileSync("mkdir", ["-p", work])

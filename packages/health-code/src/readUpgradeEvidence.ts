@@ -23,7 +23,7 @@ export async function sizeBytes(adapter: NodeAdapter): Promise<number | undefine
 	return typeof measured === "number" && Number.isSafeInteger(measured) && measured >= 0 ? measured : undefined
 }
 export function permalink(repository: InspectionReport["repository"], file: string, line: number): string {
-	// link evidence to the pinned file and line
+	// link evidence to the inspected file and line
 	const path = file.split("/").map(encodeURIComponent).join("/")
 	return `${repository.url.replace(/\.git$/, "")}/blob/${repository.commit}/${path}#L${line}`
 }

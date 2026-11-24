@@ -1,5 +1,9 @@
 import { Highlight } from "prism-react-renderer"
 import { Fragment, memo, type ReactElement, useState } from "react"
+import { Link } from "./ReportControls.tsx"
+
+// Destinations keyed by the exact prompt text they link.
+export type PromptLinks = Record<string, string>
 
 // Leave token colors to the stylesheet so they follow the page theme.
 const theme = { plain: {}, styles: [] }
@@ -8,7 +12,7 @@ export function TroubleshootingPrompt({ text }: { text: string }): ReactElement 
 	return <PromptBox title="Troubleshooting prompt for your coding agent" text={text} />
 }
 
-export function PromptBox({ title, text }: { title: string; text: string }): ReactElement {
+export function PromptBox({ title, text, links }: { title: string; text: string; links?: PromptLinks }): ReactElement {
 	const [status, setStatus] = useState("")
 	async function handleCopy(): Promise<void> {
 		// keep the visible prompt selectable when copying fails
@@ -28,7 +32,7 @@ export function PromptBox({ title, text }: { title: string; text: string }): Rea
 			<div className="prompt-box">
 				{/* biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users scroll the prompt. */}
 				<pre tabIndex={0}>
-					<HighlightedText text={text} />
+					<HighlightedText text={text} links={links} />
 				</pre>
 				<button type="button" className="secondary" aria-live="polite" onClick={handleCopy}>
 					{status || "Copy"}
@@ -38,8 +42,16 @@ export function PromptBox({ title, text }: { title: string; text: string }): Rea
 	)
 }
 
+const noLinks: PromptLinks = {}
+
 // Keep the highlighted text when only the copy status changes.
-const HighlightedText = memo(function HighlightedText({ text }: { text: string }): ReactElement {
+const HighlightedText = memo(function HighlightedText({
+	text,
+	links = noLinks,
+}: {
+	text: string
+	links?: PromptLinks
+}): ReactElement {
 	// Show long prompts as plain text.
 	if (text.length > 8192) {
 		return <>{text}</>
@@ -51,16 +63,35 @@ const HighlightedText = memo(function HighlightedText({ text }: { text: string }
 				// biome-ignore lint/suspicious/noArrayIndexKey: Prompt text keeps its order.
 				<Fragment key={`${index}:${line}`}>
 					{index > 0 && "\n"}
-					<HighlightedLine line={line} />
+					<LinkedLine line={line} links={links} />
 				</Fragment>
 			))}
 		</>
 	)
 })
 
-function HighlightedLine({ line }: { line: string }): ReactElement {
+function LinkedLine({ line, links }: { line: string; links: PromptLinks }): ReactElement {
+	// Match a patch URL before the digest inside it.
+	const linked = Object.keys(links).sort((left, right) => right.length - left.length)
+	const escaped = linked.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+	const parts = escaped.length ? line.split(new RegExp(`(${escaped.join("|")})`)) : [line]
+	const language = toLanguage(line)
 	return (
-		<Highlight code={line} language={toLanguage(line)} theme={theme}>
+		<>
+			{/* linked values and highlighted text */}
+			{parts.map((part, index) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: Prompt text keeps its order.
+				<Fragment key={`${index}:${part}`}>
+					{index % 2 ? <Link href={links[part]}>{part}</Link> : <HighlightedLine line={part} language={language} />}
+				</Fragment>
+			))}
+		</>
+	)
+}
+
+function HighlightedLine({ line, language }: { line: string; language: string }): ReactElement {
+	return (
+		<Highlight code={line} language={language} theme={theme}>
 			{({ tokens, getTokenProps }) => (
 				<>
 					{tokens.flat().map((token, index) => (

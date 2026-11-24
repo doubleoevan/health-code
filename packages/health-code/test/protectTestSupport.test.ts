@@ -36,7 +36,7 @@ test("moved mocks stay distinct and keep their test directives", () => {
 	assert.throws(() => review('vi.mock("widget/old")', '// @vitest-environment node\nvi.mock("widget/new")'))
 })
 
-test("pinned runner setup and test-only helpers stay protected outside test folders", () => {
+test("inspected runner setup and test-only helpers stay protected outside test folders", () => {
 	const files: Record<string, string> = {
 		"package.json": JSON.stringify({ scripts: { test: "jest --config ./configuration.json" } }),
 		"configuration.json": JSON.stringify({ rootDir: "./src", setupFiles: ["<rootDir>/jestSetup.ts"] }),

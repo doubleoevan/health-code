@@ -1,7 +1,7 @@
 # feature-matching Specification
 
 ## Purpose
-Help maintainers use new dependency features by identifying a concrete change to their own pinned code.
+Help maintainers use new dependency features by identifying a concrete change to their own inspected code.
 
 ## Requirements
 
@@ -21,7 +21,7 @@ For each selected Upgrade the engine SHALL read package-specific releases newer 
 
 ### Requirement: Rank cited Code Feature Matches across the Inspection
 
-The engine SHALL match a release feature to a pinned code range and identify the workaround, dependency, deprecated call or option it could replace. It SHALL rank matches deterministically within each upgrade, finish the best eligible feature adoption before starting the next upgrade and respect the caller's inspection-wide cap. It SHALL retain reasons for findings that receive no Patch.
+The engine SHALL match a release feature to an inspected code range and identify the workaround, dependency, deprecated call or option it could replace. It SHALL rank matches deterministically within each upgrade, finish the best eligible feature adoption before starting the next upgrade and respect the caller's inspection-wide cap. It SHALL retain reasons for findings that receive no Patch.
 
 #### Scenario: More opportunities than attempts
 
@@ -30,7 +30,7 @@ The engine SHALL match a release feature to a pinned code range and identify the
 
 #### Scenario: A release note identifies a direct replacement
 
-- **WHEN** a quotation in a release applicable to the pinned workspace explicitly says the new feature replaces the symbol used at the cited location
+- **WHEN** a quotation in a release applicable to the inspected workspace explicitly says the new feature replaces the symbol used at the cited location
 - **THEN** the match ranks as direct. A reversed, negated or unsupported replacement stays inferred.
 
 #### Scenario: Missing code evidence

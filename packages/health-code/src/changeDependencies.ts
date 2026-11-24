@@ -153,7 +153,7 @@ async function refreshDependencies(evidence: PatchEvidence, label: string): Prom
 	const install = await adapter.refreshInstallation()
 	if (install.check.status !== "passed" || !cleanInstall(install.observation, baseInstall)) {
 		throw new Error(
-			`Flagged dependency ${label} could not be installed: ${install.check.status}, ${install.observation.reason ?? (install.observation.findings.length ? "installation finding" : "destination comparison")}. ${install.check.evidence
+			`Dependency change ${label} could not be installed: ${install.check.status}, ${install.observation.reason ?? (install.observation.findings.length ? "installation finding" : "destination comparison")}. ${install.check.evidence
 				.map((entry) => entry.stderr.slice(-450))
 				.join(" ")
 				.slice(-600)}`,

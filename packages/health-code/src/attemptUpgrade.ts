@@ -60,7 +60,7 @@ export async function attemptUpgrade(
 	while (budget.turns > 0 && Date.now() < budget.end) {
 		turn++
 
-		// include prior attempts and pinned source evidence in the request
+		// include prior attempts and inspected source evidence in the request
 		const prompt = await fitAgentPrompt({
 			build: (material) => buildPrompt(role, material, evidence.context.prompts),
 			maxBytes: engine.options.models[role].pricing.maxInputTokens - editToolBytes - requestOverheadBytes,

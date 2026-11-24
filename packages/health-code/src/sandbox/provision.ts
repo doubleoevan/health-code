@@ -76,7 +76,7 @@ url="$1"
 ref="$2"
 if [ -z "$ref" ]; then ref=$(git -c credential.helper= -c http.followRedirects=false ls-remote --exit-code "$url" HEAD | cut -f1); fi`,
 
-	// fetch the pinned revision with submodule recursion disabled
+	// fetch the requested revision with submodule recursion disabled
 	`git -c init.templateDir= init -q /var/lib/health-code/source
 git -C /var/lib/health-code/source -c credential.helper= -c http.followRedirects=false -c fetch.recurseSubmodules=false fetch -q --depth=1 "$url" "$ref"
 git -C /var/lib/health-code/source -c core.hooksPath=/dev/null -c submodule.recurse=false checkout -q --detach FETCH_HEAD`,
@@ -88,7 +88,7 @@ if [ -e /var/lib/health-code/source/.yarnrc.yml ] || (test -f /var/lib/health-co
 printf '%s' "$actual"`,
 ].join("\n")
 
-// restore the working tree from the pinned checkout
+// restore the working tree from the inspected checkout
 export const restore = [
 	`set -eu
 rm -rf /var/lib/health-code/work

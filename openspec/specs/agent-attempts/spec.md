@@ -28,7 +28,7 @@ The public Agent Attempt role IDs SHALL be `repair` and `featureAdoption`. Their
 
 #### Scenario: One summary informs one match request
 
-- **WHEN** an Upgrade has release evidence and pinned usage
+- **WHEN** an Upgrade has release notes and inspected usage
 - **THEN** its summary is processed before its separate matching request. Each role has its own pricing, model receipt, output bound and validated citations. An Upgrade with no usage skips matching. Missing release evidence skips both requests.
 
 #### Scenario: Incompatible caller options

@@ -6,7 +6,7 @@ This workspace publishes the scoped launcher and owns the `health-code mcp` and 
 | --- | --- |
 | `cli.ts`, `createServer.ts` | Dispatch setup or stdio, validate tool input, format results and report request-scoped progress. |
 | `modelSettings.ts`, `configureModels.ts`, `inspectWithAccount.ts` | Read the required model settings through the library, name the ones the client forwards and run inspections with the account’s origin-bound credential. No model is chosen by default. |
-| `setupAccount.ts`, `probeModelRequestSandbox.ts` | Register or reuse the stored model key. Verify it with a request limited to one output token and confirm model request sandbox deletion before printing the client configuration. |
+| `setupAccount.ts`, `probeModelRequestSandbox.ts` | Register or reuse the model key. Verify it with a request limited to one output token and confirm model request sandbox deletion before printing the client configuration. |
 | `personalModelRequestSandboxes.ts` | Record each intended model request sandbox allocation by account and host. Use the verified organization ID across token rotations. Recover allocations whose local owner process has exited. |
 | `checkRepository.ts` | Run `health-code check` for CI and write the report and patches. |
 | `fixtures/` | Share recorded Inspection inputs and model replies between the MCP unit and packed stdio tests. |
@@ -20,4 +20,4 @@ The MCP sets `callerModelExecution` to `"modelRequestSandbox"`. After setup a cl
 
 `launch.mjs` is the scoped npm entry. It resolves the matching library release and runs its declared CLI over stdio. The packed Node test exercises both entry points.
 
-`browseUpgrades.ts` builds searchable, paginated upgrade menus from saved discovery results. The list_upgrades tool accepts a repo URL and returns an upgrade menu with source-linked features. The get_upgrade tool waits for one target and returns verified patch bytes or its check results. It resolves one chosen target at its pinned commit and indexes verified local patch references.
+`browseUpgrades.ts` builds searchable, paginated upgrade menus from saved inspections. The list_upgrades tool accepts a repo URL and returns an upgrade menu with source-linked features. The get_upgrade tool waits for one target and returns verified patch bytes or its check results. It resolves one chosen target at its inspected commit and indexes verified local patch references.

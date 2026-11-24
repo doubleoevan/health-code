@@ -1,5 +1,5 @@
 import { type ReactElement, useState } from "react"
-import { PromptBox, TroubleshootingPrompt } from "./PromptBox.tsx"
+import { PromptBox, type PromptLinks, TroubleshootingPrompt } from "./PromptBox.tsx"
 import { type PatchLink, type PublishedReport, toOrderedPatches, toPatchPath } from "./report.ts"
 
 function toPatchPrompt({
@@ -24,9 +24,37 @@ function toPatchPrompt({
 Dependency upgrade: ${dependency}
 Inspected commit: ${commit}
 Applies to commit: ${patch.base}${patch.testedTip ? `\nTested commit: ${patch.testedTip}` : ""}
-${prerequisite}${patch.role} patch: ${reportUrl.origin}${toPatchPath(patch.digest)}
+${prerequisite}${patch.role === "upgrade" ? "Upgrade" : "Feature"} patch: ${reportUrl.origin}${toPatchPath(patch.digest)}
 SHA-256: ${patch.digest}
 If your Health Code MCP has this patch, fetch it with get_tested_patch using the MCP inspection's own inspectionId and sha256 ${patch.digest}. Follow nextOffset and concatenate the pages verbatim. Otherwise use the patch URL. Verify the SHA-256 of each mailbox before applying it. Use a branch for this upgrade. If other upgrades have changed the checkout, check compatibility and rerun typecheck and tests on the combined tree.`
+}
+
+// link public destinations. a tested commit exists only in the sandbox
+function toPatchLinks({
+	patch,
+	dependency,
+	url,
+	repository,
+}: {
+	patch: PatchLink
+	dependency: string
+	url: string
+	repository: PublishedReport["repository"]
+}): PromptLinks {
+	const links: PromptLinks = {
+		[repository.commit]: `${repository.url}/commit/${repository.commit}`,
+		[dependency]: `https://www.npmjs.com/package/${dependency.replace(/@([^@]+)$/, "/v/$1")}`,
+	}
+
+	// link each patch address and its digest to the saved patch
+	for (const digest of [patch.digest, patch.prerequisite]) {
+		if (digest) {
+			const path = toPatchPath(digest)
+			links[digest] = path
+			links[new URL(url).origin + path] = path
+		}
+	}
+	return links
 }
 
 export function ReportActions({
@@ -68,6 +96,7 @@ export function ReportActions({
 					key={selectedPatch.patch.digest}
 					title="Upgrade prompt for your coding agent"
 					text={toPatchPrompt({ ...selectedPatch, url, commit: report.repository.commit })}
+					links={toPatchLinks({ ...selectedPatch, url, repository: report.repository })}
 				/>
 			) : (
 				investigationPrompt && <TroubleshootingPrompt text={investigationPrompt} />

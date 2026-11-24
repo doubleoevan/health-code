@@ -4,10 +4,10 @@ import type { SiteEvent } from "./report.ts"
 const actions = {
 	created: "Sandbox created",
 	"model-request-sandbox-started": "Model request sandbox started",
-	"credentials-withheld": "Real keys kept outside the sandbox",
+	"credentials-withheld": "Keys kept outside the sandbox",
 	"network-locked": "Network locked to approved destinations",
 	"connection-blocked": "Connection blocked",
-	"agent-started": "Agent started with its real key withheld",
+	"agent-started": "Agent started with its model key kept outside the sandbox",
 	deleted: "Sandbox deleted",
 }
 
@@ -18,7 +18,7 @@ function toActionLabel(event: Extract<SiteEvent, { type: "sandbox.event" }>): st
 	}
 	if (event.action === "credentials-withheld" && event.storedModelKeyCount !== undefined) {
 		const count = event.storedModelKeyCount
-		return `${count} stored model ${count === 1 ? "key" : "keys"} kept outside the sandbox`
+		return `${count} model ${count === 1 ? "key" : "keys"} kept outside the sandbox`
 	}
 
 	if (event.action === "model-relay-started") {
@@ -48,7 +48,9 @@ function toStepLabel(label: string): string {
 	if (label === "adoption" || label === "featureAdoption") {
 		return "Feature adoption"
 	}
-	return label
+
+	// describe the checkout as inspected in every saved report
+	return label.replace("pinned", "inspected")
 }
 
 function CurrentStep({ label, start }: { label: string; start: string }): ReactElement {
@@ -132,14 +134,22 @@ function renderEvent(event: SiteEvent, id: string): ReactElement {
 		case "detail":
 			return <Output event={event} id={id} />
 		case "inspection.started":
-			return <span>Health inspection started</span>
+			return <span>Inspection started</span>
 		case "inspection.finished":
 			return <span>Inspection finished</span>
 		case "inspection.failed":
 			return <span>{event.message}</span>
 	}
 }
-export function Timeline({ events, live, id }: { events: SiteEvent[]; live: boolean; id: string }): ReactElement {
+export function Timeline({
+	events,
+	live,
+	id,
+}: {
+	events: SiteEvent[]
+	live: boolean
+	id: string
+}): ReactElement | null {
 	const list = useRef<HTMLOListElement>(null)
 	const followsTail = useRef(true)
 	const lastSequence = events.at(-1)?.sequence
@@ -155,6 +165,12 @@ export function Timeline({ events, live, id }: { events: SiteEvent[]; live: bool
 	const finished = new Set(events.flatMap((event) => (event.type === "step.finished" ? [event.stepId] : [])))
 	const current = events.findLast((event) => event.type === "step.started" && !finished.has(event.stepId))
 	const sandboxEvents = events.filter((event) => event.type === "sandbox.event")
+
+	// show the timeline once a step or logged event exists
+	const loggedEvents = events.filter((event) => !live || event.type !== "step.started")
+	if (!loggedEvents.length && !current) {
+		return null
+	}
 	return (
 		<section>
 			{/* active step and elapsed time */}
@@ -175,22 +191,24 @@ export function Timeline({ events, live, id }: { events: SiteEvent[]; live: bool
 			)}
 
 			{/* chronological inspection log */}
-			<h2>Inspection log</h2>
-			<ol
-				className={live ? "timeline rolling" : "timeline history"}
-				style={{ paddingInlineStart: `${String(events.length).length + 2}ch` }}
-				ref={list}
-				onScroll={(event) => {
-					const element = event.currentTarget
-					followsTail.current = element.scrollHeight - element.scrollTop - element.clientHeight < 8
-				}}
-			>
-				{events
-					.filter((event) => !live || event.type !== "step.started")
-					.map((event) => (
-						<li key={event.sequence}>{renderEvent(event, id)}</li>
-					))}
-			</ol>
+			{loggedEvents.length > 0 && (
+				<>
+					<h2>Inspection log</h2>
+					<ol
+						className={live ? "timeline rolling" : "timeline history"}
+						style={{ paddingInlineStart: `${String(events.length).length + 2}ch` }}
+						ref={list}
+						onScroll={(event) => {
+							const element = event.currentTarget
+							followsTail.current = element.scrollHeight - element.scrollTop - element.clientHeight < 8
+						}}
+					>
+						{loggedEvents.map((event) => (
+							<li key={event.sequence}>{renderEvent(event, id)}</li>
+						))}
+					</ol>
+				</>
+			)}
 		</section>
 	)
 }

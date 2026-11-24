@@ -95,7 +95,7 @@ test("incomplete reports allow retries and confirmed upgrade failures can be reu
 				output.report.upgrades = []
 				break
 
-			// Cache a genuine empty discovery result.
+			// Cache a genuine empty upgrade menu.
 			case "no upgrades":
 				output.report.upgrades = []
 		}

@@ -20,7 +20,7 @@ import { toInspectionMode } from "./toInspectionMode.ts"
 import { toRepositoryUrl } from "./toRepositoryUrl.ts"
 
 /**
- * Inspects a pinned repository and releases its sandbox before returning the Inspection Report.
+ * Inspects a repository at one commit and releases its sandbox before returning the Inspection Report.
  */
 export function inspectRepository(options: ModelRequestSandboxOptions): Promise<ModelRequestSandboxInspectionReport>
 export function inspectRepository(options: InspectionOptionsV2 | PreviousInspectionOptions): Promise<InspectionReportV2>
@@ -118,7 +118,7 @@ async function inspectWithRecovery({
 	engine?: ModelInspection
 	revision?: string
 }): Promise<InspectionReport> {
-	// Establish the first pinned checkout under the registry network policy.
+	// Establish the first inspected checkout under the registry network policy.
 	const checkout = await runtime.open(revision)
 	const first = await inspectProject({ context, ...checkout, engine })
 	if (!first.sandboxUnavailable) {

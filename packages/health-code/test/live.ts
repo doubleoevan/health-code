@@ -13,8 +13,8 @@ for (const [url, commit] of [
 	[fixtureUrl, fixtureCommit],
 	["https://github.com/privatenumber/get-tsconfig", "b4e7751e408eeaf014974a7cb1ec2634914a4d6c"],
 ] as const) {
-	test(`pinned Baseline ${url}`, { skip, timeout: 600000 }, async () => {
-		// inspect the pinned commit with upgrade trials disabled
+	test(`Baseline ${url}`, { skip, timeout: 600000 }, async () => {
+		// inspect the commit with upgrade checks disabled
 		const started = Date.now()
 		const sandboxProvider = connectProvider({}, commit)
 		const report = await inspectRepository({
@@ -23,12 +23,12 @@ for (const [url, commit] of [
 			limits: { maxUpgrades: 0, maxDurationMs: 540000 },
 		})
 
-		// confirm the pinned baseline produced installation evidence
+		// confirm the inspected baseline produced installation evidence
 		assert.equal(report.repository.commit, commit)
 		assert.ok("name" in report.packageManager, JSON.stringify(report.packageManager))
 		assert.ok(report.baseline.install.evidence.length, "Missing Baseline installation evidence")
 		if (url === fixtureUrl) {
-			// Exercise oxlint's sparse allocator through Nano ID's pinned test script.
+			// Exercise oxlint's sparse allocator through Nano ID's inspected test script.
 			assert.equal(report.baseline.tests.status, "passed", JSON.stringify(report.baseline.tests))
 		}
 

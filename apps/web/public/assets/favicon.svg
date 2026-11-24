@@ -1,11 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="6 6 84 84">
   <title>HealthCode</title>
-  <style>
-    .brackets { stroke: #000; }
-    @media (prefers-color-scheme: dark) {
-      .brackets { stroke: #fff; }
-    }
-  </style>
-  <path class="brackets" fill="none" stroke-width="5.3" d="m28 31-17 17 17 17m40-34 17 17-17 17"/>
+  <path fill="none" stroke="#fff" stroke-width="5.3" d="m28 31-17 17 17 17m40-34 17 17-17 17"/>
   <path fill="#16853c" d="M43 29h10q1 0 1 1v12h12q1 0 1 1v10q0 1-1 1H54v12q0 1-1 1H43q-1 0-1-1V54H30q-1 0-1-1V43q0-1 1-1h12V30q0-1 1-1Z"/>
 </svg>

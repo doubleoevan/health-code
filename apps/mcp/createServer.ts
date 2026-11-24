@@ -102,7 +102,7 @@ export function createServer({
 		{
 			title: "Find available dependency upgrades",
 			description:
-				"Start discovery in the background. Poll read_inspection, then pass the same ID as upgradeMenuId to list_upgrades. To wait for the upgrade menu in one call, use list_upgrades with the repository URL.",
+				"Start listing upgrades in the background. Poll read_inspection, then pass the same ID as upgradeMenuId to list_upgrades. To wait for the upgrade menu in one call, use list_upgrades with the repository URL.",
 			annotations: toHints(false, true),
 			inputSchema: z.object({ repositoryUrl }),
 			outputSchema: z.object({ inspectionId, upgradeMenuId: inspectionId, pollAfterMs: z.number() }),
@@ -117,7 +117,7 @@ export function createServer({
 			}),
 	)
 
-	// Discover an upgrade menu or page through previously discovered targets.
+	// List an upgrade menu or page through a saved one.
 	server.registerTool(
 		"list_upgrades",
 		{
@@ -138,7 +138,7 @@ export function createServer({
 					throw new UserError("Supply either a repository URL or an existing upgrade menu ID.")
 				}
 
-				// Reopen the upgrade menu across pages without repeating discovery.
+				// Reopen the upgrade menu across pages without repeating the lookup.
 				const id = repositoryUrl
 					? await inspections.run({
 							repositoryUrl,
@@ -158,7 +158,7 @@ export function createServer({
 		{
 			title: "Get a selected dependency upgrade",
 			description:
-				"Choose a dependency and target version from list_upgrades. Return a verified patch for the pinned commit, testing the upgrade if needed. If no patch is available, return the checks and the reason. Use get_tested_patch with its digest for subsequent text pages.",
+				"Choose a dependency and target version from list_upgrades. Return a verified patch for the inspected commit, testing the upgrade if needed. If no patch is available, return the checks and the reason. Use get_tested_patch with its digest for subsequent text pages.",
 			annotations: toHints(false, true),
 			inputSchema: selection,
 			outputSchema: selectedOutput,
@@ -200,7 +200,7 @@ export function createServer({
 		{
 			title: "Start an inspection",
 			description:
-				"Test one target selected from list_upgrades at its pinned commit. For automatic batch inspections omit selection.",
+				"Test one target selected from list_upgrades at its inspected commit. For automatic batch inspections omit selection.",
 			annotations: toHints(false, true),
 			inputSchema: z.object({
 				repositoryUrl,

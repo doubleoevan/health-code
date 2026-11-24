@@ -67,7 +67,7 @@ export async function readReleases({
 				break
 			}
 
-			// keep only notes for versions between the pinned and target releases
+			// keep only notes for versions between the current and target releases
 			notes.push(...toReleaseNotes({ releases: batch.releases, repository, upgrade }))
 			if (!batch.next) {
 				break
@@ -192,7 +192,7 @@ function toReleaseNotes({
 	return notes
 }
 
-// select workspaces whose pinned version precedes the release
+// select workspaces whose current version precedes the release
 function toAffectedWorkspaces(upgrade: Upgrade, version: string): string[] {
 	return Object.entries(upgrade.from)
 		.filter(([, from]) => gt(version, from))

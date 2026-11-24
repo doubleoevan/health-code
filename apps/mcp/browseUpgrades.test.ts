@@ -118,7 +118,7 @@ test("replay delivers exact Patch pages and durable application results", async 
 			["gadget"],
 		)
 
-		// Reopen discovery with the same GitHub repository under another capitalization.
+		// Reopen the upgrade menu with the same GitHub repository under another capitalization.
 		const upgradeMenuId = randomUUID()
 		await store.save({
 			...report,
@@ -127,7 +127,7 @@ test("replay delivers exact Patch pages and durable application results", async 
 			upgrades: [],
 		})
 
-		// Keep the release and patch evidence on the same pinned commit.
+		// Keep the release and patch evidence on the same inspected commit.
 		const choice = { upgradeMenuId, dependency: "gadget", to: "1.1.0" }
 		const preview = await upgradeMenus.features(choice)
 		assert.equal(preview.features[0]?.text, "Shared defaults")
@@ -221,7 +221,7 @@ test("replay delivers exact Patch pages and durable application results", async 
 	}
 })
 
-test("the MCP discovers choices and starts only the selected pinned target", async () => {
+test("the MCP lists choices and starts only the selected target", async () => {
 	const root = await mkdtemp(join(tmpdir(), "mcp-upgrade-menu-"))
 	const store = new InspectionStore(root, protect(environment))
 	const fixture: SandboxFixture = JSON.parse(await readFile(inspectionFixtureUrl, "utf8"))

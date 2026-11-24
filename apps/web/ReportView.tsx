@@ -7,10 +7,12 @@ import { UpgradeView } from "./UpgradeView.tsx"
 export function ReportView({
 	report,
 	url,
+	durationMs,
 	investigationPrompt,
 }: {
 	report: PublishedReport
 	url: string
+	durationMs?: number
 	investigationPrompt?: string
 }): ReactElement {
 	return (
@@ -19,6 +21,7 @@ export function ReportView({
 			<header className="inspection-heading">
 				<h1>{toReportHeading(report)}</h1>
 				<p>{toSummary(report)}</p>
+				{durationMs !== undefined && <p>Inspection time · {toDuration(durationMs)}</p>}
 				<ReportActions report={report} url={url} investigationPrompt={investigationPrompt} />
 			</header>
 			{report.stoppedReason && <p>{report.stoppedReason}</p>}
@@ -68,4 +71,11 @@ export function ReportView({
 			)}
 		</>
 	)
+}
+
+// show whole minutes and seconds
+function toDuration(milliseconds: number): string {
+	const seconds = Math.round(milliseconds / 1000)
+	const minutes = Math.floor(seconds / 60)
+	return minutes ? `${minutes} min ${seconds % 60} sec` : `${seconds} sec`
 }

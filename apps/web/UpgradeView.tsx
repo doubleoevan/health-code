@@ -157,7 +157,14 @@ function PatchDetails({
 					<>
 						<dt>Patch verification</dt>
 						<dd>
-							Install · {patch.checks.install}. Typecheck · {patch.checks.typecheck}. Tests · {patch.checks.tests}.
+							{/* each check as its own sentence */}
+							{Object.entries({
+								Install: patch.checks.install,
+								Typecheck: patch.checks.typecheck,
+								Tests: patch.checks.tests,
+							})
+								.map(([label, text]) => `${label} · ${text.replace(/\.$/, "")}.`)
+								.join(" ")}
 						</dd>
 					</>
 				)}

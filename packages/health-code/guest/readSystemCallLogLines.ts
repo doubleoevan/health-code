@@ -53,7 +53,7 @@ if (directory && /^\/var\/lib\/health-code\/evidence-[a-f0-9-]{36}$/.test(direct
 		return readFileSync(path, "utf8")
 	}
 	try {
-		// seed link tracking with the pinned project entries
+		// seed link tracking with the inspected project entries
 		const links = read("links")
 			.split("\0")
 			.filter(Boolean)
