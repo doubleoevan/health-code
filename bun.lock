@@ -21,14 +21,14 @@
     },
     "apps/mcp": {
       "name": "@health-code/mcp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "health-code-mcp": "launch.mjs",
       },
       "dependencies": {
         "@modelcontextprotocol/server": "2.4.0",
         "@runta/runta-sdk": "0.2.0",
-        "health-code": "0.1.0",
+        "health-code": "0.1.1",
         "zod": "4.6.7",
       },
       "devDependencies": {
@@ -59,7 +59,7 @@
     },
     "packages/health-code": {
       "name": "health-code",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "health-code": "dist/mcp/cli.js",
       },
