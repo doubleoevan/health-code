@@ -461,6 +461,7 @@ aside ul {
 	color: var(--accent);
 }
 article {
+	background: color-mix(in srgb, var(--panel) 25%, transparent);
 	padding: clamp(1rem, 3vw, 2rem);
 	margin-bottom: var(--block-gap);
 }
