@@ -35,13 +35,17 @@ export const modelSettingNames = [
  * Reads model routes for all four roles from the environment without choosing a model.
  */
 export function readModelRoutes(environment: NodeJS.ProcessEnv): SandboxModelRoutes {
-	const origin = readModelOrigin(environment)
+	const address = readModelAddress(environment)
+	const { origin } = address
 	const protocol = readModelProtocol(environment, origin)
 	const pricing: Pricing = {
 		inputUsdPerMillion: readPriceBound(environment, priceVariables[0]),
 		outputUsdPerMillion: readPriceBound(environment, priceVariables[1]),
 		maxInputTokens: 65536,
 	}
+
+	// default to /v1 when the address has no path
+	const path = address.pathname.replace(/\/$/, "") || "/v1"
 
 	// All four roles refer to the stored credential for this origin.
 	const header = protocol === "anthropic" ? "x-api-key" : "authorization"
@@ -55,7 +59,7 @@ export function readModelRoutes(environment: NodeJS.ProcessEnv): SandboxModelRou
 			modelId,
 			pricing,
 			protocol,
-			baseUrl: `${origin}/v1`,
+			baseUrl: `${origin}${path}`,
 			credential: { name: toModelSecretName(origin), header, valueTemplate },
 		}
 	}
@@ -80,29 +84,34 @@ function readPriceBound(environment: NodeJS.ProcessEnv, name: (typeof priceVaria
  * Reads the HTTPS origin that scopes model credentials.
  */
 export function readModelOrigin(environment: NodeJS.ProcessEnv): string {
+	return readModelAddress(environment).origin
+}
+
+// read the model host with its optional API path
+function readModelAddress(environment: NodeJS.ProcessEnv): URL {
 	try {
-		// parse the configured origin before binding credentials
+		// parse the configured address before binding credentials
 		const url = new URL(environment[hostVariable] ?? "")
 		if (
 			url.protocol !== "https:" ||
 			url.username ||
 			url.password ||
 			url.port ||
-			// reject endpoint-specific paths and noncanonical hosts
+			// reject queries, unusual path characters and noncanonical hosts
 			url.search ||
 			url.hash ||
-			url.pathname !== "/" ||
+			!/^(?:\/[\w.~-]+)*\/?$/.test(url.pathname) ||
 			!/^[a-z0-9.-]+\.[a-z0-9-]+$/i.test(url.hostname)
 		) {
 			throw new Error()
 		}
 
-		// return the normalized origin used to scope model credentials
-		return url.origin
+		// return the normalized address
+		return url
 	} catch {
 		throw new InspectionError(
 			"invalid-model-settings",
-			"Set HEALTH_CODE_MODEL_HOST to an HTTPS origin on the standard port.",
+			"Set HEALTH_CODE_MODEL_HOST to an HTTPS address on the standard port, with an API path when it isn't /v1.",
 		)
 	}
 }

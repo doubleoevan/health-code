@@ -32,7 +32,7 @@ The unscoped `health-code` npm package SHALL start the Node stdio server with `n
 
 ### Requirement: Route personally funded inspections
 
-The caller SHALL fund sandbox, model request sandbox and model use. The caller SHALL configure the model host and a model ID, with optional price bounds and an optional model ID per role. Unset price bounds SHALL default to $10 per million input tokens and $50 per million output tokens. The MCP SHALL name every missing setting and the setup command in one error and choose no model itself. It SHALL support Anthropic and OpenAI-compatible hosts. The MCP SHALL select model request sandbox execution for summaries and Code Feature Matches and use the existing sandbox binding for Repair and Feature adoption. Live MCP Inspections SHALL require `RUNTA_TOKEN` and the model settings, with the key stored in Runta. An optional GitHub credential SHALL serve release retrieval only.
+The caller SHALL fund sandbox, model request sandbox and model use. The caller SHALL configure the model host and a model ID, with optional price bounds and an optional model ID per role. Unset price bounds SHALL default to $10 per million input tokens and $50 per million output tokens. The MCP SHALL name every missing setting and the setup command in one error and choose no model itself. It SHALL support Anthropic and OpenAI-compatible hosts. A model host SHALL accept an API path and use `/v1` when it has none. The MCP SHALL select model request sandbox execution for summaries and Code Feature Matches and use the existing sandbox binding for Repair and Feature adoption. Live MCP Inspections SHALL require `RUNTA_TOKEN` and the model settings, with the key stored in Runta. An optional GitHub credential SHALL serve release retrieval only.
 
 #### Scenario: First Inspection after setup
 
@@ -48,6 +48,11 @@ The caller SHALL fund sandbox, model request sandbox and model use. The caller S
 
 - **WHEN** a role selects an origin without its registered secret
 - **THEN** the MCP reports that setup is required for that origin. It never sends another origin’s credential, falls back to a local key or dispatches a request through an unverified binding.
+
+#### Scenario: Model host with a path
+
+- **WHEN** the model host includes an API path
+- **THEN** every model request uses that path and the stored key stays named for the origin
 
 ### Requirement: Discover and start inspections
 

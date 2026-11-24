@@ -20,7 +20,7 @@ You need Node 22.18 or later on the 22.x line. Node 24.11 or later also works.
 | --- | --- |
 | `RUNTA_TOKEN` | Token from your [Runta account](https://dashboard.runta.com). It needs access to runtimes and secrets and the model-provider list. |
 | `MODEL_API_KEY` | Model provider key. Only setup needs it. Setup stores it in Runta. |
-| `HEALTH_CODE_MODEL_HOST` | Model provider address such as `https://api.anthropic.com`. |
+| `HEALTH_CODE_MODEL_HOST` | Model provider address such as `https://api.anthropic.com`. Include the full API path when it isn't `/v1`, such as `https://api.z.ai/api/paas/v4` or `https://proxy.example.com/anthropic/v1`. Leave out `/chat/completions` or `/messages`. |
 | `HEALTH_CODE_MODEL` | Model ID such as `claude-opus-5-5`. |
 
 1. Set these variables and run `npx health-code mcp setup` from your home directory.

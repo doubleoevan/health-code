@@ -10,7 +10,7 @@
 [![License](https://img.shields.io/npm/l/health-code?style=flat-square)](https://github.com/doubleoevan/health-code/blob/main/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/doubleoevan/health-code?style=flat-square)](https://github.com/doubleoevan/health-code/stargazers)
 
-[Demo](https://runhealthcode.dev) · [GitHub](https://github.com/doubleoevan/health-code) · [Guide](https://github.com/doubleoevan/health-code/blob/main/packages/health-code/GUIDE.md) · [MCP](https://github.com/doubleoevan/health-code/blob/main/apps/mcp/README.md)
+[Demo](https://runhealthcode.dev) · [GitHub](https://github.com/doubleoevan/health-code) · [Guide](https://github.com/doubleoevan/health-code/blob/main/packages/health-code/GUIDE.md) · [MCP](https://www.npmjs.com/package/@health-code/mcp)
 
 </div>
 
@@ -44,7 +44,7 @@ You need [Node.js](https://nodejs.org/) 22.18+ or 24.11+ and a [Runta](https://d
 - **New features:** finds release features that match your code.
 - **Sandbox:** the network is locked and your model key stays outside.
 - **Package managers:** npm, pnpm, Bun and Yarn.
-- **Models:** Anthropic and OpenAI-compatible hosts.
+- **Models:** bring your own through an Anthropic or OpenAI-compatible API with tool calling.
 
 ## Choose one upgrade
 

@@ -59,11 +59,11 @@ See the [MCP guide](apps/mcp/README.md#setup) for settings.
 
 ## Packages
 
-```text
-packages/health-code   Inspection library on npm
-apps/web               Demo site
-apps/mcp               MCP server and CI command
-```
+| Package | Use |
+| --- | --- |
+| [`health-code`](https://www.npmjs.com/package/health-code) | Inspection library, MCP server and CI command |
+| [`@health-code/mcp`](https://www.npmjs.com/package/@health-code/mcp) | Shortcut to the MCP server |
+| [`apps/web`](apps/web) | Demo site |
 
 Guides: [library](packages/health-code/GUIDE.md) · [MCP](apps/mcp/README.md) · [development](DEVELOPMENT.md)
 

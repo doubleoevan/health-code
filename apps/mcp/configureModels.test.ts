@@ -63,6 +63,23 @@ test("all four roles use origin-bound routes and ignore an inherited model key",
 	assert.equal(custom.repair.protocol, "openai-compatible")
 	assert.equal(custom.repair.credential.header, "authorization")
 
+	// keep an API path and bind one stored key to the origin
+	for (const [host, baseUrl] of [
+		["https://models.example.org", "https://models.example.org/v1"],
+		["https://models.example.org/v1/", "https://models.example.org/v1"],
+		["https://models.example.org/api/paas/v4", "https://models.example.org/api/paas/v4"],
+	]) {
+		const { repair } = configureModels({ ...modelSettings, HEALTH_CODE_MODEL_HOST: host })
+		assert.equal(repair.baseUrl, baseUrl)
+		assert.equal(repair.credential.name, custom.repair.credential.name)
+	}
+
+	// reject addresses that could widen the credential binding
+	for (const suffix of ["/v1?key=1", "/v1#a", "/v1/*", "/a%2fb", "//v1", ":8443/v1"]) {
+		const host = `https://models.example.org${suffix}`
+		assert.throws(() => configureModels({ ...modelSettings, HEALTH_CODE_MODEL_HOST: host }), /HEALTH_CODE_MODEL_HOST/)
+	}
+
 	// accept an explicit protocol and reject an unknown one
 	const proxy = { ...modelSettings, HEALTH_CODE_MODEL_HOST: "https://proxy.example.org" }
 	assert.equal(configureModels({ ...proxy, HEALTH_CODE_MODEL_PROTOCOL: "anthropic" }).repair.protocol, "anthropic")

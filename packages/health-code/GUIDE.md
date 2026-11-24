@@ -44,7 +44,7 @@ Pass configured model handles in `models.releaseSummary` and `models.featureMatc
 
 An Inspection with models defaults to 60 minutes and $15. Repair gets up to 40 turns, 20 minutes and $4. Feature adoption gets up to 25 turns, 10 minutes and $2. Each agent turn allows up to 8,192 output tokens. Set a lower turn limit with `limits.agent.repair.maxTurns` or `limits.agent.featureAdoption.maxTurns`. Set total spending and time under `limits`. Existing model-free calls and legacy string dictionaries return version 1.
 
-Use `readModelRoutes(environment)` to build routes from the `HEALTH_CODE_MODEL` settings. `health-code mcp setup` stores the key under the Runta secret these routes name. Pass a route and key to `createHostModel` for the summary and matching handles. Both accept Anthropic and OpenAI-compatible hosts. A caller can use the same configured model for summaries and matching. The guest route carries the stored credential name. The two model handles stay in the calling process.
+Use `readModelRoutes(environment)` to build routes from the `HEALTH_CODE_MODEL` settings. `health-code mcp setup` stores the key under the Runta secret these routes name. Pass a route and key to `createHostModel` for the summary and matching handles. Both accept Anthropic and OpenAI-compatible hosts. `HEALTH_CODE_MODEL_HOST` uses `/v1` unless it includes another API path. A caller can use the same configured model for summaries and matching. The guest route carries the stored credential name. The two model handles stay in the calling process.
 
 ```ts
 import { inspectRepository } from "health-code"
