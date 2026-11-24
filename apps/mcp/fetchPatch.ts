@@ -66,17 +66,21 @@ function findPatch(
 		if (raw) {
 			const parsed = artifact.safeParse(raw)
 			if (!parsed.success || !verified(raw, parsed.data)) {
-				throw new UserError("Patch is unreadable or its SHA-256 digest differs from the saved bytes.")
+				throw new UserError(
+					"Patch is unreadable or its SHA-256 digest differs from the saved bytes. Try the upgrade again.",
+				)
 			}
 
 			// require a library verdict before returning the patch
 			if (typeof upgrade.verdict !== "string") {
-				throw new UserError("Patch has no recorded Verdict.")
+				throw new UserError("Patch has no recorded Verdict. Try the upgrade again.")
 			}
 			return { patch: parsed.data, verdict: upgrade.verdict, siblings: upgrade.patches }
 		}
 	}
-	throw new UserError("This Inspection Report has no tested Patch with that digest.")
+	throw new UserError(
+		"This Inspection Report has no tested Patch with that digest. Call read_upgrade_results for its digests.",
+	)
 }
 
 export function fetchPatch(report: SavedReport, input: Fetch): z.infer<typeof patchOutput> {
@@ -104,7 +108,7 @@ export function fetchPatch(report: SavedReport, input: Fetch): z.infer<typeof pa
 			!raw ||
 			!verified(raw, prerequisite))
 	) {
-		throw new UserError("Invalid required Patch order or digest.")
+		throw new UserError("Invalid required Patch order or digest. Try the upgrade again.")
 	}
 
 	// stop the handoff if either patch changes tests

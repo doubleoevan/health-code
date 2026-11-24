@@ -7,6 +7,7 @@ import {
 	isModelRequestSandboxName,
 	type ModelRequestSandbox,
 	type SandboxProvider,
+	SandboxUnavailableError,
 } from "health-code"
 
 import { z } from "zod"
@@ -51,7 +52,7 @@ export async function organizationFolder({
 		})
 		if (!response.ok) {
 			await response.body?.cancel()
-			throw new Error()
+			throw new SandboxUnavailableError(toUnavailableReason(response.status))
 		}
 
 		// Only the authenticated organization identifier belongs in the ownership scope.
@@ -59,11 +60,26 @@ export async function organizationFolder({
 			.object({ organization_id: z.string().min(1).max(128) })
 			.parse(await response.json())
 		return ownerFolder(id)
-	} catch {
+	} catch (error) {
+		// a failed connection or timeout is temporary
+		if (error instanceof SandboxUnavailableError) {
+			throw error
+		}
+		if (error instanceof TypeError || error instanceof DOMException) {
+			throw new SandboxUnavailableError("unavailable")
+		}
 		throw new UserError(
 			"Could not verify the Runta organization. Check account access to list model providers and retry.",
 		)
 	}
+}
+
+// name why Runta refused the request
+function toUnavailableReason(status: number): SandboxUnavailableError["reason"] {
+	if (status === 401) {
+		return "authentication"
+	}
+	return status === 403 ? "permission" : "unavailable"
 }
 
 /**
@@ -73,7 +89,7 @@ export async function personalProvider(token: string, end = Date.now() + 120000)
 	const provider = createSandboxProvider({ token })
 	const modelRequestSandbox = provider.modelRequestSandbox
 	if (!modelRequestSandbox) {
-		throw new UserError("Model Request Sandbox unavailable")
+		throw new UserError("Model request sandbox unavailable. Restart your client and try again.")
 	}
 
 	// Resolve ownership before inspecting any local record.

@@ -1,5 +1,7 @@
 # Health Code MCP
 
+[npm](https://www.npmjs.com/package/@health-code/mcp) · [GitHub](https://github.com/doubleoevan/health-code) · [Demo](https://runhealthcode.dev)
+
 Inspect a public GitHub repository from Claude Code or Codex using your own Runta account. The server offers tools to start an inspection, follow its progress, retrieve a tested patch by digest and record what happened when you applied it.
 
 ```sh
@@ -24,7 +26,7 @@ You need Node 22.18 or later on the 22.x line. Node 24.11 or later also works.
 1. Set these variables and run `npx health-code mcp setup` from your home directory.
 2. Paste the printed entry inside `mcpServers` in `.mcp.json` for Claude Code. For Codex paste it at the top level of `~/.codex/config.toml`.
 3. Remove `MODEL_API_KEY` and restart your client with `RUNTA_TOKEN` set. The entry includes your model settings.
-4. Ask your agent to **list upgrades for this repository**. Choose one and ask it to **test that upgrade and apply its verified patch**.
+4. Ask your agent to **list upgrades for this repository**. Choose one and ask it to **try that upgrade and apply its verified patch**.
 
 | Optional | Use |
 | --- | --- |
@@ -35,11 +37,13 @@ You need Node 22.18 or later on the 22.x line. Node 24.11 or later also works.
 | `HEALTH_CODE_MODEL_PROTOCOL` | `anthropic` or `openai-compatible`. Defaults to `anthropic` for `https://api.anthropic.com` and `openai-compatible` for other hosts. Set `anthropic` for a proxy that uses the Anthropic API. |
 | `HEALTH_CODE_INPUT_USD_PER_MILLION` | Highest price per million input tokens. Defaults to `10`. |
 | `HEALTH_CODE_OUTPUT_USD_PER_MILLION` | Highest price per million output tokens. Defaults to `50`. |
-| `GITHUB_TOKEN` | Release notes for public repositories. Add it to the client entry. |
+| `GITHUB_TOKEN` | Release notes and the public repository check. Add it to the client entry. |
 
 The prices apply to every model you set and drive the spend limits. Set them when your model costs more than the defaults or to use more of each limit with a cheaper model. Run setup again after changing the host or protocol.
 
 ## Tools
+
+Name a public repository as `owner/repository` or a URL. When you name none, your agent passes the GitHub origin of your current checkout. A failed call returns the cause and the next step.
 
 Call `list_upgrades({ repositoryUrl })` to see eligible versions and their documented features. Choose one and call `get_upgrade({ upgradeMenuId, dependency, to })` to get its verified patch or the check results explaining why none was produced. Starting discovery or testing a selected upgrade sends ordered events to clients that display MCP progress. A saved upgrade menu reuses the discovered versions and fetches release notes for the visible page. A saved patch opens from local storage. Use the inspection ID with `read_inspection` to replay the log. To browse another page or sort the same upgrade menu, pass its `upgradeMenuId` to `list_upgrades` with `offset`, `order` (minor, alphabetical or workspaces), `search` or `readyOnly`.
 
@@ -51,7 +55,7 @@ Each upgrade menu target includes its first five documented features. Pass `next
 
 ## Example agent session
 
-Ask your agent to **list upgrades for this repository, test the upgrade I choose and apply its verified patch**.
+Ask your agent to **list upgrades for this repository, try the upgrade I choose and apply its verified patch**.
 
 1. Call `list_upgrades` with the public GitHub `repositoryUrl`. Review the versions and documented features. To browse more, pass the returned `upgradeMenuId` and pass `nextOffset` as `offset`.
 2. Call `get_upgrade` with `upgradeMenuId`, `dependency` and `to` from the upgrade menu. It returns the verified upgrade patch or the check results explaining why none was produced.

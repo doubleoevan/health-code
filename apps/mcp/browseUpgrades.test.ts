@@ -105,7 +105,7 @@ test("replay delivers exact Patch pages and durable application results", async 
 		)
 
 		// Fetch each selected artifact independently after reopening the report.
-		const upgradeMenus = new UpgradeMenus(store, releaseRequest)
+		const upgradeMenus = new UpgradeMenus(reader, releaseRequest)
 		const upgradeMenu = await upgradeMenus.list({
 			upgradeMenuId: inspectionId,
 			order: "minor",
@@ -221,7 +221,7 @@ test("replay delivers exact Patch pages and durable application results", async 
 		// reject linked records and ignore unfinished writes
 		const linked = randomUUID()
 		await symlink(join(root, inspectionId), join(root, linked))
-		await assert.rejects(store.load(linked), /unreadable/)
+		await assert.rejects(store.load(linked), /unexpected link/)
 
 		// confirm that pending records never appear under a finished id
 		await mkdir(join(root, ".pending-example"))
@@ -264,7 +264,11 @@ test("the MCP lists choices and starts only the selected target", async () => {
 
 	// Follow the agent's ordinary tool calls through the MCP transport.
 	const client = new Client({ name: "upgrade-menu-test", version: "1" })
-	const server = createServer({ inspections, version: "1", upgradeMenus: new UpgradeMenus(store, releaseRequest) })
+	const server = createServer({
+		inspections,
+		version: "1",
+		upgradeMenus: new UpgradeMenus(inspections, releaseRequest),
+	})
 	const [left, right] = InMemoryTransport.createLinkedPair()
 
 	// Complete both user-facing operations through the tool interface.

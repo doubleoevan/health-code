@@ -10,8 +10,9 @@ import {
 import * as z from "zod"
 import { fetchPatch, patchOutput } from "./fetchPatch.ts"
 import { listPatches, patchReference } from "./listPatches.ts"
-import { UserError } from "./modelSettings.ts"
-import { type InspectionStore, inspectionId, type SavedReport } from "./storeInspection.ts"
+import { readGithubToken, UserError } from "./modelSettings.ts"
+import { inspectionId, type SavedReport } from "./storeInspection.ts"
+import type { Inspections } from "./trackInspections.ts"
 
 const target = z.object({
 	dependency: z.string(),
@@ -75,12 +76,15 @@ export function toUpgradeMenuId(id: string | undefined, previous: string | undef
 	return upgradeMenuId
 }
 
+const unknownTarget =
+	"Choose a dependency and target version from this repository’s upgrade menu. Call list_upgrades to see it."
+
 export class UpgradeMenus {
 	// Keep only compact patch references for immutable saved reports.
 	private readonly indexed = new Set<string>()
 	private readonly ready = new Map<string, NonNullable<UpgradeMenuTarget["patch"]>>()
 	constructor(
-		private readonly store: InspectionStore,
+		private readonly inspections: Pick<Inspections, "store" | "loadReport">,
 		private readonly request: typeof fetch = fetch,
 	) {}
 
@@ -88,7 +92,7 @@ export class UpgradeMenus {
 		query: z.infer<typeof upgradeMenuQuery>,
 		signal?: AbortSignal,
 	): Promise<z.infer<typeof upgradeMenuOutput>> {
-		const report = await this.store.load(query.upgradeMenuId)
+		const report = await this.inspections.loadReport(query.upgradeMenuId)
 		const parsed = menuSelection.safeParse(report.selection)
 		if (!parsed.success) {
 			throw new UserError("This report has no upgrade list. Call list_upgrades with the repository URL.")
@@ -102,7 +106,7 @@ export class UpgradeMenus {
 		const issue =
 			parsed.data.registryLookupIssue ?? (typeof report.stoppedReason === "string" ? report.stoppedReason : undefined)
 		const rows = await readUpgradeMenuFeatures(groups.slice(query.offset, end), {
-			githubToken: process.env.GITHUB_TOKEN,
+			githubToken: readGithubToken(process.env),
 			request: this.request,
 			signal,
 		})
@@ -127,10 +131,10 @@ export class UpgradeMenus {
 		choice: z.infer<typeof selection> & { offset?: number },
 		signal?: AbortSignal,
 	): Promise<z.infer<typeof featureOutput>> {
-		const report = await this.store.load(toUpgradeMenuId(choice.upgradeMenuId, choice.menuId))
+		const report = await this.inspections.loadReport(toUpgradeMenuId(choice.upgradeMenuId, choice.menuId))
 		const upgrade = this.target(report, choice)
 		const preview = await readUpgradeFeatures(upgrade, {
-			githubToken: process.env.GITHUB_TOKEN,
+			githubToken: readGithubToken(process.env),
 			request: this.request,
 			signal,
 		})
@@ -141,10 +145,10 @@ export class UpgradeMenus {
 		url: string | undefined,
 		choice: z.infer<typeof selection>,
 	): Promise<{ repositoryUrl: string; revision: string; upgrade: Upgrade; patch?: UpgradeMenuTarget["patch"] }> {
-		const report = await this.store.load(toUpgradeMenuId(choice.upgradeMenuId, choice.menuId))
+		const report = await this.inspections.loadReport(toUpgradeMenuId(choice.upgradeMenuId, choice.menuId))
 		const upgrade = this.target(report, choice)
 		if (url !== undefined && report.repository.url.toLowerCase() !== url.toLowerCase()) {
-			throw new UserError("Choose a dependency and target version from this repository’s upgrade menu.")
+			throw new UserError(unknownTarget)
 		}
 
 		// Link a matching patch before admitting any fresh work.
@@ -161,7 +165,7 @@ export class UpgradeMenus {
 		const targets = menuSelection.safeParse(report.selection).data?.eligible ?? []
 		const target = targets.find((item) => item.dependency === choice.dependency && item.to === choice.to)
 		if (!target) {
-			throw new UserError("Choose a dependency and target version from this repository’s upgrade menu.")
+			throw new UserError(unknownTarget)
 		}
 		return target
 	}
@@ -176,13 +180,13 @@ export class UpgradeMenus {
 	}
 
 	private async indexReports(): Promise<void> {
-		for (const id of await this.store.reportIds()) {
+		for (const id of await this.inspections.store.reportIds()) {
 			if (this.indexed.has(id)) {
 				continue
 			}
 
 			// Advertise only upgrade patches whose saved bytes verify at their digest.
-			const report = await this.store.load(id).catch(() => undefined)
+			const report = await this.inspections.store.load(id).catch(() => undefined)
 			if (!report) {
 				continue
 			}

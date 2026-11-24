@@ -136,4 +136,16 @@ test("rotating the token preserves the verified organization scope", async () =>
 	const first = await organizationFolder({ token: "initial", end, request })
 	assert.equal(await organizationFolder({ token: "rotated", end, request }), first)
 	assert.notEqual(await organizationFolder({ token: "other", end, request }), first)
+
+	// separate a rejected token from missing access and an outage
+	for (const [status, reason] of [
+		[401, "authentication"],
+		[403, "permission"],
+		[503, "unavailable"],
+	] as const) {
+		const refused = async (): Promise<Response> => new Response("", { status })
+		await assert.rejects(organizationFolder({ token: "initial", end, request: refused }), { reason })
+	}
+	const offline = (): Promise<Response> => Promise.reject(new TypeError("fetch failed"))
+	await assert.rejects(organizationFolder({ token: "initial", end, request: offline }), { reason: "unavailable" })
 })

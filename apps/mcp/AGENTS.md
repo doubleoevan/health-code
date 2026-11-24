@@ -10,6 +10,8 @@ This workspace publishes the scoped launcher and owns the `health-code mcp` and 
 | `personalModelRequestSandboxes.ts` | Record each intended model request sandbox allocation by account and host. Use the verified organization ID across token rotations. Recover allocations whose local owner process has exited. |
 | `checkRepository.ts` | Run `health-code check` for CI and write the report and patches. |
 | `appView.ts`, `view/` | Serve and build the interactive page shown by clients with MCP Apps support. Read `view/AGENTS.md`. |
+| `readRepository.ts` | Read a repository address and check that GitHub shows it publicly before a sandbox starts. |
+| `toFailureMessage.ts` | Give each failure its cause and next step. |
 | `toEventLine.ts` | Describe one inspection event for tools, CI and the app view. |
 | `fixtures/` | Share recorded Inspection inputs and model replies between the MCP unit and packed stdio tests. |
 | `trackInspections.ts`, `storeInspection.ts` | Own active tasks, abort on shutdown, page evidence and save private Inspection Reports and application results. |

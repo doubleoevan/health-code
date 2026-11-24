@@ -5,10 +5,12 @@ import { InspectionError } from "health-code"
 import { checkRepository, checkUsage } from "./checkRepository.ts"
 import { createServer } from "./createServer.ts"
 import { inspectWithAccount } from "./inspectWithAccount.ts"
-import { accountToken, requireSettings, UserError } from "./modelSettings.ts"
+import { accountToken, readGithubToken, requireSettings, UserError } from "./modelSettings.ts"
 import { recoverAccount } from "./personalModelRequestSandboxes.ts"
+import { requirePublicRepository } from "./readRepository.ts"
 import { setupAccount } from "./setupAccount.ts"
 import { InspectionStore } from "./storeInspection.ts"
+import { toFailureMessage } from "./toFailureMessage.ts"
 import { Inspections } from "./trackInspections.ts"
 
 async function main(args: string[]): Promise<void> {
@@ -34,7 +36,7 @@ async function main(args: string[]): Promise<void> {
 		? Promise.resolve()
 				.then(() => recoverAccount(accountToken(process.env)))
 				.catch((error: unknown) =>
-					error instanceof UserError
+					error instanceof UserError || error instanceof InspectionError
 						? error
 						: new UserError("Model Request Sandbox recovery failed. Check your account and restart."),
 				)
@@ -43,8 +45,14 @@ async function main(args: string[]): Promise<void> {
 	// bind inspection jobs to the stdio session
 	const inspections = new Inspections(new InspectionStore(), async (options) => {
 		requireSettings(process.env)
+		await requirePublicRepository(options.repositoryUrl, {
+			githubToken: readGithubToken(process.env),
+			signal: options.signal,
+		})
+
+		// wait for the account before running the inspection
 		const provider = await recovery
-		if (provider instanceof UserError) {
+		if (provider instanceof Error) {
 			throw provider
 		}
 		return inspectWithAccount({ ...options, sandboxProvider: provider }, process.env)
@@ -77,9 +85,8 @@ async function runCheck(args: string[]): Promise<void> {
 	process.exitCode = isComplete ? 0 : 1
 }
 
-// expose setup guidance and keep internal errors out of stderr
+// name the next step and keep internal errors out of stderr
 main(process.argv.slice(2)).catch((error: unknown) => {
-	const isExpected = error instanceof UserError || error instanceof InspectionError
-	console.error(isExpected ? error.message : "Health Code could not start.")
+	console.error(toFailureMessage(error))
 	process.exitCode = 1
 })

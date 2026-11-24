@@ -20,6 +20,7 @@ import {
 	type SavedReport,
 } from "./storeInspection.ts"
 import { toEventLine } from "./toEventLine.ts"
+import { toFailureMessage } from "./toFailureMessage.ts"
 
 const page = z.object({ text: z.string(), nextOffset: z.number().nullable() })
 export const readOutput = z.object({
@@ -55,6 +56,7 @@ type State = {
 
 	// Retain terminal evidence when the report cannot be saved.
 	failure?: string
+	eventError?: UserError
 	reportText?: string
 	patches?: z.infer<typeof patchReference>[]
 }
@@ -65,7 +67,7 @@ type Read = { inspectionId: string; afterSequence: number; waitMs: number; repor
 export function textPage(text: string, offset: number): { text: string; nextOffset: number | null } {
 	// reject offsets that start inside a surrogate pair
 	if (offset > text.length || (offset > 0 && /[\uDC00-\uDFFF]/u.test(text.charAt(offset)))) {
-		throw new UserError("Invalid text cursor.")
+		throw new UserError("Invalid text cursor. Pass 0 or the last nextOffset.")
 	}
 
 	// leave the entire surrogate pair for the next page when it crosses the boundary
@@ -108,7 +110,13 @@ export class Inspections {
 
 	// read a report that storage could not save from memory
 	async loadReport(id: string): Promise<SavedReport> {
-		const unsaved = this.active.get(id)?.reportText
+		const state = this.active.get(id)
+		const unsaved = state?.reportText
+		if (state && !unsaved) {
+			throw new UserError(
+				state.failure ?? "This inspection is still running. Poll read_inspection until its status is complete.",
+			)
+		}
 		return unsaved ? reportSchema.parse(JSON.parse(unsaved)) : this.store.load(id)
 	}
 
@@ -116,10 +124,26 @@ export class Inspections {
 	stop(id: string): void {
 		const state = this.active.get(id)
 		if (state?.status !== "running") {
-			throw new UserError("No active inspection has that ID.")
+			throw new UserError("No active inspection has that ID. Call read_inspection for its result.")
 		}
 		state.controller.abort()
 	}
+
+	// keep the cause that the library replaces with a delivery error
+	private screenEvent(state: State, event: object): void {
+		try {
+			this.store.guard(JSON.stringify(event))
+		} catch (error) {
+			if (error instanceof UserError) {
+				state.eventError = error
+			}
+
+			// rethrow so the library stops the inspection
+			throw error
+		}
+	}
+
+	// return the inspection id as soon as the library announces it
 	async start(repositoryUrl: string, choice?: Choice & { signal?: AbortSignal }): Promise<string> {
 		// join a running test of the same upgrade
 		const upgradeKey = choice?.upgrade && JSON.stringify([repositoryUrl.toLowerCase(), choice.revision, choice.upgrade])
@@ -149,7 +173,7 @@ export class Inspections {
 					signal: choice?.signal ? AbortSignal.any([choice.signal, controller.signal]) : controller.signal,
 					onEvent: (input) => {
 						// Validate before publishing an event or waking a polling client.
-						this.store.guard(JSON.stringify(input))
+						this.screenEvent(state, input)
 						const event = eventSchema.parse(input)
 
 						// publish the inspection id as soon as the library announces it
@@ -161,7 +185,7 @@ export class Inspections {
 
 						// bind all subsequent events to the accepted inspection
 						if (event.inspectionId !== id) {
-							throw new UserError("Inspection event identity mismatch.")
+							throw new UserError("Inspection event identity mismatch. Start a new inspection.")
 						}
 						state.events.push(event)
 
@@ -178,7 +202,7 @@ export class Inspections {
 			.then(async (report) => {
 				// verify that the finished report belongs to this job
 				if (!id || report.inspectionId !== id) {
-					throw new UserError("Inspection identity mismatch.")
+					throw new UserError("Inspection identity mismatch. Start a new inspection.")
 				}
 				this.store.guard(JSON.stringify(report))
 				const saved = reportSchema.parse(report)
@@ -193,7 +217,9 @@ export class Inspections {
 						if (attempt === 2) {
 							state.reportText = JSON.stringify(saved)
 							state.patches = listPatches(saved)
-							throw new UserError("Inspection Report is available in memory only. Check local storage.")
+							throw new UserError(
+								"Inspection Report is available in memory only. Check disk space and permissions for ~/.health-code.",
+							)
 						}
 						await delay(100)
 					}
@@ -208,25 +234,14 @@ export class Inspections {
 				state.step = "Finished"
 
 				// expose only recognized errors in the terminal state
-				state.failure =
-					error instanceof UserError
-						? error.message
-						: error instanceof InspectionError
-							? error.code === "credential-binding"
-								? "Model Request Sandbox verification failed. Run health-code mcp setup for this model origin."
-								: `Inspection failed (${error.code}).`
-							: "Inspection failed."
-
-				// name any sandbox whose deletion is unconfirmed
-				if (error instanceof InspectionError && error.cleanupIds) {
-					state.failure += ` Sandbox deletion unconfirmed: ${error.cleanupIds.join(", ")}.`
-				}
+				const isDelivery = error instanceof InspectionError && error.code === "event-delivery" && !error.cleanupIds
+				state.failure = toFailureMessage(isDelivery ? (state.eventError ?? error) : error)
 
 				// screen the failure message before delivery
 				try {
 					this.store.guard(state.failure)
 				} catch {
-					state.failure = "Inspection evidence withheld."
+					state.failure = "The failure text contained a credential and was withheld. Start a new inspection."
 				}
 				accepted.reject(new UserError(state.failure))
 			})

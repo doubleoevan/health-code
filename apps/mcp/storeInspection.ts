@@ -55,13 +55,23 @@ export function protect(environment: NodeJS.ProcessEnv): (text: string) => void 
 	// screen both raw credentials and their serialized forms
 	return (text) => {
 		if (secrets.some((key) => text.includes(key) || text.includes(JSON.stringify(key).slice(1, -1)))) {
-			throw new UserError("Evidence withheld because it contains a configured credential.")
+			throw new UserError(
+				"Evidence withheld because it contains a configured credential. Remove the credential from the input or repository.",
+			)
 		}
 	}
 }
 
 function hasFileErrorCode(error: unknown, code: "ENOENT" | "EEXIST"): boolean {
 	return error instanceof Error && "code" in error && error.code === code
+}
+
+/**
+ * Recognizes a disk or permission failure in local storage.
+ */
+export function isStorageError(error: unknown): error is NodeJS.ErrnoException {
+	const codes = ["EACCES", "EPERM", "ENOENT", "ENOSPC", "EROFS"]
+	return error instanceof Error && "code" in error && codes.includes(String(error.code))
 }
 
 type Snapshot = { report: SavedReport; text: string }
@@ -79,7 +89,7 @@ export class InspectionStore {
 		// Reject links beneath the private storage root before traversing local evidence.
 		const root = await realpath(this.root)
 		if ((await realpath(path)) !== resolve(root, relative(this.root, path))) {
-			throw new UserError("Inspection storage contains an unexpected link.")
+			throw new UserError("Inspection storage contains an unexpected link. Remove links under ~/.health-code.")
 		}
 	}
 
@@ -108,7 +118,7 @@ export class InspectionStore {
 		await this.checkPath(path)
 		const stat = await lstat(path)
 		if (!stat.isFile() || stat.size > 64 * 1024 * 1024) {
-			throw new UserError("Inspection record has an unsupported size or type.")
+			throw new UserError("Inspection record has an unsupported size or type. Start a new inspection.")
 		}
 
 		// check stored text for configured credentials before parsing
@@ -123,7 +133,7 @@ export class InspectionStore {
 		const text = JSON.stringify(report)
 		this.guard(text)
 		if (Buffer.byteLength(text) > 64 * 1024 * 1024) {
-			throw new UserError("Inspection Report exceeds local storage limit.")
+			throw new UserError("Inspection Report exceeds the local storage limit. Try one upgrade.")
 		}
 
 		// stage the report and its result directory with private permissions
@@ -140,7 +150,15 @@ export class InspectionStore {
 	}
 	async reportIds(): Promise<string[]> {
 		// Enumerate only published report directories under the private storage root.
-		const entries = await readdir(this.root, { withFileTypes: true })
+		const entries = await readdir(this.root, { withFileTypes: true }).catch((error: unknown) => {
+			// return no reports before the first save
+			if (hasFileErrorCode(error, "ENOENT")) {
+				return []
+			}
+			throw error
+		})
+
+		// keep folders named by an inspection id
 		return entries
 			.filter((entry) => entry.isDirectory() && inspectionId.safeParse(entry.name).success)
 			.map((entry) => entry.name)
@@ -156,7 +174,7 @@ export class InspectionStore {
 			const path = await this.reportPath(id)
 			const stat = await lstat(path, { bigint: true })
 			if (!stat.isFile() || stat.size > 64n * 1024n * 1024n) {
-				throw new UserError("Inspection Report has an unsupported size or type.")
+				throw new UserError("Inspection Report has an unsupported size or type. Start a new inspection.")
 			}
 
 			// Reuse one immutable report across cursor reads until its on-disk identity changes.
@@ -180,9 +198,16 @@ export class InspectionStore {
 		} catch (error) {
 			// distinguish a missing inspection from unreadable saved evidence
 			if (hasFileErrorCode(error, "ENOENT")) {
-				throw new UserError("Inspection not found. Active inspections belong to their server process.")
+				throw new UserError(
+					"Inspection not found. Active inspections end with their server process. Start a new one with list_upgrades.",
+				)
 			}
-			throw new UserError("Saved Inspection Report is unreadable.")
+
+			// keep a storage error that already names its next step
+			if (error instanceof UserError || isStorageError(error)) {
+				throw error
+			}
+			throw new UserError("Saved Inspection Report is unreadable. Start a new inspection.")
 		}
 	}
 	async record(outcome: Outcome): Promise<void> {
@@ -231,7 +256,9 @@ export class InspectionStore {
 		for (const name of names) {
 			const record = outcomeSchema.parse(await this.read(join(directory, name)))
 			if (record.inspectionId !== id || name !== `${toHash(JSON.stringify(record))}.json`) {
-				throw new UserError("Saved Patch result is unreadable.")
+				throw new UserError(
+					`Saved Patch result is unreadable. Delete results/${name} under ~/.health-code/inspections/${id}, then record it again.`,
+				)
 			}
 
 			// retain only results whose identity checks succeeded

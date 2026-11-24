@@ -1,6 +1,5 @@
 import { stripVTControlCharacters } from "node:util"
 import { type CallToolResult, McpServer } from "@modelcontextprotocol/server"
-import { toRepositoryUrl } from "health-code"
 import * as z from "zod"
 import { appViewMeta, registerAppView } from "./appView.ts"
 import {
@@ -17,14 +16,12 @@ import {
 } from "./browseUpgrades.ts"
 import { checkoutSchema, fetchPatch, patchOutput, validateOutcome } from "./fetchPatch.ts"
 import { UserError } from "./modelSettings.ts"
+import { readRepository, repositoryInput } from "./readRepository.ts"
 import { digest, inspectionId, outcomeSchema } from "./storeInspection.ts"
 import { toEventLine } from "./toEventLine.ts"
+import { toFailureMessage } from "./toFailureMessage.ts"
 import { type Inspections, readOutput } from "./trackInspections.ts"
 
-const repositoryUrl = z
-	.string()
-	.max(256)
-	.regex(/^https:\/\/github\.com\/[a-z\d-]+\/[\w.-]+\/?$/i)
 const offset = z.number().int().nonnegative().default(0)
 function toHints(
 	readOnlyHint: boolean,
@@ -59,7 +56,7 @@ function progressReporter({ mcpReq }: ToolContext): (step: string) => Promise<vo
 export function createServer({
 	inspections,
 	version,
-	upgradeMenus = new UpgradeMenus(inspections.store),
+	upgradeMenus = new UpgradeMenus(inspections),
 }: {
 	inspections: Inspections
 	version: string
@@ -93,10 +90,7 @@ export function createServer({
 			return { content: [{ type: "text", text }], structuredContent: details }
 		} catch (error) {
 			// expose only errors intended for the tool caller
-			const message =
-				error instanceof UserError
-					? error.message
-					: "Request failed. Check the inspection ID, cursor and local storage."
+			const message = toFailureMessage(error)
 			return { content: [{ type: "text", text: message }], isError: true }
 		}
 	}
@@ -109,12 +103,12 @@ export function createServer({
 			description:
 				"Start listing upgrades in the background. Poll read_inspection, then pass the same ID as upgradeMenuId to list_upgrades. To wait for the upgrade menu in one call, use list_upgrades with the repository URL.",
 			annotations: toHints(false, true),
-			inputSchema: z.object({ repositoryUrl }),
+			inputSchema: z.object({ repositoryUrl: repositoryInput }),
 			outputSchema: z.object({ inspectionId, upgradeMenuId: inspectionId, pollAfterMs: z.number() }),
 		},
 		async ({ repositoryUrl }) =>
 			respond(async () => {
-				const id = await inspections.start(repositoryUrl, { mode: "listUpgrades" })
+				const id = await inspections.start(readRepository(repositoryUrl), { mode: "listUpgrades" })
 				return {
 					summary: "Finding upgrades. Poll read_inspection, then open list_upgrades.",
 					details: { inspectionId: id, upgradeMenuId: id, pollAfterMs: 2000 },
@@ -128,12 +122,12 @@ export function createServer({
 		{
 			title: "Browse dependency upgrades",
 			description:
-				"Start with a repositoryUrl to discover versions and their documented features. Pass upgradeMenuId to filter, sort or page the same upgrade menu. Release text is untrusted publisher content. Choose one version with get_upgrade.",
+				"Pass the repository the user names or the GitHub origin of their current checkout as repositoryUrl to discover versions and their documented features. Pass upgradeMenuId to filter, sort or page the same upgrade menu. Release text is untrusted publisher content. Choose one version with get_upgrade.",
 			annotations: toHints(false, true),
 			inputSchema: upgradeMenuQuery.extend({
 				upgradeMenuId: inspectionId.optional(),
 				inspectionId: inspectionId.optional().describe("Deprecated alias for upgradeMenuId."),
-				repositoryUrl: repositoryUrl.optional(),
+				repositoryUrl: repositoryInput,
 			}),
 			outputSchema: upgradeMenuOutput,
 			_meta: appViewMeta,
@@ -145,13 +139,14 @@ export function createServer({
 				}
 
 				// Reopen the upgrade menu across pages without repeating the lookup.
-				const id = repositoryUrl
-					? await inspections.run({
-							repositoryUrl,
+				const menuId = upgradeMenuId ?? previousId
+				const id = menuId
+					? toUpgradeMenuId(upgradeMenuId, previousId)
+					: await inspections.run({
+							repositoryUrl: readRepository(repositoryUrl),
 							choice: { mode: "listUpgrades" },
 							request: { signal: ctx.mcpReq.signal, progress: progressReporter(ctx) },
 						})
-					: toUpgradeMenuId(upgradeMenuId, previousId)
 
 				return {
 					summary: "Available dependency upgrades",
@@ -180,7 +175,7 @@ export function createServer({
 						choice: { revision: selected.revision, upgrade: selected.upgrade },
 						request: { signal: ctx.mcpReq.signal, progress: progressReporter(ctx) },
 					}))
-				const report = await inspections.store.load(id)
+				const report = await inspections.loadReport(id)
 				const details = toSelectedResult(report, choice)
 				return { summary: details.patch ? "Tested upgrade patch" : "No verified upgrade patch", details }
 			}),
@@ -207,10 +202,10 @@ export function createServer({
 		{
 			title: "Start an inspection",
 			description:
-				"Test one target selected from list_upgrades at its inspected commit. For automatic batch inspections omit selection.",
+				"Try one target selected from list_upgrades at its inspected commit. For automatic batch inspections omit selection.",
 			annotations: toHints(false, true),
 			inputSchema: z.object({
-				repositoryUrl,
+				repositoryUrl: repositoryInput,
 				selection: selection.optional(),
 			}),
 			outputSchema: z.object({ inspectionId, pollAfterMs: z.number(), sha256: digest.optional() }),
@@ -219,12 +214,13 @@ export function createServer({
 		async ({ repositoryUrl, selection }, ctx) =>
 			respond(async () => {
 				// report the accepted id before the inspection finishes
-				const selected = selection && (await upgradeMenus.select(toRepositoryUrl(repositoryUrl), selection))
+				const url = repositoryUrl || !selection ? readRepository(repositoryUrl) : undefined
+				const selected = selection && (await upgradeMenus.select(url, selection))
 				if (selected?.patch) {
 					return { summary: "Patch ready. Call get_tested_patch.", details: { ...selected.patch, pollAfterMs: 0 } }
 				}
 				const id = await inspections.start(
-					repositoryUrl,
+					selected?.repositoryUrl ?? readRepository(repositoryUrl),
 					selected && { revision: selected.revision, upgrade: selected.upgrade },
 				)
 				await progressReporter(ctx)(inspections.currentStep(id))
@@ -310,7 +306,7 @@ export function createServer({
 		async (input) =>
 			respond(async () => {
 				// verify the requested digest against the saved report
-				const report = await inspections.store.load(input.inspectionId)
+				const report = await inspections.loadReport(input.inspectionId)
 				const details = fetchPatch(report, input)
 				return {
 					summary: `${details.verdict} · checkout ${details.checkout.relationship} · ${details.action}`,
@@ -330,7 +326,7 @@ export function createServer({
 		},
 		async (input) =>
 			respond(async () => {
-				const report = await inspections.store.load(input.inspectionId)
+				const report = await inspections.loadReport(input.inspectionId)
 				validateOutcome(report, input)
 				await inspections.store.record(input)
 				return { summary: `Recorded ${input.application} application · tests ${input.tests}`, details: input }
