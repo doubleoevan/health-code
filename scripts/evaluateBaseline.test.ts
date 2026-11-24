@@ -12,7 +12,7 @@ test("record requires a complete pinned Baseline and scores only reviewed measur
 	const path = pathToFileURL(join(dir, "case.json"))
 	try {
 		// seed an unmeasured baseline case
-		const fixture = JSON.parse(await readFile(new URL("../evals/carlnotes-baseline.json", import.meta.url), "utf8"))
+		const fixture = JSON.parse(await readFile(new URL("../evals/baseline-test-counts.json", import.meta.url), "utf8"))
 		const seed = { ...fixture, review: "unmeasured", expected: null }
 		await writeFile(path, JSON.stringify(seed))
 

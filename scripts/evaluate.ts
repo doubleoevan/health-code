@@ -1,10 +1,10 @@
 import { createSandboxProvider, inspectRepository } from "health-code"
 import { openBaseline } from "./evaluateBaseline.ts"
-import { evaluateUpgrade } from "./evaluateUpgrade.ts"
+import { evaluateUpgrade, upgradeCaseIds } from "./evaluateUpgrade.ts"
 
 async function evaluateBaseline(record: boolean, signal: AbortSignal): Promise<void> {
 	// load the pinned baseline and select its recording mode
-	const path = new URL("../evals/carlnotes-baseline.json", import.meta.url)
+	const path = new URL("../evals/baseline-test-counts.json", import.meta.url)
 	const { fixture, finish } = await openBaseline(path, record)
 	const started = Date.now()
 
@@ -66,13 +66,25 @@ process.on("SIGTERM", cancel)
 try {
 	// dispatch the selected evaluation case
 	const args = process.argv.slice(2)
-	if (args.join(" ") === "--case carlnotes-baseline --record" || args.join(" ") === "--case carlnotes-baseline") {
+	const upgradeCaseId = upgradeCaseIds.find((id) => args.join(" ") === `--case ${id}`)
+	if (args.join(" ") === "--case baseline-test-counts --record" || args.join(" ") === "--case baseline-test-counts") {
 		await evaluateBaseline(args.includes("--record"), controller.signal)
-	} else if (args.join(" ") === "--case typescript-7") {
-		await evaluateUpgrade(controller.signal)
+	} else if (upgradeCaseId) {
+		await evaluateUpgrade(upgradeCaseId, controller.signal)
 	} else if (args.join(" ") === "--all") {
-		// run both cases against their reviewed expectations
-		await evaluateUpgrade(controller.signal)
+		// run every case against its recorded expectations
+		for (const id of upgradeCaseIds) {
+			await evaluateUpgrade(id, controller.signal).catch((error: unknown) => {
+				// score the remaining cases unless the evaluation was cancelled
+				controller.signal.throwIfAborted()
+
+				// report the failed case in the exit code
+				console.error(id, error)
+				process.exitCode = 1
+			})
+		}
+
+		// score the Baseline after every upgrade case
 		await evaluateBaseline(false, controller.signal)
 	} else {
 		throw new Error("Expected --all or --case <id> [--record]")

@@ -6,7 +6,7 @@ import { z } from "zod"
 
 const baselineCase = z.object({
 	version: z.literal(1),
-	id: z.literal("carlnotes-baseline"),
+	id: z.literal("baseline-test-counts"),
 	kind: z.literal("baseline"),
 	repositoryUrl: z.string().url(),
 	commit: z.string().regex(/^[\da-f]{40}$/),
@@ -25,7 +25,7 @@ export async function openBaseline(
 	const original = await readFile(path, "utf8")
 	const fixture = baselineCase.parse(JSON.parse(original))
 	if (!record && (fixture.review !== "reviewed" || !fixture.expected)) {
-		throw new Error("CarlNotes Baseline awaits review")
+		throw new Error("Baseline case awaits review")
 	}
 	return {
 		fixture,

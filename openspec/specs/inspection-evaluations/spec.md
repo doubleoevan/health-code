@@ -38,13 +38,27 @@ The TypeScript seed SHALL inspect 5.9.3 to 7.0.2 at Health Code commit 7e6d81920
 - **WHEN** the case reports Passes as is, weakens an existing test, or publishes an unflagged new dependency
 - **THEN** the evaluation fails even if the final command exited successfully.
 
-### Requirement: Grade a credential-free CarlNotes Baseline
+### Requirement: Grade linked dependency and mocked path repairs
 
-The CarlNotes seed SHALL inspect commit 2c229c8d44e957e93d5178a8664d5e2d5cbbe0f6 with zero upgrades, no application keys in the guest and no model calls. Its first record-mode execution SHALL write measured test counts and test file errors with file paths and reasons to the case file for review. Scoring SHALL require reviewed expectations and leave the case file unchanged.
+The linked-dependencies and mocked-import-path cases SHALL inspect commit a20b925b740b8e3ab1f639b53e3adc1e913f39fb and require a confirmed failed Upgrade Check, green tests and the public default budgets. The @vitejs/plugin-react 5.2.0 to 6.3.0 case SHALL require Fixed with unchanged existing tests and an upgraded vite. The @novnc/novnc 1.5.0 to 1.7.0 case SHALL require Fixed with test changes.
+
+#### Scenario: A linked dependency is missing
+
+- **WHEN** a repair of the linked-dependencies case leaves vite at its installed version
+- **THEN** the evaluation fails.
+
+#### Scenario: A repair has an unexpected Verdict
+
+- **WHEN** the Verdict or the presence of existing test changes differs from the case
+- **THEN** the evaluation fails.
+
+### Requirement: Grade a credential-free Baseline
+
+The Baseline seed SHALL inspect commit 2c229c8d44e957e93d5178a8664d5e2d5cbbe0f6 with zero upgrades, no application keys in the guest and no model calls. Its first record-mode execution SHALL write measured test counts and test file errors with file paths and reasons to the case file for review. Scoring SHALL require reviewed expectations and leave the case file unchanged.
 
 #### Scenario: Record the first Baseline
 
-- **WHEN** a developer invokes `bun run eval --case carlnotes-baseline --record` and the pinned Baseline inventory and cleanup complete
+- **WHEN** a developer invokes `bun run eval --case baseline-test-counts --record` and the pinned Baseline inventory and cleanup complete
 - **THEN** the runner atomically writes passed, failed, skipped and todo counts and the sorted list of test file errors with their paths and reasons into that case. It marks the measurements pending review and issues no passing score.
 
 #### Scenario: Recording fails before the inventory is complete

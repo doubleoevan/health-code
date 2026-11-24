@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# measure consecutive statement lines using the carlnotes limit
+# the most consecutive statement lines allowed without a comment
 limit=8
 
 # find a shell input delimiter outside comments and quoted arguments

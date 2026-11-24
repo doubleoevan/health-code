@@ -1,6 +1,6 @@
 {
 	"version": 1,
-	"id": "typescript-7",
+	"id": "removed-apis",
 	"kind": "upgrade",
 	"repositoryUrl": "https://github.com/doubleoevan/health-code",
 	"commit": "7e6d81920e7959933822dc628fe7ad184f56cf61",
@@ -10,7 +10,8 @@
 		"confirmed": true,
 		"locator": "scripts/readWorkspace.ts",
 		"verdict": "Fixed",
-		"existingTestChanges": false
+		"existingTestChanges": false,
+		"diagnosisPatterns": ["readConfigFile", "(?:\\bsys\\b|parseJsonConfigFileContent)"]
 	},
 	"reference": {
 		"parent": "cc0c5319b89410fc71ff9b7359f49fd11916e2c7",

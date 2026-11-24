@@ -5,7 +5,7 @@ on:
       case:
         description: Pinned case to score
         type: choice
-        options: [typescript-7, carlnotes-baseline]
+        options: [removed-apis, linked-dependencies, mocked-import-path, baseline-test-counts]
         required: true
 permissions:
   contents: read
@@ -39,7 +39,7 @@ jobs:
         run: |
           echo "## $CASE_ID evaluation" >> "$GITHUB_STEP_SUMMARY"
           echo "Score step outcome: $OUTCOME" >> "$GITHUB_STEP_SUMMARY"
-          for report in logs/typescript-7-*.json; do
+          for report in logs/"$CASE_ID"-*.json; do
             if [ -f "$report" ]; then
               jq -r '"Verdict: \(.verdict). Confirmed break: \(.confirmed). Budget acceptance: \(.budgetAcceptance). Repair turns: \(.attemptTurns). Model cost: $\(.modelCostUsd)."' "$report" >> "$GITHUB_STEP_SUMMARY"
             fi

@@ -14,9 +14,16 @@ import { z } from "zod"
 import { scoreBudget } from "./scoreBudget.ts"
 
 const commit = z.string().regex(/^[a-f0-9]{40}$/)
-const schema = z.object({
+
+/**
+ * Lists the IDs of the pinned upgrade cases.
+ */
+export const upgradeCaseIds = ["removed-apis", "linked-dependencies", "mocked-import-path"] as const
+export type UpgradeCaseId = (typeof upgradeCaseIds)[number]
+
+export const upgradeCaseSchema = z.object({
 	version: z.literal(1),
-	id: z.literal("typescript-7"),
+	id: z.enum(upgradeCaseIds),
 	kind: z.literal("upgrade"),
 	repositoryUrl: z.string().url(),
 	commit,
@@ -24,28 +31,33 @@ const schema = z.object({
 	expected: z.object({
 		check: z.literal("failed"),
 		confirmed: z.literal(true),
-		locator: z.string(),
-		verdict: z.literal("Fixed"),
-		existingTestChanges: z.literal(false),
+		verdict: z.enum(["Fixed", "Fixed with test changes"]),
+		existingTestChanges: z.boolean(),
+
+		// the optional expectations
+		locator: z.string().optional(),
+		linkedDependencies: z.array(z.string()).default([]),
+		diagnosisPatterns: z.array(z.string()).default([]),
 	}),
-	reference: z.object({ parent: commit, commit }),
+	memoryMib: z.union([z.literal(4096), z.literal(8192)]).optional(),
+	reference: z.object({ parent: commit, commit }).optional(),
 })
 
 /**
- * Scores the historical TypeScript regression using the public version 2 defaults.
+ * Scores one pinned upgrade using the public version 2 defaults.
  */
-export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
+export async function evaluateUpgrade(upgradeCaseId: UpgradeCaseId, signal?: AbortSignal): Promise<void> {
 	// load the pinned upgrade and require both accounts
-	const fixture = schema.parse(
-		JSON.parse(await readFile(new URL("../evals/typescript-7.json", import.meta.url), "utf8")),
+	const fixture = upgradeCaseSchema.parse(
+		JSON.parse(await readFile(new URL(`../evals/${upgradeCaseId}.json`, import.meta.url), "utf8")),
 	)
 	const { MODEL_API_KEY: apiKey, RUNTA_TOKEN: token } = process.env
 	if (!apiKey || !token) {
-		throw new Error("TypeScript evaluation requires a host model credential and a sandbox account")
+		throw new Error("Upgrade evaluation requires a host model credential and a sandbox account")
 	}
 
 	// inspect the exact repository revision and dependency upgrade
-	const provider = createSandboxProvider({ revision: fixture.commit })
+	const provider = createSandboxProvider({ revision: fixture.commit, memoryMib: fixture.memoryMib })
 	const started = Date.now()
 	const inspectionReport = await inspectRepository({
 		repositoryUrl: fixture.repositoryUrl,
@@ -86,7 +98,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	}
 
 	// check that the failure reproduced on both attempts
-	const repeated = [report.typecheck, report.tests].some(
+	const isBreakConfirmed = [report.install, report.typecheck, report.tests].some(
 		(check) =>
 			check.status === "failed" &&
 			check.attempts?.length === 2 &&
@@ -94,9 +106,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	)
 
 	// match source evidence and look for edits to tests
-	const located = report.locators.some(
-		(loc) => loc.file === fixture.expected.locator && loc.url?.includes(fixture.commit),
-	)
+	const hasExpectedLocator = matchesExpectedLocator(report, fixture)
 	const testChanges = report.patches.flatMap((patch) => patch.commits.filter((entry) => entry.flag === "test"))
 	const upgradePatch = report.patches.find((patch) => patch.role === "upgrade")
 	const verified = upgradePatch?.verification
@@ -118,10 +128,11 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	const score = gradeUpgrade({
 		withinBudget,
 		report,
-		repeated,
-		located,
-		unchanged: !testChanges.length,
-		green:
+		isBreakConfirmed,
+		hasExpectedLocator,
+		expected: fixture.expected,
+		hasExpectedTestChanges: testChanges.length > 0 === fixture.expected.existingTestChanges,
+		isPatchVerified:
 			verified?.install.status === "passed" &&
 			verified.typecheck.status === "passed" &&
 			verified.tests.status === "passed",
@@ -134,7 +145,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	// save the tested mailbox beside the evaluation report
 	const directory = new URL("../logs/", import.meta.url)
 	await mkdir(directory, { recursive: true })
-	const filename = `typescript-7-${inspectionReport.inspectionId}.patch`
+	const filename = `${fixture.id}-${inspectionReport.inspectionId}.patch`
 	if (upgradePatch) {
 		await writeFile(new URL(filename, directory), upgradePatch.mailbox)
 	}
@@ -163,7 +174,7 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 		promptVersions: inspectionReport.promptVersions,
 		commit: inspectionReport.repository.commit,
 		verdict: report.verdict,
-		confirmed: repeated,
+		confirmed: isBreakConfirmed,
 		locators: report.locators,
 		testChanges,
 		dependencies: report.newDependencies,
@@ -175,12 +186,12 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 		withinBudget,
 		attemptDurationMs: report.attemptDurationMs,
 		sandboxCostUpperBoundUsd,
-		sourceDiff: upgradePatch ? await sourceDiff(upgradePatch, fixture.reference) : null,
+		sourceDiff: upgradePatch && fixture.reference ? await sourceDiff(upgradePatch, fixture.reference) : null,
 	}
 
 	// write the full comparison and print a compact summary
 	await writeFile(
-		new URL(`typescript-7-${inspectionReport.inspectionId}.json`, directory),
+		new URL(`${fixture.id}-${inspectionReport.inspectionId}.json`, directory),
 		`${JSON.stringify(outcome, null, 2)}\n`,
 	)
 	console.log(
@@ -203,6 +214,15 @@ export async function evaluateUpgrade(signal?: AbortSignal): Promise<void> {
 	}
 }
 
+// match the pinned source location when the case names one
+function matchesExpectedLocator(report: UpgradeReportV2, fixture: z.infer<typeof upgradeCaseSchema>): boolean {
+	const { locator } = fixture.expected
+	return (
+		locator === undefined ||
+		report.locators.some((entry) => entry.file === locator && entry.url?.includes(fixture.commit))
+	)
+}
+
 /**
  * Binds each role to its configured model with the evaluation's input bound.
  */
@@ -221,26 +241,36 @@ export function toEvaluationModels(environment: NodeJS.ProcessEnv, apiKey: strin
 export function gradeUpgrade({
 	withinBudget,
 	report,
-	repeated,
-	located,
-	unchanged,
-	green,
+	isBreakConfirmed,
+	hasExpectedLocator,
+	expected,
+	hasExpectedTestChanges,
+	isPatchVerified,
 }: {
 	report: UpgradeReportV2
-	repeated: boolean
-	located: boolean
-	unchanged: boolean
-	green: boolean
+	expected: Pick<z.infer<typeof upgradeCaseSchema>["expected"], "verdict" | "linkedDependencies" | "diagnosisPatterns">
+
+	// the measured results
+	isBreakConfirmed: boolean
+	hasExpectedLocator: boolean
+	hasExpectedTestChanges: boolean
+	isPatchVerified: boolean
 	withinBudget: boolean
 }): { budgetAcceptance: boolean; acceptableDiagnosis: boolean } {
-	// match each declared dependency to a justified patch commit
+	// match each dependency to a flagged commit. linked dependencies share one commit
 	const diagnosis = JSON.stringify(report.diagnosis ?? {})
-	const flagged = report.patches.flatMap((patch) => patch.commits.filter((commit) => commit.flag === "dependency"))
-	const declared = report.newDependencies
+	const dependencyCommits = report.patches.flatMap((patch) =>
+		patch.commits.filter((commit) => commit.flag === "dependency"),
+	)
+	const { newDependencies } = report
 	const dependenciesReviewed =
-		declared.length === flagged.length &&
-		declared.every(
-			(dep) => dep.reason.trim() && flagged.some((commit) => commit.sha === dep.commit && commit.reason === dep.reason),
+		dependencyCommits.every((commit) => newDependencies.some((dependency) => dependency.commit === commit.sha)) &&
+		newDependencies.every(
+			(dependency) =>
+				dependency.reason.trim() &&
+				dependencyCommits.some(
+					(commit) => commit.sha === dependency.commit && commit.reason?.includes(dependency.reason),
+				),
 		)
 
 	// score repair acceptance separately from a located diagnosis
@@ -248,22 +278,26 @@ export function gradeUpgrade({
 		budgetAcceptance:
 			withinBudget &&
 			dependenciesReviewed &&
-			repeated &&
-			// require the tested repair to preserve existing tests
-			located &&
-			unchanged &&
-			green &&
-			report.verdict === "Fixed" &&
+			isBreakConfirmed &&
+			// require the source location, test changes and linked dependencies
+			hasExpectedLocator &&
+			hasExpectedTestChanges &&
+			expected.linkedDependencies.every((name) =>
+				newDependencies.some((dependency) => dependency.name === name && dependency.from),
+			) &&
+			// require passing final checks and the expected Verdict
+			isPatchVerified &&
+			report.verdict === expected.verdict &&
 			report.patches.length > 0,
 
 		// credit a diagnosis that identifies the expected migration
 		acceptableDiagnosis:
-			repeated &&
-			located &&
+			isBreakConfirmed &&
+			hasExpectedLocator &&
 			report.verdict === "Can't fix" &&
 			!report.patches.length &&
-			/readConfigFile/.test(diagnosis) &&
-			/(?:\bsys\b|parseJsonConfigFileContent)/.test(diagnosis),
+			expected.diagnosisPatterns.length > 0 &&
+			expected.diagnosisPatterns.every((pattern) => new RegExp(pattern).test(diagnosis)),
 	}
 }
 

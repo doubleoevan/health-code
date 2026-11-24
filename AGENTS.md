@@ -10,7 +10,7 @@ The TypeScript library owns inspections. The site and MCP server expose the libr
 | `packages/health-code/` | Library workspace. Owns inspection behavior and the public package entry. Read its AGENTS.md for the boundary. |
 | `apps/web/` | Web application (`@health-code/web`). Owns submission, SQLite persistence, SSE, browser interactions and Inspection Report publication. |
 | `apps/mcp/` | Source for the `health-code mcp` and `health-code check` Node commands and the published `@health-code/mcp` launcher. Owns account setup, MCP tools, Inspection storage and Patch handoff. |
-| `evals/` | On-demand, pinned inspection cases and the CarlNotes Baseline inventory for maintainer review. |
+| `evals/` | On-demand, pinned inspection cases and the Baseline test inventory for maintainer review. |
 | `DEVELOPMENT.md` | Contributor commands and release verification. |
 | `scripts/` | Repository checks, preflight, and the developer inspection CLI. Use `bun run inspect <repo-url> [--fake]` for a rolling log and a local JSON Inspection Report. |
 | `.github/` | CI, CodeQL, weekly dependency updates, and shared Bun setup. |

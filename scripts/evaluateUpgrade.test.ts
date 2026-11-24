@@ -1,15 +1,25 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
 import type { UpgradeReportV2 } from "health-code"
-import { gradeUpgrade, sourceDiff, toEvaluationModels } from "./evaluateUpgrade.ts"
+import { gradeUpgrade, sourceDiff, toEvaluationModels, upgradeCaseIds, upgradeCaseSchema } from "./evaluateUpgrade.ts"
 import { scoreBudget } from "./scoreBudget.ts"
 
+// start each grading test with every measured check passing
+const passingChecks = {
+	withinBudget: true,
+	isBreakConfirmed: true,
+	hasExpectedLocator: true,
+	hasExpectedTestChanges: true,
+	isPatchVerified: true,
+}
+
 test("a repeated and located diagnosis is distinct from a verified repair", () => {
-	const input = { withinBudget: true, repeated: true, located: true, unchanged: true, green: true }
+	const expected = { verdict: "Fixed" as const, linkedDependencies: [], diagnosisPatterns: ["readConfigFile", "sys"] }
+	const input = { ...passingChecks, expected }
 	const diagnosis = {
 		verdict: "Can't fix",
 		patches: [],
@@ -22,7 +32,7 @@ test("a repeated and located diagnosis is distinct from a verified repair", () =
 		acceptableDiagnosis: true,
 		budgetAcceptance: false,
 	})
-	assert.equal(gradeUpgrade({ ...input, report: diagnosis, located: false }).acceptableDiagnosis, false)
+	assert.equal(gradeUpgrade({ ...input, report: diagnosis, hasExpectedLocator: false }).acceptableDiagnosis, false)
 	const fixed = {
 		verdict: "Fixed",
 		newDependencies: [],
@@ -32,8 +42,48 @@ test("a repeated and located diagnosis is distinct from a verified repair", () =
 	// require passing checks and unchanged tests within budget
 	assert.equal(gradeUpgrade({ ...input, report: fixed }).budgetAcceptance, true)
 	assert.equal(gradeUpgrade({ ...input, report: fixed, withinBudget: false }).budgetAcceptance, false)
-	assert.equal(gradeUpgrade({ ...input, report: fixed, green: false }).budgetAcceptance, false)
-	assert.equal(gradeUpgrade({ ...input, report: fixed, unchanged: false }).budgetAcceptance, false)
+	assert.equal(gradeUpgrade({ ...input, report: fixed, isPatchVerified: false }).budgetAcceptance, false)
+	assert.equal(gradeUpgrade({ ...input, report: fixed, hasExpectedTestChanges: false }).budgetAcceptance, false)
+})
+test("an upgrade case requires its expected verdict and linked dependencies", () => {
+	const expected = { verdict: "Fixed" as const, linkedDependencies: ["vite"], diagnosisPatterns: [] }
+	const input = { ...passingChecks, expected }
+
+	// build a Fixed report whose linked dependencies share one commit
+	const linkedDependency = { name: "vite", reason: "Required peer", commit: "fixture", from: { ".": "7.0.0" } }
+	const matchingDependency = { name: "vitest", reason: "Match vite", commit: "fixture" }
+	const report = {
+		verdict: "Fixed",
+		newDependencies: [linkedDependency, matchingDependency],
+		patches: [{ commits: [{ flag: "dependency", sha: "fixture", reason: "Required peer\nMatch vite" }] }],
+	} as unknown as UpgradeReportV2
+
+	// reject a missing linked dependency or a different verdict
+	assert.equal(gradeUpgrade({ ...input, report }).budgetAcceptance, true)
+	const unlinkedReport = { ...report, newDependencies: [], patches: [{ commits: [] }] } as unknown as UpgradeReportV2
+	assert.equal(gradeUpgrade({ ...input, report: unlinkedReport }).budgetAcceptance, false)
+
+	// reject a new dependency that shares the linked dependency's name
+	const { from: _from, ...addedDependency } = linkedDependency
+	const addedReport = { ...report, newDependencies: [addedDependency] } as unknown as UpgradeReportV2
+	assert.equal(gradeUpgrade({ ...input, report: addedReport }).budgetAcceptance, false)
+
+	// reject a flagged commit with no reported dependency
+	const unreportedDependencyReport = { ...report, newDependencies: [] } as unknown as UpgradeReportV2
+	assert.equal(
+		gradeUpgrade({ ...input, expected: { ...expected, linkedDependencies: [] }, report: unreportedDependencyReport })
+			.budgetAcceptance,
+		false,
+	)
+	const changedTestsReport = { ...report, verdict: "Fixed with test changes" } as UpgradeReportV2
+	assert.equal(gradeUpgrade({ ...input, report: changedTestsReport }).budgetAcceptance, false)
+})
+test("every pinned upgrade case matches the case schema", () => {
+	// compare each file name with its case ID
+	for (const id of upgradeCaseIds) {
+		const text = readFileSync(new URL(`../evals/${id}.json`, import.meta.url), "utf8")
+		assert.equal(upgradeCaseSchema.parse(JSON.parse(text)).id, id)
+	}
 })
 test("each evaluation role uses its own configured model", () => {
 	const models = toEvaluationModels(

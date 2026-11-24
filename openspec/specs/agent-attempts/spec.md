@@ -18,7 +18,7 @@ The public Agent Attempt role IDs SHALL be `repair` and `featureAdoption`. Their
 
 #### Scenario: Existing callers upgrade the library
 
-- **WHEN** the web app or CarlNotes supplies existing model handles and omits `callerModelExecution`, or explicitly selects `"local"`
+- **WHEN** the web app or another library caller supplies existing model handles and omits `callerModelExecution`, or explicitly selects `"local"`
 - **THEN** the caller receives the same version 2 model behavior with a provider that has no model request sandbox capability. A model-free caller still receives the version 1 contract.
 
 #### Scenario: A caller selects the model request sandbox

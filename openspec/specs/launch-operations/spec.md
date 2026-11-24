@@ -35,7 +35,7 @@ The admin page SHALL show daily share rate, viewer-to-runner rate, denominators,
 
 ### Requirement: Verify the hosted journey with public repositories
 
-An explicit end-to-end command SHALL exercise CarlNotes and the approved three other public TypeScript repositories against the configured deployment, keep evidence of report rendering and runtime cleanup, and distinguish live verdicts from deterministic regression coverage.
+An explicit end-to-end command SHALL exercise the four approved public TypeScript repositories against the configured deployment, keep evidence of report rendering and runtime cleanup, and distinguish live verdicts from deterministic regression coverage.
 
 #### Scenario: Collect acceptance evidence
 

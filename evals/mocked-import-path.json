@@ -1,0 +1,19 @@
+{
+	"version": 1,
+	"id": "mocked-import-path",
+	"kind": "upgrade",
+	"repositoryUrl": "https://github.com/runta-dev/errand",
+	"commit": "a20b925b740b8e3ab1f639b53e3adc1e913f39fb",
+	"memoryMib": 8192,
+	"upgrade": {
+		"dependency": "@novnc/novnc",
+		"from": "1.5.0",
+		"to": "1.7.0"
+	},
+	"expected": {
+		"check": "failed",
+		"confirmed": true,
+		"verdict": "Fixed with test changes",
+		"existingTestChanges": true
+	}
+}
