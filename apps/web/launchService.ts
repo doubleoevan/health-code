@@ -110,7 +110,7 @@ export class LaunchService {
 
 		// Derive quota identities only for fresh work.
 		if (choice?.upgrade && maxUpgrades === 0) {
-			throw new AdmissionError(503, "Upgrade testing is paused. Existing patches remain available.")
+			throw new AdmissionError(503, "You can’t try new upgrades right now. Existing patches remain available.")
 		}
 
 		// Identify the visitor before reserving fresh work.

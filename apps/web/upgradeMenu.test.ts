@@ -25,14 +25,14 @@ test("browse an inspected upgrade menu, choose one release and reopen its licens
 		const menuReport = await replay.inspect(repositoryUrl, () => {}, { mode: "listUpgrades" })
 		store.finish(upgradeMenu.id, publishReport(menuReport, "MIT"))
 		const html = await (await app.request(`/r/${upgradeMenu.id}`)).text()
-		for (const label of ["Test an upgrade", "Search dependencies", "Most workspaces first", "Test upgrade"]) {
+		for (const label of ["Try an upgrade", "Search dependencies", "Most workspaces first", "Try upgrade"]) {
 			expect(html).toContain(label)
 		}
 
 		// Ignore the patch filter until a tested patch exists.
 		const unfiltered = await (await app.request(`/r/${upgradeMenu.id}?ready=on`)).text()
 		expect(unfiltered).not.toContain("Tested patch available")
-		expect(unfiltered).toContain("Test upgrade")
+		expect(unfiltered).toContain("Try upgrade")
 
 		// Read release features for the selected version before starting its tests.
 		const path = `/api/inspections/${upgradeMenu.id}/features?dependency=widget&to=`
@@ -45,7 +45,7 @@ test("browse an inspected upgrade menu, choose one release and reopen its licens
 		expect((await submit({ ...choice, to: "9.9.9" })).status).toBe(400)
 		const result = await (await submit({ ...choice, repositoryUrl: repositoryUrl + ".git/" })).json()
 		const selectedPage = await (await app.request(`/r/${result.id}`)).text()
-		expect(selectedPage).toContain('<h1 class="shimmer">Testing widget upgrade...</h1>')
+		expect(selectedPage).toContain('<h1 class="shimmer">Trying widget upgrade...</h1>')
 		expect(selectedPage).toContain(" · <span>widget 1.2.0 → 1.3.0</span>")
 
 		// hide the link back while the inspection waits and store the chosen target
@@ -134,7 +134,7 @@ test("saved upgrade menus and queued jobs retain their meaning across the field 
 
 		// Exercise both the shared page and its feature endpoint.
 		const app = createTestSite(store)
-		expect(await (await app.request(`/r/${id}`)).text()).toContain("Test an upgrade")
+		expect(await (await app.request(`/r/${id}`)).text()).toContain("Try an upgrade")
 		expect((await app.request(`/api/inspections/${id}/features?dependency=widget&to=1.3.0`)).status).toBe(200)
 	} finally {
 		store.database.close()

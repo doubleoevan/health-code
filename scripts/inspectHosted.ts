@@ -42,13 +42,13 @@ async function submit(
 	await page.getByLabel("Public GitHub repository").fill(`https://github.com/${repository}`)
 	const upgradeMenu = await admit(page, page.getByRole("button", { name: "New features" }))
 	await page.waitForURL((url) => url.pathname === upgradeMenu.path)
-	await page.getByRole("heading", { name: "Test an upgrade" }).waitFor({ timeout: 2400000 })
+	await page.getByRole("heading", { name: "Try an upgrade" }).waitFor({ timeout: 2400000 })
 
 	// Select the first displayed target through the same controls as a visitor.
 	const group = page
 		.locator("article")
 		.filter({
-			has: page.getByRole("button", { name: "Test upgrade" }).or(page.getByRole("link", { name: "View tested patch" })),
+			has: page.getByRole("button", { name: "Try upgrade" }).or(page.getByRole("link", { name: "View tested patch" })),
 		})
 		.first()
 
@@ -63,7 +63,7 @@ async function submit(
 		return { path: new URL(link, page.url()).pathname, reused: true, upgradeMenuPath: upgradeMenu.path }
 	}
 	return {
-		...(await admit(page, target.getByRole("button", { name: "Test upgrade" }))),
+		...(await admit(page, target.getByRole("button", { name: "Try upgrade" }))),
 		upgradeMenuPath: upgradeMenu.path,
 	}
 }

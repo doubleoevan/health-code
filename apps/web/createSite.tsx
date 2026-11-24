@@ -19,13 +19,13 @@ function render(props: PageProps, assets: Assets): string {
 	// describe the inspected revision in the page metadata
 	const report = props.snapshot?.card
 	const title = props.upgradeMenu
-		? "Health Code · Test an upgrade"
+		? "Health Code · Try an upgrade"
 		: report
 			? `Health Code: ${toSummary(report)}`
 			: "Health Code · Dependency inspections"
 	const description = report
 		? `Dependency upgrade evidence for ${report.repository.url} at ${report.repository.commit.slice(0, 8)}.`
-		: "Watch dependency upgrades being tested in a Runta sandbox."
+		: "Try dependency upgrades in a Runta sandbox."
 	const head = renderToStaticMarkup(
 		<head>
 			{/* document metadata and canonical address */}

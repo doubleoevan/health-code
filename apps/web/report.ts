@@ -163,7 +163,7 @@ export function toCheckText(check: CheckResult): string {
 
 export function toSummary(report: PublishedReport): string {
 	if (report.upgradeMenu) {
-		return "Test an upgrade"
+		return "Try an upgrade"
 	}
 	const count = report.upgrades.length
 	if (!count && report.registryLookupIssue) {

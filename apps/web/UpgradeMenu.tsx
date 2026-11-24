@@ -149,7 +149,7 @@ function DependencyVersions({
 								</span>
 							) : (
 								<button type="button" disabled={pending} onClick={() => onSelect(target)}>
-									Test upgrade
+									Try upgrade
 								</button>
 							)}
 						</div>

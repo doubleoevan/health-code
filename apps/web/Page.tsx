@@ -80,7 +80,7 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 			{upgradeMenu ? (
 				<>
 					<header className="inspection-heading">
-						<h1>Test an upgrade</h1>
+						<h1>Try an upgrade</h1>
 						<p className="mono">
 							<Link href={upgradeMenu.repositoryUrl}>{upgradeMenu.repositoryUrl.slice(19)}</Link> ·{" "}
 							{upgradeMenu.commit.slice(0, 8)}
@@ -101,14 +101,14 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 						<span>for new features</span>
 					</h1>
 					<p className="intro">
-						AI health inspectors show you new dependency features and test an upgrade on your codebase inside a Runta
+						AI health inspectors show you new dependency features and try an upgrade on your codebase inside a Runta
 						sandbox. The network is locked, model keys stay outside and successful upgrades return tested patches.
 					</p>
 
 					{/* repository inspection steps */}
 					<ol className="steps">
 						<li>Enter your public GitHub repo URL (Node.js or Bun) and click New features</li>
-						<li>Choose a dependency and click Test upgrade to test it on your codebase in a Runta sandbox.</li>
+						<li>Choose a dependency and click Try upgrade to try it on your codebase in a Runta sandbox.</li>
 					</ol>
 
 					{/* public repository submission */}
@@ -214,7 +214,7 @@ function useSubmit(
 function toInspectionHeading(snapshot: Snapshot, live: boolean): string {
 	if (live) {
 		if (snapshot.selectedDependencyUpgrade) {
-			return `Testing ${snapshot.selectedDependencyUpgrade.dependency.replace(/^@/, "")} upgrade...`
+			return `Trying ${snapshot.selectedDependencyUpgrade.dependency.replace(/^@/, "")} upgrade...`
 		}
 		return snapshot.mode === "listUpgrades" ? "Finding upgrades..." : "Inspecting repository..."
 	}

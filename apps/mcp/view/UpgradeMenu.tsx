@@ -229,7 +229,7 @@ function TargetVersion({
 					</button>
 				) : (
 					<button type="button" disabled={isPending} onClick={() => onTest(target)}>
-						Test upgrade
+						Try upgrade
 					</button>
 				)}
 				{startedId && !patch && (
