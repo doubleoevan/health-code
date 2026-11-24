@@ -222,6 +222,12 @@ h1 {
 	max-width: 100%;
 	margin-inline: auto;
 }
+.inspection-heading nav {
+	margin-bottom: var(--block-gap);
+}
+.inspection-heading nav a {
+	text-decoration: none;
+}
 .inspection-heading h1,
 .inspection-heading h1::selection {
 	background: transparent;

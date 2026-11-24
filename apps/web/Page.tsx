@@ -3,7 +3,7 @@ import { type FormEvent, type KeyboardEvent, type ReactElement, useCallback, use
 import { Challenge } from "./Challenge.tsx"
 import { InspectionDetails } from "./InspectionDetails.tsx"
 import { TroubleshootingPrompt } from "./PromptBox.tsx"
-import { Copy, Link } from "./ReportControls.tsx"
+import { Copy, Link, UpgradeMenuLink } from "./ReportControls.tsx"
 import { ReportView } from "./ReportView.tsx"
 import {
 	mcpSetupUrl,
@@ -268,11 +268,13 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 					report={snapshot.card}
 					url={url}
 					durationMs={finished?.durationMs}
+					upgradeMenuId={snapshot.upgradeMenuId}
 					investigationPrompt={snapshot.investigationPrompt}
 				/>
 			) : (
 				<header className="inspection-heading">
-					{/* inspection title and repository */}
+					{/* link back, inspection title and repository */}
+					<UpgradeMenuLink id={snapshot.upgradeMenuId} repositoryUrl={snapshot.repositoryUrl} />
 					<h1 className={isShimmering ? "shimmer" : undefined}>{toInspectionHeading(snapshot, live)}</h1>
 					<p className="mono">
 						<Link href={snapshot.repositoryUrl}>{snapshot.repositoryUrl}</Link>

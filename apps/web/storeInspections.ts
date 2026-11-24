@@ -108,6 +108,18 @@ export class InspectionStore {
 		return choice
 	}
 
+	// find the repository's newest upgrade menu
+	private findUpgradeMenuId(repositoryUrl: string): string | undefined {
+		// skip inspections of one upgrade and empty upgrade menus
+		return this.database
+			.query<{ id: string }, [string]>(`
+			SELECT i.id FROM inspections i JOIN inspection_choices c ON c.id=i.id
+			WHERE i.repositoryUrl=? COLLATE NOCASE AND i.state='complete' AND json_extract(c.payload,'$.upgrade') IS NULL
+			AND json_array_length(coalesce(json_extract(i.report,'$.upgradeMenu'),json_extract(i.report,'$.menu')))>0
+			ORDER BY i.rowid DESC LIMIT 1`)
+			.get(repositoryUrl)?.id
+	}
+
 	upgradeMenuTarget({
 		upgradeMenuId,
 		dependency,
@@ -260,6 +272,7 @@ export class InspectionStore {
 				position: this.position(id),
 				mode: choice?.mode,
 				selectedDependencyUpgrade: choice?.upgrade,
+				upgradeMenuId: this.findUpgradeMenuId(row.repositoryUrl),
 				message: row.message,
 				repositoryUrl: row.repositoryUrl,
 				events,

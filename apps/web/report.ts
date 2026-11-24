@@ -107,6 +107,9 @@ export type Snapshot = {
 	state: InspectionState
 	message: string | null
 
+	// the repository's newest upgrade menu
+	upgradeMenuId?: string
+
 	// Resume the stream after the last event in this snapshot.
 	events: SiteEvent[]
 	card: PublishedReport | null

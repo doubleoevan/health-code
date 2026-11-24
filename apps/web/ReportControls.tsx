@@ -12,6 +12,27 @@ export function Link({ href, children }: { href?: string; children: ReactNode })
 		</a>
 	)
 }
+export function CommitLink({ commit, repositoryUrl }: { commit: string; repositoryUrl?: string }): ReactElement {
+	return (
+		<Link href={repositoryUrl && `${repositoryUrl}/commit/${commit}`}>
+			<code title={commit}>{commit.slice(0, 8)}</code>
+		</Link>
+	)
+}
+export function UpgradeMenuLink({ id, repositoryUrl }: { id?: string; repositoryUrl: string }): ReactElement | null {
+	if (!id) {
+		return null
+	}
+	return (
+		<nav className="mono" aria-label="Back to upgrades">
+			<Link href={`/r/${id}`}>
+				{/* arrow and repository */}
+				<span aria-hidden="true">← </span>
+				{repositoryUrl.slice(19)} upgrades
+			</Link>
+		</nav>
+	)
+}
 export function Copy({ text, label }: { text: string; label: string }): ReactElement {
 	const [status, setStatus] = useState("")
 	async function handleClick(): Promise<void> {

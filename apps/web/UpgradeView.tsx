@@ -1,5 +1,6 @@
 import type { ReactElement } from "react"
-import { Link } from "./ReportControls.tsx"
+import { PatchPreview } from "./PatchPreview.tsx"
+import { CommitLink, Link } from "./ReportControls.tsx"
 import { type Citation, toOrderedPatches, toPatchPath, type UpgradeCard } from "./report.ts"
 
 function Citations({ links }: { links: Citation[] }): ReactElement {
@@ -112,9 +113,11 @@ function CodeFeatureMatches({ matches }: { matches: UpgradeCard["matches"] }): R
 function PatchDetails({
 	patch,
 	upgrade,
+	repositoryUrl,
 }: {
 	patch: UpgradeCard["patches"][number]
 	upgrade: UpgradeCard
+	repositoryUrl: string
 }): ReactElement {
 	// Number only the patches with a recorded application order for this target.
 	let heading = patch.role === "upgrade" ? "Upgrade patch" : "Optional feature patch"
@@ -131,13 +134,14 @@ function PatchDetails({
 				{/* patch base and tested commit */}
 				<dt>Applies to commit</dt>
 				<dd>
-					<code>{patch.base}</code>
+					{/* link a commit published on GitHub */}
+					<CommitLink commit={patch.base} repositoryUrl={patch.prerequisite ? undefined : repositoryUrl} />
 				</dd>
 				{patch.testedTip && (
 					<>
 						<dt>Tested commit</dt>
 						<dd>
-							<code>{patch.testedTip}</code>
+							<CommitLink commit={patch.testedTip} />
 						</dd>
 					</>
 				)}
@@ -170,7 +174,8 @@ function PatchDetails({
 				)}
 			</dl>
 
-			{/* verified patch download */}
+			{/* verified patch text and download */}
+			<PatchPreview digest={patch.digest} />
 			<Link href={toPatchPath(patch.digest)}>Download patch</Link>
 		</section>
 	)
@@ -223,7 +228,7 @@ function UpgradeCoverage({ upgrade }: { upgrade: UpgradeCard }): ReactElement {
 	)
 }
 
-export function UpgradeView({ upgrade }: { upgrade: UpgradeCard }): ReactElement {
+export function UpgradeView({ upgrade, repositoryUrl }: { upgrade: UpgradeCard; repositoryUrl: string }): ReactElement {
 	// Preserve the dependency order in both the links and the application prompt.
 	const patches = toOrderedPatches(upgrade.patches)
 
@@ -346,7 +351,7 @@ export function UpgradeView({ upgrade }: { upgrade: UpgradeCard }): ReactElement
 
 			{/* tested patches and application instructions */}
 			{patches.map((patch) => (
-				<PatchDetails key={patch.digest} patch={patch} upgrade={upgrade} />
+				<PatchDetails key={patch.digest} patch={patch} upgrade={upgrade} repositoryUrl={repositoryUrl} />
 			))}
 		</article>
 	)

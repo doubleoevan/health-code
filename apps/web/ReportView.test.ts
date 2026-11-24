@@ -113,6 +113,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			"Output tokens",
 			"some usage unavailable",
 			"Patch verification",
+			"Show patch",
 			"Download patch",
 			"Applies to commit",
 			"Tested commit",

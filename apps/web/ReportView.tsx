@@ -1,6 +1,6 @@
 import type { ReactElement } from "react"
 import { ReportActions } from "./ReportActions.tsx"
-import { Link } from "./ReportControls.tsx"
+import { Link, UpgradeMenuLink } from "./ReportControls.tsx"
 import { type PublishedReport, toReportHeading, toSummary } from "./report.ts"
 import { UpgradeView } from "./UpgradeView.tsx"
 
@@ -8,17 +8,20 @@ export function ReportView({
 	report,
 	url,
 	durationMs,
+	upgradeMenuId,
 	investigationPrompt,
 }: {
 	report: PublishedReport
 	url: string
 	durationMs?: number
+	upgradeMenuId?: string
 	investigationPrompt?: string
 }): ReactElement {
 	return (
 		<>
-			{/* inspection summary and coding agent handoff */}
+			{/* link back, inspection summary and coding agent handoff */}
 			<header className="inspection-heading">
+				<UpgradeMenuLink id={upgradeMenuId} repositoryUrl={report.repository.url} />
 				<h1>{toReportHeading(report)}</h1>
 				<p>{toSummary(report)}</p>
 				{durationMs !== undefined && <p>Inspection time · {toDuration(durationMs)}</p>}
@@ -51,7 +54,7 @@ export function ReportView({
 				)}
 				{report.registryLookupIssue && report.upgrades.length > 0 && <p>{report.registryLookupIssue}</p>}
 				{report.upgrades.map((upgrade) => (
-					<UpgradeView key={upgrade.dependency + upgrade.to} upgrade={upgrade} />
+					<UpgradeView key={upgrade.dependency + upgrade.to} upgrade={upgrade} repositoryUrl={report.repository.url} />
 				))}
 				{report.upgrades.length === 0 && !report.registryLookupIssue && !report.stoppedReason && (
 					<p>No upgrades inspected.</p>

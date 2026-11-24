@@ -19,7 +19,30 @@
 	top: 0.6rem;
 	inset-inline-end: 0.6rem;
 }
+.patch-preview {
+	margin-bottom: var(--inline-gap);
+}
+.patch-preview pre {
+	max-height: 28rem;
+	padding: 1rem;
+}
+.patch-preview .added {
+	color: light-dark(#116329, #7ee2a0);
+}
+.patch-preview .removed {
+	color: light-dark(#a40e26, #ff9c96);
+}
+.patch-preview .heading {
+	color: light-dark(#0a5c8a, #8cc8f0);
+}
+.patch-preview .folded {
+	color: var(--muted);
+	font-style: italic;
+}
 @media (hover: none) {
+	.patch-preview .prompt-box {
+		padding-top: 1rem;
+	}
 	.prompt-box {
 		padding-top: 3.5rem;
 	}

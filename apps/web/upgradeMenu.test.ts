@@ -47,6 +47,9 @@ test("browse an inspected upgrade menu, choose one release and reopen its licens
 		const selectedPage = await (await app.request(`/r/${result.id}`)).text()
 		expect(selectedPage).toContain('<h1 class="shimmer">Testing widget upgrade...</h1>')
 		expect(selectedPage).toContain(" · widget 1.2.0 → 1.3.0")
+
+		// verify the link back to the upgrade menu and the chosen target
+		expect(selectedPage).toContain(`<a href="/r/${upgradeMenu.id}"><span aria-hidden="true">← `)
 		expect(store.choice(result.id)?.upgrade).toEqual({ dependency: "widget", to: "1.3.0", from: { ".": "1.2.0" } })
 		expect(store.choice(result.id)?.revision).toBe(menuReport.report.repository.commit)
 
