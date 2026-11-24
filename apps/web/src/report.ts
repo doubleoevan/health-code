@@ -21,9 +21,6 @@ type StoredSandboxEvent = Omit<Extract<ModelRequestSandboxEvent, { type: "sandbo
 	action: "model-relay-started"
 }
 
-// replace repository output in a report without a verified license
-export const withheldReason = "Output withheld because no open source license was verified."
-
 export type SiteEvent = InspectionEvent | ModelRequestSandboxEvent | StoredSandboxEvent
 export type Citation = { label: string; url?: string }
 
@@ -121,23 +118,6 @@ export type Snapshot = {
 export function toVersionChange({ from, to }: NonNullable<Snapshot["selectedDependencyUpgrade"]>): string {
 	const versions = typeof from === "string" ? from : [...new Set(Object.values(from))].join(", ")
 	return `${versions} → ${to}`
-}
-
-export function readPublishedReport(json: string): PublishedReport {
-	const report: PublishedReport & { menu?: PublishedReport["upgradeMenu"] } = JSON.parse(json)
-	if (report.menu) {
-		report.upgradeMenu ??= report.menu
-		delete report.menu
-	}
-
-	// Preserve source links in reports published with the original field name.
-	for (const upgrade of report.upgrades) {
-		if ("reusedFrom" in upgrade && typeof upgrade.reusedFrom === "string") {
-			upgrade.reusedFromInspectionId ??= upgrade.reusedFrom
-			delete upgrade.reusedFrom
-		}
-	}
-	return report
 }
 
 export function toCheckText(check: CheckResult): string {

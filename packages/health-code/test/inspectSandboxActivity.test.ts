@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { inspectSandboxActivity } from "../guest/inspectSandboxActivity.ts"
 import type { Observation } from "../src/index.ts"
-import { guestArguments } from "../src/sandbox/executeGuest.ts"
+import { buildGuestArguments } from "../src/sandbox/buildGuestArguments.ts"
 
 test("uses resolved descriptor targets for writes through symlinks", () => {
 	const result = inspectSandboxActivity(
@@ -95,7 +95,7 @@ test("observes pnpm permission changes through project links alongside read-only
 	].join("\n")
 
 	// check the read-only mount and the write that escapes the project
-	const { argv: args } = guestArguments({ argv: ["true"], timeoutMs: 1000 }, undefined)
+	const { argv: args } = buildGuestArguments({ argv: ["true"], timeoutMs: 1000 }, undefined)
 	const mount = args.indexOf("/usr")
 	assert.deepEqual(args.slice(mount - 1, mount + 2), ["--ro-bind", "/usr", "/usr"])
 	assert.deepEqual(inspectSandboxActivity(trace, "", "0 packets dropped by kernel", []).files, {
@@ -196,7 +196,7 @@ test("Bun hardlinks anonymous temporary inodes into the project", () => {
 
 test("network observation traces all outbound address-bearing calls and keeps unfinished sends inconclusive", () => {
 	// inspect an unfinished system call under network observation
-	const { argv: args } = guestArguments({ argv: ["true"], timeoutMs: 1000, observe: "network" }, "/evidence")
+	const { argv: args } = buildGuestArguments({ argv: ["true"], timeoutMs: 1000, observe: "network" }, "/evidence")
 	assert.ok(args.includes("trace=execve,connect,sendto,sendmsg,sendmmsg"))
 	const inspect = (name: string): ReturnType<typeof inspectSandboxActivity> =>
 		inspectSandboxActivity(

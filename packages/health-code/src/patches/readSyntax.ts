@@ -1,6 +1,12 @@
-import { parse } from "@babel/parser"
+import { type ParserOptions, parse } from "@babel/parser"
 
 export type Syntax = { type: string; [key: string]: unknown }
+
+// the parser settings every source reader shares
+export const syntaxOptions = {
+	sourceType: "unambiguous",
+	plugins: ["jsx", "typescript", "decorators-legacy"],
+} satisfies ParserOptions
 
 /**
  * Recognizes a syntax node before its fields are traversed.
@@ -13,11 +19,7 @@ export function isSyntax(value: unknown): value is Syntax {
  * Parses a source file into its top-level statements.
  */
 export function parseStatements(text: string): ReturnType<typeof parse>["program"]["body"] {
-	return parse(text, {
-		sourceType: "unambiguous",
-		createImportExpressions: true,
-		plugins: ["typescript", "jsx", "decorators-legacy"],
-	}).program.body
+	return parse(text, { ...syntaxOptions, createImportExpressions: true }).program.body
 }
 
 /**

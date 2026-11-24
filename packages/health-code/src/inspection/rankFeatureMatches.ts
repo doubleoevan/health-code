@@ -1,8 +1,8 @@
 import { z } from "zod"
 import type { CodeFeatureMatch, Locator, UpgradeReportV2 } from "../agentContracts.ts"
+import { permalink, type UsageEvidence } from "../checks/readUpgradeEvidence.ts"
 import type { InspectionReport } from "../contracts.ts"
 import type { ReleaseNote } from "../upgrades/readReleases.ts"
-import { permalink, type UsageEvidence } from "./readUpgradeEvidence.ts"
 
 export const matchSchema = z
 	.array(

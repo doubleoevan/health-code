@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import { confirm, excludeBaselineFailures, isComparable } from "../src/checks/confirmCheck.ts"
+import { readTypeErrors } from "../src/checks/readTypeErrors.ts"
 import type { CheckResult } from "../src/contracts.ts"
-import { confirm, excludeBaselineFailures, isComparable } from "../src/inspection/confirmCheck.ts"
-import { readTypeErrors } from "../src/inspection/readTypeErrors.ts"
 
 const known = "src/a.ts(20,24): error TS2322: Type 'x' is not assignable.\n  Type 'final' is not assignable.\n"
 

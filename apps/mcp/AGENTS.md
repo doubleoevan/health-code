@@ -7,7 +7,7 @@ Sources, their tests, `src/view/` and `src/fixtures/` sit in `src/`. `launch.mjs
 | Entry | Responsibility |
 | --- | --- |
 | `cli.ts`, `createServer.ts` | Dispatch setup or stdio, validate tool input, format results and report request-scoped progress. |
-| `modelSettings.ts`, `configureModels.ts`, `inspectWithAccount.ts` | Read the required model settings through the library, name every missing one and run inspections with the account’s origin-bound credential. No model is chosen by default. |
+| `readEnvironmentSettings.ts`, `userError.ts`, `configureModels.ts`, `inspectWithAccount.ts` | Read the required model settings through the library, name every missing one and run inspections with the account’s origin-bound credential. No model is chosen by default. |
 | `setupAccount.ts`, `probeModelRequestSandbox.ts` | Register or reuse the model key. Verify it with a request limited to one output token and confirm model request sandbox deletion before printing the client configuration. |
 | `personalModelRequestSandboxes.ts` | Record each intended model request sandbox allocation by account and host. Use the verified organization ID across token rotations. Recover allocations whose local owner process has exited. |
 | `checkRepository.ts` | Run `health-code check` for CI and write the report and patches. |

@@ -2,8 +2,8 @@ import { existsSync, lstatSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { parse } from "@babel/parser"
 import { isPackagePath } from "../src/patches/isPackagePath.ts"
-import { filesUnder, readText, workspaceDirectories } from "./inventory.ts"
-import { isSyntax } from "./readSyntax.ts"
+import { isSyntax, syntaxOptions } from "../src/patches/readSyntax.ts"
+import { filesUnder, readText, workspaceDirectories } from "./readProjectFiles.ts"
 
 type Usage = { file: string; line: number; symbol: string; workspace: string; text: string }
 type Syntax = {
@@ -50,11 +50,7 @@ export function readUsage(dependency: string): { usage: Usage[]; unresolved: str
 
 		// parse candidate files with location information
 		try {
-			const ast = parse(text, {
-				sourceType: "unambiguous",
-				createImportExpressions: true,
-				plugins: ["jsx", "typescript", "decorators-legacy"],
-			})
+			const ast = parse(text, { ...syntaxOptions, createImportExpressions: true })
 			const names = new Map<string, string>()
 			const lines = text.split("\n")
 			const workspace = workspaces.find((name) => file.startsWith(`${name}/`)) ?? "."

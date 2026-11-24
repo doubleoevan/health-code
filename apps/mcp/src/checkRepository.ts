@@ -4,10 +4,11 @@ import { parseArgs } from "node:util"
 import type { ModelRequestSandboxInspectionReport } from "health-code"
 import { z } from "zod"
 import { inspectWithAccount } from "./inspectWithAccount.ts"
-import { accountToken, requireSettings, UserError } from "./modelSettings.ts"
 import { type PersonalProvider, personalProvider } from "./personalModelRequestSandboxes.ts"
+import { accountToken, requireSettings } from "./readEnvironmentSettings.ts"
 import { toEventLine } from "./toEventLine.ts"
 import type { Inspect } from "./trackInspections.ts"
+import { UserError } from "./userError.ts"
 
 type CheckArguments = {
 	repositoryUrl: string

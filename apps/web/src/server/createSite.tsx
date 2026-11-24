@@ -1,115 +1,18 @@
-import { InspectionError, toFeaturePage, toRepositoryUrl, toUpgradeMenu, type UpgradeMenuTarget } from "health-code"
+import { InspectionError, toFeaturePage, toUpgradeMenu, type UpgradeMenuTarget } from "health-code"
 import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { HTTPException } from "hono/http-exception"
-import { renderToStaticMarkup, renderToString } from "react-dom/server"
-import { Page, type PageProps } from "../client/Page.tsx"
-import { mcpSetupUrl, toSummary } from "../publishedReport.ts"
+import type { PageProps } from "../client/Page.tsx"
+import { mcpSetupUrl } from "../report.ts"
 import { adminPage } from "./adminPage.tsx"
 import { buildReportInvestigationPrompt } from "./buildReportInvestigationPrompt.ts"
 import type { Inspections } from "./executeInspection.ts"
-import type { InspectionChoice } from "./inspectionSource.ts"
 import { SiteError } from "./inspectionSource.ts"
+import { readSubmission, resolveChoice } from "./readSubmission.ts"
 import { AdmissionError, toUtcDay, type Visitor } from "./recordAdmissions.ts"
+import { type Assets, renderPage } from "./renderPage.tsx"
 import { streamInspection } from "./streamInspection.ts"
 import { identifyVisitor, isSecureRequest, verifyAdmin } from "./verifyVisitor.ts"
-
-type Assets = { script: string; styles: string[] }
-function render(props: PageProps, assets: Assets): string {
-	// describe the inspected revision in the page metadata
-	const report = props.snapshot?.card
-	const title = props.upgradeMenu
-		? "Health Code · Try an upgrade"
-		: report
-			? `Health Code: ${toSummary(report)}`
-			: "Health Code · Dependency inspections"
-	const description = report
-		? `Dependency upgrade evidence for ${report.repository.url} at ${report.repository.commit.slice(0, 8)}.`
-		: "Try dependency upgrades in a Runta sandbox."
-	const head = renderToStaticMarkup(
-		<head>
-			{/* document metadata and canonical address */}
-			<meta charSet="utf-8" />
-			<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
-			<meta name="viewport" content="width=device-width,initial-scale=1" />
-			<title>{title}</title>
-			<link rel="canonical" href={props.url} />
-
-			{/* link previews */}
-			<meta property="og:type" content="website" />
-			<meta property="og:title" content={title} />
-			<meta property="og:description" content={description} />
-			<meta property="og:url" content={props.url} />
-			<meta name="twitter:card" content="summary" />
-			<meta name="twitter:title" content={title} />
-			<meta name="twitter:description" content={description} />
-
-			{/* page stylesheets */}
-			{assets.styles.map((style) => (
-				<link key={style} rel="stylesheet" href={style} />
-			))}
-		</head>,
-	)
-
-	// Escape the script closing delimiter in repository-controlled text.
-	const state = JSON.stringify(props).replaceAll("<", "\\u003c")
-	return `<!doctype html><html lang="en">${head}<body><div id="app">${renderToString(<Page {...props} />)}</div><script id="page-state" type="application/json">${state}</script><script type="module" src="${assets.script}"></script></body></html>`
-}
-
-type Submission = {
-	repositoryUrl: string
-	challenge?: unknown
-	action?: unknown
-	upgradeMenuId?: unknown
-	menuId?: unknown
-	dependency?: unknown
-	to?: unknown
-}
-
-function resolveChoice(input: Submission, inspections: Inspections): InspectionChoice & { readyId?: string } {
-	if (input.action === undefined) {
-		return {}
-	}
-	if (input.action === "discover") {
-		return { mode: "listUpgrades" }
-	}
-	const upgradeMenuId = input.upgradeMenuId ?? input.menuId
-	if (
-		input.action !== "select" ||
-		typeof upgradeMenuId !== "string" ||
-		(input.menuId !== undefined && input.menuId !== upgradeMenuId)
-	) {
-		throw new SiteError("Choose an upgrade from the upgrade menu.")
-	}
-
-	// Resolve the exact version against the server's saved upgrade menu.
-	const report = inspections.store.snapshot(upgradeMenuId)?.card
-	const target = report?.upgradeMenu?.find((item) => item.dependency === input.dependency && item.to === input.to)
-	if (
-		!report ||
-		!target ||
-		report.repository.url.toLowerCase() !== toRepositoryUrl(input.repositoryUrl).toLowerCase()
-	) {
-		throw new SiteError("Choose an available dependency and version from this repository’s upgrade menu.")
-	}
-	return {
-		readyId: inspections.launch ? undefined : target.patch?.inspectionId,
-		revision: report.repository.commit,
-		upgrade: { dependency: target.dependency, from: target.from, to: target.to },
-	}
-}
-
-function isChoiceField(value: unknown, maximum: number): value is string {
-	return typeof value === "string" && value.length > 0 && value.length <= maximum
-}
-
-function readFeatureQuery(context: Context): { dependency: string; to: string; offset: number } | undefined {
-	const { dependency, to } = context.req.query()
-	const offset = Number(context.req.query("offset") ?? "0")
-	if (Number.isSafeInteger(offset) && offset >= 0 && isChoiceField(dependency, 214) && isChoiceField(to, 256)) {
-		return { dependency, to, offset }
-	}
-}
 
 function toUpgradeMenuView(
 	targets: UpgradeMenuTarget[] | undefined,
@@ -143,14 +46,6 @@ function toUpgradeMenuView(
 		page,
 		pages,
 	}
-}
-
-async function readSubmission(context: Context): Promise<Submission | null> {
-	const body: unknown = await context.req.json().catch(() => null)
-	if (!body || typeof body !== "object" || !("repositoryUrl" in body) || typeof body.repositoryUrl !== "string") {
-		return null
-	}
-	return { ...body, repositoryUrl: body.repositoryUrl }
 }
 
 function admissionFailure(context: Context, error: unknown, key?: string): Response {
@@ -274,7 +169,7 @@ export function createSite(options: {
 		context.header("Cache-Control", "no-store")
 		const demoCallsLeft = readDemoCallsLeft(context)
 		return context.html(
-			render({ url: options.origin, siteMode, demoCallsLeft, snapshot: null, paused: inspections.paused }, assets),
+			renderPage({ url: options.origin, siteMode, demoCallsLeft, snapshot: null, paused: inspections.paused }, assets),
 		)
 	})
 
@@ -353,7 +248,7 @@ export function createSite(options: {
 		snapshot.canStop = canVisitorStop(context, id)
 		const demoCallsLeft = readDemoCallsLeft(context)
 		return context.html(
-			render({ snapshot: upgradeMenu ? null : snapshot, upgradeMenu, siteMode, demoCallsLeft, url }, assets),
+			renderPage({ snapshot: upgradeMenu ? null : snapshot, upgradeMenu, siteMode, demoCallsLeft, url }, assets),
 		)
 	})
 
@@ -443,4 +338,17 @@ export function createSite(options: {
 		})
 	})
 	return app
+}
+
+// read the dependency, version and offset of a release feature request
+function readFeatureQuery(context: Context): { dependency: string; to: string; offset: number } | undefined {
+	const { dependency, to } = context.req.query()
+	const offset = Number(context.req.query("offset") ?? "0")
+	if (Number.isSafeInteger(offset) && offset >= 0 && isChoiceField(dependency, 214) && isChoiceField(to, 256)) {
+		return { dependency, to, offset }
+	}
+}
+
+function isChoiceField(value: unknown, maximum: number): value is string {
+	return typeof value === "string" && value.length > 0 && value.length <= maximum
 }

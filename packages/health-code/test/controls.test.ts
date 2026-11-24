@@ -7,8 +7,8 @@ import {
 	inspectRepository,
 	type SandboxFixture,
 } from "../src/index.ts"
+import { buildGuestArguments } from "../src/sandbox/buildGuestArguments.ts"
 import { buildTestCommand } from "../src/sandbox/buildTestCommand.ts"
-import { guestArguments } from "../src/sandbox/executeGuest.ts"
 import { confirmNetworkPolicy, validateRegistryHosts } from "../src/sandbox/networkPolicy.ts"
 import { fixtureCommit, fixtureUrl } from "./providerContract.ts"
 
@@ -61,7 +61,7 @@ test("invalid or contradictory inspection modes are rejected before contacting t
 })
 
 test("guest environment contains inert application values and trusted controls", () => {
-	const { argv, placeholderVariableCount } = guestArguments(
+	const { argv, placeholderVariableCount } = buildGuestArguments(
 		{
 			argv: ["node", "--version"],
 			timeoutMs: 5000,
@@ -192,7 +192,7 @@ test("test inventory pages retain all cases and mark the end of a full page", as
 })
 
 test("caller test values replace placeholders without overriding runtime controls", () => {
-	const { argv, placeholderVariableCount } = guestArguments(
+	const { argv, placeholderVariableCount } = buildGuestArguments(
 		{
 			argv: ["true"],
 			timeoutMs: 1000,

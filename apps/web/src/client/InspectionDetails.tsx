@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react"
-import type { PublishedReport } from "../publishedReport.ts"
+import type { PublishedReport } from "../report.ts"
 import { CheckOutcome, TestFileErrorList } from "./UpgradeView.tsx"
 
 export function InspectionDetails({ report }: { report: PublishedReport }): ReactElement {

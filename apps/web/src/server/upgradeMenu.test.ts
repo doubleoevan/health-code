@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { replayRepositoryUrl as repositoryUrl } from "../publishedReport.ts"
+import { replayRepositoryUrl as repositoryUrl } from "../report.ts"
 import { createTestSite, replay } from "./fixtures/createTestSite.ts"
 import { publishReport } from "./publishReport.ts"
 import { InspectionStore } from "./storeInspections.ts"

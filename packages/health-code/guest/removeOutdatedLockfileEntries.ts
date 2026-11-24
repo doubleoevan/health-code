@@ -1,7 +1,7 @@
 import { existsSync, writeFileSync } from "node:fs"
 import { valid } from "semver"
 import { lockfiles, sections } from "../src/patches/bumpManifest.ts"
-import { filesUnder, readText, workspaceManifests } from "./inventory.ts"
+import { filesUnder, readText, workspaceManifests } from "./readProjectFiles.ts"
 
 type LockedPackage = { version?: string; link?: boolean }
 type NpmLockfile = { packages?: Record<string, LockedPackage> }

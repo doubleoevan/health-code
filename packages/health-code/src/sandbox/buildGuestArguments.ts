@@ -5,7 +5,7 @@ import { maxSystemCallLogBytes } from "./maxSystemCallLogBytes.ts"
 const reserved =
 	/^(?:PATH|HOME|TMP.*|TEMP|PWD|SHELL|USER|LOGNAME|IFS|ENV|BASH_ENV|NODE.*|BUN.*|NPM.*|npm_.*|YARN.*|PNPM.*|GIT.*|LD_.*|DYLD_.*|SSL_.*|.*PROXY|RUNTA_.*|COREPACK.*|XDG_.*|CI|LANG|LC_.*|SHELLOPTS|BASHOPTS)$/i
 type TestMount = { path: string; kind: "report" | "inventory"; writable?: boolean }
-export function guestArguments(
+export function buildGuestArguments(
 	command: Command,
 	observation: string | undefined,
 	testMount?: TestMount,

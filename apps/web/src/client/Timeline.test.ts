@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import type { SiteEvent } from "../publishedReport.ts"
+import type { SiteEvent } from "../report.ts"
 import { Timeline } from "./Timeline.tsx"
 
 test("a saved model request sandbox startup is shown once in the pinned list and once in the timeline", () => {

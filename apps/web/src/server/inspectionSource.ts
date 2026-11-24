@@ -1,5 +1,5 @@
 import type { InspectionOptionsV2, Upgrade, UpgradeFeatures } from "health-code"
-import type { SiteEvent } from "../publishedReport.ts"
+import type { SiteEvent } from "../report.ts"
 import type { LaunchLimits } from "./launchLimits.ts"
 import type { InspectionOutput } from "./publishReport.ts"
 import type { RepositoryHead } from "./recordAdmissions.ts"

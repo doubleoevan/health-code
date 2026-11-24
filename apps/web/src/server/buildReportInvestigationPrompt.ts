@@ -1,5 +1,5 @@
 import { buildInvestigationPrompt } from "health-code"
-import type { Snapshot } from "../publishedReport.ts"
+import type { Snapshot } from "../report.ts"
 
 export function buildReportInvestigationPrompt(snapshot: Snapshot, url: string): string | undefined {
 	const report = snapshot.card

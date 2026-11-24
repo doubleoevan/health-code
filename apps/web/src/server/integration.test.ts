@@ -6,7 +6,7 @@ import {
 	SandboxUnavailableError,
 	toModelSecretName,
 } from "health-code"
-import { replayRepositoryUrl as repositoryUrl } from "../publishedReport.ts"
+import { replayRepositoryUrl as repositoryUrl } from "../report.ts"
 import { createLiveSource } from "./createLiveSource.ts"
 import { createTestSite, replay } from "./fixtures/createTestSite.ts"
 import { modelSettings } from "./fixtures/modelSettings.ts"

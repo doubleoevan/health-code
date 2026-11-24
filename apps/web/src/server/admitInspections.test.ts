@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { replayRepositoryUrl } from "../publishedReport.ts"
+import { replayRepositoryUrl } from "../report.ts"
 import { LaunchService } from "./admitInspections.ts"
 import { createSite } from "./createSite.tsx"
 import { Inspections } from "./executeInspection.ts"

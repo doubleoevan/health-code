@@ -1,5 +1,5 @@
 import { type ReactElement, useState } from "react"
-import { type PatchLink, type PublishedReport, toOrderedPatches, toPatchPath } from "../publishedReport.ts"
+import { type PatchLink, type PublishedReport, toOrderedPatches, toPatchPath } from "../report.ts"
 import { PromptBox, type PromptLinks, TroubleshootingPrompt } from "./PromptBox.tsx"
 
 function toPatchPrompt({

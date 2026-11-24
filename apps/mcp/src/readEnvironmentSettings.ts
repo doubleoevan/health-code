@@ -1,9 +1,8 @@
 import { modelSettingNames } from "health-code"
+import { UserError } from "./userError.ts"
 
 // the settings without a default, sandbox token first
 const requiredSettings = ["RUNTA_TOKEN", "HEALTH_CODE_MODEL_HOST", "HEALTH_CODE_MODEL"] as const
-
-export class UserError extends Error {}
 
 export function toEnvironmentReference(name: string): string {
 	return `\${${name}}`

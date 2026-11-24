@@ -1,14 +1,10 @@
 import { createHash } from "node:crypto"
 import type { Baseline, InspectionReport, ModelRequestSandboxInspectionReport, UpgradeReportV2 } from "health-code"
 import { testInventorySummarySchema, toInspectionMode } from "health-code"
-import {
-	type Citation,
-	type PatchLink,
-	type PublishedReport,
-	toCheckText,
-	type UpgradeCard,
-	withheldReason,
-} from "../publishedReport.ts"
+import { type Citation, type PatchLink, type PublishedReport, toCheckText, type UpgradeCard } from "../report.ts"
+
+// replace repository output in a report without a verified license
+export const withheldReason = "Output withheld because no open source license was verified."
 
 export type InspectionOutput = { report: InspectionReport | ModelRequestSandboxInspectionReport }
 export type Publication = {
@@ -190,4 +186,24 @@ function toPrerequisiteDigest(id: string | undefined, byId: Map<string, string>)
 		throw new Error("Missing patch prerequisite")
 	}
 	return digest
+}
+
+/**
+ * Reads a stored report and restores the fields that older reports named differently.
+ */
+export function readPublishedReport(json: string): PublishedReport {
+	const report: PublishedReport & { menu?: PublishedReport["upgradeMenu"] } = JSON.parse(json)
+	if (report.menu) {
+		report.upgradeMenu ??= report.menu
+		delete report.menu
+	}
+
+	// Preserve source links in reports published with the original field name.
+	for (const upgrade of report.upgrades) {
+		if ("reusedFrom" in upgrade && typeof upgrade.reusedFrom === "string") {
+			upgrade.reusedFromInspectionId ??= upgrade.reusedFrom
+			delete upgrade.reusedFrom
+		}
+	}
+	return report
 }

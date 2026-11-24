@@ -10,9 +10,10 @@ import {
 import * as z from "zod"
 import { fetchPatch, patchOutput } from "./fetchPatch.ts"
 import { listPatches, patchReference } from "./listPatches.ts"
-import { readGithubToken, UserError } from "./modelSettings.ts"
+import { readGithubToken } from "./readEnvironmentSettings.ts"
 import { inspectionId, type SavedReport } from "./storeInspection.ts"
 import type { Inspections } from "./trackInspections.ts"
+import { UserError } from "./userError.ts"
 
 const target = z.object({
 	dependency: z.string(),

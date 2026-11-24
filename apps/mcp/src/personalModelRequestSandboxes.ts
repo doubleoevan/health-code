@@ -11,8 +11,8 @@ import {
 } from "health-code"
 
 import { z } from "zod"
-import { UserError } from "./modelSettings.ts"
 import { modelRequestSandboxCleanupError, sandboxOperation } from "./probeModelRequestSandbox.ts"
+import { UserError } from "./userError.ts"
 
 export type PersonalProvider = SandboxProvider & { modelRequestSandbox: ModelRequestSandbox }
 

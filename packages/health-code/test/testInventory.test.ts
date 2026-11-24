@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { mergeTestInventory } from "../src/inspection/mergeTestInventory.ts"
+import { mergeTestInventory } from "../src/checks/mergeTestInventory.ts"
 import {
 	type PatchVerificationInputs,
 	readPatchVerificationInputs,

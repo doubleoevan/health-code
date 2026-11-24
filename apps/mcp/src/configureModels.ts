@@ -1,5 +1,5 @@
 import { readModelRoutes, type SandboxModelRoutes } from "health-code"
-import { UserError } from "./modelSettings.ts"
+import { UserError } from "./userError.ts"
 
 /**
  * Resolves the caller's model routes with a stored credential bound to their origin.

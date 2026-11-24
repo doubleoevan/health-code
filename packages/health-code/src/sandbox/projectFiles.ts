@@ -1,6 +1,6 @@
 import { checkOperation } from "../collectEvents.ts"
 import { InspectionError, type Operation } from "../contracts.ts"
-import { guestArguments } from "./executeGuest.ts"
+import { buildGuestArguments } from "./buildGuestArguments.ts"
 import { checked, type Runtime } from "./requestRuntime.ts"
 
 // Verify the opened descriptors so renaming a symlink cannot redirect a checked write.
@@ -53,7 +53,7 @@ export function readProjectFile({
 }): Promise<string> {
 	return checked(
 		runtime,
-		guestArguments(
+		buildGuestArguments(
 			{
 				argv: ["/usr/bin/python3", "-I", "-c", projectFile, "/project", "read", validatedPath(path)],
 				timeoutMs: operation.timeoutMs,
@@ -86,7 +86,7 @@ export async function writeProjectFile({
 	}
 	checkOperation(operation.signal)
 	const result = await runtime.exec(
-		guestArguments(
+		buildGuestArguments(
 			{
 				argv: ["/usr/bin/python3", "-I", "-c", projectFile, "/project", "write", target],
 				timeoutMs: operation.timeoutMs,

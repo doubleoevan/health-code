@@ -8,7 +8,7 @@ import {
 	type SiteEvent,
 	type Snapshot,
 	toVersionChange,
-} from "../publishedReport.ts"
+} from "../report.ts"
 import { Challenge } from "./Challenge.tsx"
 import { InspectionDetails } from "./InspectionDetails.tsx"
 import { TroubleshootingPrompt } from "./PromptBox.tsx"

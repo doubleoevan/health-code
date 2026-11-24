@@ -1,6 +1,6 @@
 import { toRepositoryUrl } from "health-code"
 import * as z from "zod"
-import { UserError } from "./modelSettings.ts"
+import { UserError } from "./userError.ts"
 
 export const repositoryInput = z
 	.string()

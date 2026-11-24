@@ -14,13 +14,13 @@ import {
 	upgradeResultsOutput,
 } from "./browseUpgrades.ts"
 import { checkoutSchema, fetchPatch, patchOutput, validateOutcome } from "./fetchPatch.ts"
-import { UserError } from "./modelSettings.ts"
 import { readRepository, repositoryInput } from "./readRepository.ts"
 import { appViewMeta, registerAppView } from "./registerAppView.ts"
 import { digest, inspectionId, outcomeSchema } from "./storeInspection.ts"
 import { toEventLine } from "./toEventLine.ts"
 import { toFailureMessage } from "./toFailureMessage.ts"
 import { type Inspections, readOutput } from "./trackInspections.ts"
+import { UserError } from "./userError.ts"
 
 const offset = z.number().int().nonnegative().default(0)
 function toHints(

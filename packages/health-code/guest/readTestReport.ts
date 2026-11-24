@@ -3,7 +3,7 @@ import { isAbsolute, relative } from "node:path"
 import { XMLParser } from "fast-xml-parser"
 import type { TestFailure } from "../src/contracts.ts"
 import { jsonCaseName, xmlCaseName } from "../src/patches/testCaseName.ts"
-import { readText, workspaceDirectories } from "./inventory.ts"
+import { readText, workspaceDirectories } from "./readProjectFiles.ts"
 
 export const reportPath = ".health-code/test-results"
 

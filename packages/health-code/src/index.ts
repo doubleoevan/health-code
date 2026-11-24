@@ -49,6 +49,7 @@ export type {
 	UpgradeReportV2,
 	Verdict,
 } from "./agentContracts.ts"
+export { testInventorySummarySchema } from "./checks/testInventorySummary.ts"
 export type {
 	Baseline,
 	CheckResult,
@@ -82,7 +83,6 @@ export {
 	readUpgradeMenuFeatures,
 	readUpgradeMenuFeatures as readMenuFeatures,
 } from "./inspection/listUpgrades.ts"
-export { testInventorySummarySchema } from "./inspection/testInventorySummary.ts"
 export { buildInvestigationPrompt } from "./models/buildPrompt.ts"
 export type {
 	ModelRequestSandbox,

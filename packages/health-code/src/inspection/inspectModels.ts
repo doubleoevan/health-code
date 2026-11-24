@@ -1,6 +1,14 @@
 import { isDeepStrictEqual } from "node:util"
 import { z } from "zod"
 import type { AgentRole, InspectionEventV2, InspectionOptionsV2, UpgradeReportV2 } from "../agentContracts.ts"
+import type { NodeAdapter } from "../checks/checkProject.ts"
+import {
+	diagnostics,
+	locateDiagnostics,
+	sizeBytes,
+	type UsageEvidence,
+	usageEvidence,
+} from "../checks/readUpgradeEvidence.ts"
 import { cleanupAllowance, type InspectionContext, redactEvidence, rethrowInspectionFailure } from "../collectEvents.ts"
 import {
 	InspectionError,
@@ -24,12 +32,10 @@ import { type PatchEvidence, workspace } from "../patches/verifyCandidate.ts"
 import { credentialTarget } from "../sandbox/setCredentialBinding.ts"
 import { readReleases } from "../upgrades/readReleases.ts"
 import { toUpgradeKey } from "../upgrades/selectUpgrades.ts"
-import type { NodeAdapter } from "./checkProject.ts"
+import { RuntimeMeter } from "./meterRuntimes.ts"
 import { validateModels } from "./modelOptions.ts"
 import { matchSchema, selectFeatureMatches, verifyMatch } from "./rankFeatureMatches.ts"
-import { diagnostics, locateDiagnostics, sizeBytes, type UsageEvidence, usageEvidence } from "./readUpgradeEvidence.ts"
 import { requestHostModel } from "./requestHostModel.ts"
-import { RuntimeMeter } from "./runtimeMeter.ts"
 
 const summarySchema = z.object({ text: z.string().max(8000), sources: z.array(z.string()) })
 type InspectedUpgrade = { report: UpgradeReportV2; evidence: PatchEvidence }

@@ -10,6 +10,7 @@
 - Group the library `src/` into `inspection`, `upgrades`, `models`, `patches` and `sandbox`.
 - Move the `apps/mcp` sources under `src/`.
 - Rename files to match their main export, and give `scripts/` one casing for TypeScript files.
+- Split modules that held two jobs, share the duplicated syntax reader and move check comparison to `src/checks/`.
 - Give the recorded sandbox fixture one shared home and record the repository's file conventions in the root guide.
 
 ## Capabilities

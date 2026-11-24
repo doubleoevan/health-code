@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events"
 import { InspectionError, toRepositoryUrl, type UpgradeFeatures } from "health-code"
-import type { SiteEvent } from "../publishedReport.ts"
+import type { SiteEvent } from "../report.ts"
 import type { AdmissionRequest, LaunchService } from "./admitInspections.ts"
 import { ReleaseFeatureCache } from "./cacheReleaseFeatures.ts"
 import { type InspectionChoice, type InspectionSource, SiteError } from "./inspectionSource.ts"

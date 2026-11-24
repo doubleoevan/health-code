@@ -1,5 +1,5 @@
 import type { ReactElement } from "react"
-import { type Citation, toOrderedPatches, toPatchPath, type UpgradeCard } from "../publishedReport.ts"
+import { type Citation, toOrderedPatches, toPatchPath, type UpgradeCard } from "../report.ts"
 import { PatchPreview } from "./PatchPreview.tsx"
 import { CommitLink, Link } from "./ReportControls.tsx"
 

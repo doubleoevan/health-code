@@ -5,13 +5,14 @@ import { InspectionError } from "health-code"
 import { checkRepository, checkUsage } from "./checkRepository.ts"
 import { createServer } from "./createServer.ts"
 import { inspectWithAccount } from "./inspectWithAccount.ts"
-import { accountToken, readGithubToken, requireSettings, UserError } from "./modelSettings.ts"
 import { recoverAccount } from "./personalModelRequestSandboxes.ts"
+import { accountToken, readGithubToken, requireSettings } from "./readEnvironmentSettings.ts"
 import { requirePublicRepository } from "./readRepository.ts"
 import { setupAccount } from "./setupAccount.ts"
 import { InspectionStore } from "./storeInspection.ts"
 import { toFailureMessage } from "./toFailureMessage.ts"
 import { Inspections } from "./trackInspections.ts"
+import { UserError } from "./userError.ts"
 
 async function main(args: string[]): Promise<void> {
 	if (args[0] === "check") {

@@ -1,5 +1,5 @@
 import type { ReactElement } from "react"
-import { type PublishedReport, toReportHeading, toSummary } from "../publishedReport.ts"
+import { type PublishedReport, toReportHeading, toSummary } from "../report.ts"
 import { ReportActions } from "./ReportActions.tsx"
 import { Link, UpgradeMenuLink } from "./ReportControls.tsx"
 import { UpgradeView } from "./UpgradeView.tsx"

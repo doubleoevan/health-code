@@ -9,7 +9,6 @@ import {
 } from "health-code"
 import * as z from "zod"
 import { listPatches, patchReference } from "./listPatches.ts"
-import { UserError } from "./modelSettings.ts"
 import {
 	type Event,
 	eventSchema,
@@ -21,6 +20,7 @@ import {
 } from "./storeInspection.ts"
 import { toEventLine } from "./toEventLine.ts"
 import { toFailureMessage } from "./toFailureMessage.ts"
+import { UserError } from "./userError.ts"
 
 const page = z.object({ text: z.string(), nextOffset: z.number().nullable() })
 export const readOutput = z.object({

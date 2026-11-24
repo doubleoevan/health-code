@@ -6,7 +6,7 @@
 
 `provision.ts` prepares the disposable VM, installs tools, and acquires inspected source. It enables Linux memory overcommit so tools can reserve sparse virtual address ranges. `createSandboxProvider.ts` sets the physical memory limit at allocation.
 
-`executeGuest.ts` constructs the guest filesystem, process, environment, and installation observation boundaries. Verify changes with the shared provider contract and the two pinned public fixtures using `bun run test:provider` from the repository root.
+`buildGuestArguments.ts` constructs the guest filesystem, process, environment, and installation observation boundaries. Verify changes with the shared provider contract and the two pinned public fixtures using `bun run test:provider` from the repository root.
 
 A hosted consumer passes a stable deployment name to the provider factory and calls the public `reconcileSandboxes` operation before starting workers. The provider paginates runtime inventory, matches its reserved prefix and Inspection UUID, and reclaims abandoned allocations by runtime ID. Ordinary CLI allocations retain their existing names.
 

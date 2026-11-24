@@ -3,7 +3,7 @@ import { link, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, w
 import { homedir } from "node:os"
 import { join, relative, resolve } from "node:path"
 import * as z from "zod"
-import { UserError } from "./modelSettings.ts"
+import { UserError } from "./userError.ts"
 
 const reportFile = "inspection-report.json"
 

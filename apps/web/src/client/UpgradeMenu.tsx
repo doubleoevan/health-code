@@ -1,6 +1,6 @@
 import type { DependencyChoice, ReleaseFeaturePage, UpgradeMenuOrder, UpgradeMenuTarget } from "health-code"
 import { type ChangeEvent, type ReactElement, useEffect, useRef, useState } from "react"
-import { toVersionChange } from "../publishedReport.ts"
+import { toVersionChange } from "../report.ts"
 import { Link } from "./ReportControls.tsx"
 
 export type UpgradeMenuView = {

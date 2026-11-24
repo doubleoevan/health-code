@@ -7,7 +7,7 @@ import type {
 } from "health-code"
 import { toInspectionMode, toUpgradeTargetKey } from "health-code"
 
-import type { PublishedReport } from "../publishedReport.ts"
+import type { PublishedReport } from "../report.ts"
 
 /**
  * Stores references to completed upgrades in immutable inspection reports.

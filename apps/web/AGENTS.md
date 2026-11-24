@@ -4,12 +4,14 @@
 | --- | --- |
 | `src/client/` | React components, the browser entry `client.tsx` and the stylesheets. |
 | `src/server/` | The Hono routes, inspection worker, admission, SQLite storage, report publication and `src/server/fixtures/`. |
-| `src/publishedReport.ts` | The published report types and text transforms that both sides import. |
+| `src/report.ts` | The published report types and text transforms that both sides import. |
 | `public/assets/` | The icon, fonts and font licenses. |
 
 The file names below sit in `src/client/` or `src/server/`. `vite.config.ts` and the Dockerfile stay at the workspace root.
 
 The `@health-code/web` workspace serves the inspection site. Bun runs its Hono entry in `server.ts`. It serves the Vite client, the anonymous submission API, resumable event streams and server-rendered Inspection Reports. The browser hydrates `Page.tsx`. `Timeline.test.ts` covers live and saved event rendering. `Timeline.tsx` renders ordered Inspection Events and pinned Sandbox Events. `ReportView.tsx` renders source locations, replacement evidence, adoption outcomes, recorded model usage and the tested Patch handoff. “What the health inspector could verify” lists the upgrade install, typecheck and tests separately. Older saved reports can omit optional details.
+
+`createSite.tsx` owns the routes. `renderPage.tsx` renders the HTML document and `readSubmission.ts` parses submissions.
 
 `executeInspection.ts` owns startup recovery and the bounded worker. `admitInspections.ts` admits hosted submissions against the live limits and joins existing inspections. `storeInspections.ts` owns the SQLite schema and transactions. `stopInspections.ts` stops queued or running inspections. Anyone can stop a local inspection. On the hosted site only the starting visitor can stop an inspection nobody joined. `StopInspection.tsx` stops in one click. A stopped upgrade test returns to its upgrade menu. `streamInspection.ts` replays committed events in pages after the caller’s cursor. Timeline entries fetch raw output on disclosure through the license-checked detail route. Each patch has its own download and copy instructions. `PatchPreview.tsx` loads a patch into a modal with its download. `PatchText.tsx` highlights it by file type, and `splitPatch.ts` folds any file past the display limit to one line. Within each dependency target, the report numbers the upgrade and optional feature patch when a prerequisite is recorded. Feature patch instructions include the prerequisite digest and URL. `publishReport.ts` constructs the public report and verifies every digest before publication. The original library report remains on the server. `verifyRepository.ts` checks GitHub visibility and license detection at the inspected commit. `executeInspection.ts` records the license at the inspected commit before the run so live output can show. An unverified license is looked up again before publication.
 

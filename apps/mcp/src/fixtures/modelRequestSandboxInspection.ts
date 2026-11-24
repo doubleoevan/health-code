@@ -7,6 +7,7 @@ import {
 	type SandboxFixture,
 	toModelSecretName,
 } from "health-code"
+import { inspectionFixtureUrl } from "./inspectionSettings.ts"
 
 /**
  * Creates a recorded Inspection with model replies and a restorable release transport.
@@ -22,12 +23,7 @@ export async function modelRequestSandboxFixture(
 	restore: () => void
 }> {
 	// load recorded commands for the inspected project
-	const fixture: SandboxFixture = JSON.parse(
-		await readFile(
-			new URL("../../../../packages/health-code/test/fixtures/recorded/npm/sandbox.json", import.meta.url),
-			"utf8",
-		),
-	)
+	const fixture: SandboxFixture = JSON.parse(await readFile(inspectionFixtureUrl, "utf8"))
 	const [detect, registry, install, , report, bump] = fixture.commands
 	assert.ok(detect && registry && install && report && bump)
 

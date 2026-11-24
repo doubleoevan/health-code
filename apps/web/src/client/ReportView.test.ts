@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { replayRepositoryUrl as repository, toReportHeading, toSummary } from "../publishedReport.ts"
+import { replayRepositoryUrl as repository, toReportHeading, toSummary } from "../report.ts"
 import { origin, replay, createTestSite as site } from "../server/fixtures/createTestSite.ts"
 import { publishReport } from "../server/publishReport.ts"
 import { InspectionStore } from "../server/storeInspections.ts"

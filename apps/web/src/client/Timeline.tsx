@@ -1,5 +1,5 @@
 import { type ReactElement, useEffect, useRef, useState } from "react"
-import type { SiteEvent } from "../publishedReport.ts"
+import type { SiteEvent } from "../report.ts"
 
 const actions = {
 	created: "Sandbox created",

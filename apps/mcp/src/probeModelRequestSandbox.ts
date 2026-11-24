@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { type ModelRequestSandbox, type SandboxModelRoutes, toModelRequestSandboxName } from "health-code"
-import { UserError } from "./modelSettings.ts"
+import { UserError } from "./userError.ts"
 
 export const setupTimeoutMs = 120000
 

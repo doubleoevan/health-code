@@ -1,6 +1,6 @@
 import { InspectionError, SandboxUnavailableError } from "health-code"
-import { UserError } from "./modelSettings.ts"
 import { isStorageError } from "./storeInspection.ts"
+import { UserError } from "./userError.ts"
 
 const unavailableMessages = {
 	authentication:

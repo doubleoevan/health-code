@@ -1,5 +1,6 @@
 import { parse } from "@babel/parser"
 import type { CodeFeatureMatch } from "../agentContracts.ts"
+import { syntaxOptions } from "./readSyntax.ts"
 
 type Scope = { files: Map<string, string>; tests: Set<string>; symbol?: string }
 function measure({ files, tests, symbol }: Scope): { lines: number; nodes: number; calls: number } {
@@ -10,11 +11,7 @@ function measure({ files, tests, symbol }: Scope): { lines: number; nodes: numbe
 		if (tests.has(file)) {
 			continue
 		}
-		const ast = parse(text, {
-			sourceType: "unambiguous",
-			plugins: ["jsx", "typescript", "decorators-legacy"],
-			tokens: true,
-		})
+		const ast = parse(text, { ...syntaxOptions, tokens: true })
 		const occupied = new Set<number>()
 
 		// count occupied source lines from parsed tokens

@@ -1,5 +1,5 @@
 import { posix } from "node:path"
-import { isSyntax, parseStatements, readPropertyName, type Syntax } from "./readSyntax.ts"
+import { isSyntax, parseStatements, readPropertyName, type Syntax } from "../src/patches/readSyntax.ts"
 
 export type ViteAlias = { directory: string; name: string; target: string }
 

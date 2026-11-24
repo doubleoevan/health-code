@@ -1,12 +1,12 @@
+import { NodeAdapter, pending, skippedUpgrade } from "../checks/checkProject.ts"
+import { inspectUpgrade } from "../checks/inspectUpgrade.ts"
+import { preservePartialReport, retainCompletedChecks } from "../checks/preservePartialReport.ts"
+import { sizeBytes } from "../checks/readUpgradeEvidence.ts"
 import type { InspectionContext } from "../collectEvents.ts"
 import type { InspectionReport, Sandbox } from "../contracts.ts"
 import { readPatchVerificationInputs } from "../patches/verifyCandidate.ts"
 import { toUpgradeKey } from "../upgrades/selectUpgrades.ts"
-import { NodeAdapter, pending, skippedUpgrade } from "./checkProject.ts"
 import type { ModelInspection } from "./inspectModels.ts"
-import { inspectUpgrade } from "./inspectUpgrade.ts"
-import { preservePartialReport, retainCompletedChecks } from "./preservePartialReport.ts"
-import { sizeBytes } from "./readUpgradeEvidence.ts"
 
 export async function inspectProject({
 	context,

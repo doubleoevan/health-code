@@ -1,7 +1,7 @@
 import { inspectRepository, type ModelRequestSandboxInspectionReport, type SandboxProvider } from "health-code"
 import { configureModels } from "./configureModels.ts"
-import { accountToken, readGithubToken, requireSettings } from "./modelSettings.ts"
 import { type PersonalProvider, personalProvider } from "./personalModelRequestSandboxes.ts"
+import { accountToken, readGithubToken, requireSettings } from "./readEnvironmentSettings.ts"
 import type { Inspect } from "./trackInspections.ts"
 
 export function inspectWithAccount(

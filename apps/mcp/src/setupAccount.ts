@@ -1,16 +1,16 @@
 import { Runta } from "@runta/runta-sdk"
 import { createSandboxProvider, readModelOrigin, type SandboxModelRoutes, toModelSecretName } from "health-code"
 import { configureModels } from "./configureModels.ts"
+import { personalProvider } from "./personalModelRequestSandboxes.ts"
+import { probeModelRequestSandbox, setupTimeoutMs } from "./probeModelRequestSandbox.ts"
 import {
 	accountToken,
 	readModelSettings,
 	requireSettings,
 	setupKey,
 	toEnvironmentReference,
-	UserError,
-} from "./modelSettings.ts"
-import { personalProvider } from "./personalModelRequestSandboxes.ts"
-import { probeModelRequestSandbox, setupTimeoutMs } from "./probeModelRequestSandbox.ts"
+} from "./readEnvironmentSettings.ts"
+import { UserError } from "./userError.ts"
 
 type Account = {
 	probe(token: string, route: SandboxModelRoutes["releaseSummary"], end: number): Promise<void>

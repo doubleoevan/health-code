@@ -1,5 +1,5 @@
 import { type ReactElement, useId, useRef, useState } from "react"
-import { toPatchPath } from "../publishedReport.ts"
+import { toPatchPath } from "../report.ts"
 import { PatchText } from "./PatchText.tsx"
 import { Link } from "./ReportControls.tsx"
 

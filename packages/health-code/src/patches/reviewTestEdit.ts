@@ -1,16 +1,10 @@
 import { parse } from "@babel/parser"
 import { isPackagePath } from "./isPackagePath.ts"
+import { isSyntax, type Syntax, syntaxOptions } from "./readSyntax.ts"
 
-type Node = { type: string; [key: string]: unknown }
 type Review = { kind: "mock" } | { kind: "coverage"; names: string[] } | { kind: "expectation"; name: string }
-function isNode(value: unknown): value is Node {
-	return !!value && typeof value === "object" && "type" in value && typeof value.type === "string"
-}
-function toTree(text: string): Node[] {
-	const program = parse(text, {
-		sourceType: "unambiguous",
-		plugins: ["jsx", "typescript", "decorators-legacy"],
-	}).program
+function toTree(text: string): Syntax[] {
+	const program = parse(text, syntaxOptions).program
 	return JSON.parse(
 		JSON.stringify([...program.directives, ...program.body], (key, value) =>
 			["loc", "start", "end", "extra", "leadingComments", "innerComments", "trailingComments"].includes(key)
@@ -19,15 +13,15 @@ function toTree(text: string): Node[] {
 		),
 	)
 }
-function testName(statement: Node): string | undefined {
+function testName(statement: Syntax): string | undefined {
 	// identify direct named test declarations
 	const call = statement.expression
 
 	// require a direct call to test or it
 	if (
-		!isNode(call) ||
+		!isSyntax(call) ||
 		call.type !== "CallExpression" ||
-		!isNode(call.callee) ||
+		!isSyntax(call.callee) ||
 		!["test", "it"].includes(String(call.callee.name))
 	) {
 		return
@@ -45,7 +39,7 @@ function testName(statement: Node): string | undefined {
 
 // trace matcher members back to an expect call
 function expectReceiver(node: unknown): boolean {
-	if (!isNode(node)) {
+	if (!isSyntax(node)) {
 		return false
 	}
 
@@ -53,7 +47,7 @@ function expectReceiver(node: unknown): boolean {
 	if (node.type === "MemberExpression") {
 		return expectReceiver(node.object)
 	}
-	return node.type === "CallExpression" && isNode(node.callee) && node.callee.name === "expect"
+	return node.type === "CallExpression" && isSyntax(node.callee) && node.callee.name === "expect"
 }
 
 // locate the changed literal in the cited release text
@@ -86,8 +80,8 @@ function documentsExpectedValue(citation: Citation, value: unknown): boolean {
 
 function assertionCall(expression: unknown): boolean {
 	// unwrap awaited assertions before checking the call
-	const value = isNode(expression) && expression.type === "AwaitExpression" ? expression.argument : expression
-	if (!isNode(value) || value.type !== "CallExpression" || !isNode(value.callee)) {
+	const value = isSyntax(expression) && expression.type === "AwaitExpression" ? expression.argument : expression
+	if (!isSyntax(value) || value.type !== "CallExpression" || !isSyntax(value.callee)) {
 		return false
 	}
 	const target = value.callee
@@ -95,9 +89,9 @@ function assertionCall(expression: unknown): boolean {
 	// recognize supported assertion methods on their owning object
 	if (
 		target.name === "assert" ||
-		(isNode(target.object) &&
+		(isSyntax(target.object) &&
 			target.object.name === "assert" &&
-			isNode(target.property) &&
+			isSyntax(target.property) &&
 			[
 				"ok",
 				"equal",
@@ -119,18 +113,18 @@ function assertionCall(expression: unknown): boolean {
 	) {
 		return true
 	}
-	return isNode(target.property) && /^to[A-Z]/.test(String(target.property.name)) && expectReceiver(target.object)
+	return isSyntax(target.property) && /^to[A-Z]/.test(String(target.property.name)) && expectReceiver(target.object)
 }
 
-function containsAssertion(statement: Node): boolean {
+function containsAssertion(statement: Syntax): boolean {
 	const expression = statement.expression
-	if (!isNode(expression) || !Array.isArray(expression.arguments)) {
+	if (!isSyntax(expression) || !Array.isArray(expression.arguments)) {
 		return false
 	}
 
 	// locate assertions inside the proposed test callback
 	const body = expression.arguments[1]?.body
-	if (!isNode(body)) {
+	if (!isSyntax(body)) {
 		return false
 	}
 	if (assertionCall(body)) {
@@ -166,14 +160,14 @@ function containsAssertion(statement: Node): boolean {
 	return false
 }
 
-function expectation(value: Node): Node | undefined {
-	if (value.type !== "CallExpression" || !Array.isArray(value.arguments) || !isNode(value.callee)) {
+function expectation(value: Syntax): Syntax | undefined {
+	if (value.type !== "CallExpression" || !Array.isArray(value.arguments) || !isSyntax(value.callee)) {
 		return
 	}
 	const member = value.callee
 
 	// require an ordinary method call for an editable expectation
-	if (member.type !== "MemberExpression" || member.computed || !isNode(member.property) || !isNode(member.object)) {
+	if (member.type !== "MemberExpression" || member.computed || !isSyntax(member.property) || !isSyntax(member.object)) {
 		return
 	}
 	const method = member.property.name
@@ -184,7 +178,7 @@ function expectation(value: Node): Node | undefined {
 	}
 	if (
 		receiver.type === "CallExpression" &&
-		isNode(receiver.callee) &&
+		isSyntax(receiver.callee) &&
 		receiver.callee.name === "expect" &&
 		// restrict expect matchers to their expected-value argument
 		["toBe", "toEqual", "toStrictEqual"].includes(String(method))
@@ -197,7 +191,7 @@ function containsSymbol(tree: unknown, symbol: string): boolean {
 	if (Array.isArray(tree)) {
 		return tree.some((child) => containsSymbol(child, symbol))
 	}
-	if (!isNode(tree)) {
+	if (!isSyntax(tree)) {
 		return false
 	}
 
@@ -208,12 +202,12 @@ function containsSymbol(tree: unknown, symbol: string): boolean {
 	)
 }
 type Citation = { symbol: string; quote: string }
-function maskValues(statement: Node, citation?: Citation): { shape: string; values: string[]; cited: boolean[] } {
+function maskValues(statement: Syntax, citation?: Citation): { shape: string; values: string[]; cited: boolean[] } {
 	// mask eligible expected literals while preserving the surrounding test
 	const cited: boolean[] = []
 	const values: string[] = []
 	const shape = JSON.stringify(statement, (_, value) => {
-		if (isNode(value)) {
+		if (isSyntax(value)) {
 			const literal = expectation(value)
 
 			// collect the original literals and their release citations
@@ -248,7 +242,7 @@ export function reviewNewTest(contents: string): { kind: "coverage"; names: stri
 	return { kind: "coverage", names }
 }
 
-function reviewAddedCases(previous: Node[], next: Node[]): Review {
+function reviewAddedCases(previous: Syntax[], next: Syntax[]): Review {
 	let index = 0
 	const names: string[] = []
 	for (const statement of next) {
@@ -273,33 +267,33 @@ function reviewAddedCases(previous: Node[], next: Node[]): Review {
 }
 
 // recognize the module registration calls of vitest, jest and bun
-function mockedModule(statement: Node): Node | undefined {
+function mockedModule(statement: Syntax): Syntax | undefined {
 	const call = statement.expression
-	if (statement.type !== "ExpressionStatement" || !isNode(call) || call.type !== "CallExpression") {
+	if (statement.type !== "ExpressionStatement" || !isSyntax(call) || call.type !== "CallExpression") {
 		return
 	}
 
 	// require a plain method call
 	const { callee } = call
-	if (!isNode(callee) || callee.computed || !isNode(callee.object) || !isNode(callee.property)) {
+	if (!isSyntax(callee) || callee.computed || !isSyntax(callee.object) || !isSyntax(callee.property)) {
 		return
 	}
 
 	// require a literal module name as the first argument
 	const name = `${callee.object.name}.${callee.property.name}`
 	const module: unknown = Array.isArray(call.arguments) ? call.arguments[0] : undefined
-	if (["vi.mock", "vi.doMock", "jest.mock", "jest.doMock", "mock.module"].includes(name) && isNode(module)) {
+	if (["vi.mock", "vi.doMock", "jest.mock", "jest.doMock", "mock.module"].includes(name) && isSyntax(module)) {
 		return module.type === "StringLiteral" ? module : undefined
 	}
 }
 
 // accept a moved mock only when both paths belong to the upgraded package
-function isMockMove(previous: Node, next: Node, dependency: string): boolean {
+function isMockMove(previous: Syntax, next: Syntax, dependency: string): boolean {
 	const old = mockedModule(previous)
 	const proposed = mockedModule(next)
 
 	// match the package root and its subpaths
-	const isOwned = (module: Node): boolean => isPackagePath({ path: String(module.value), dependency })
+	const isOwned = (module: Syntax): boolean => isPackagePath({ path: String(module.value), dependency })
 	if (!old || !proposed || !isOwned(old) || !isOwned(proposed)) {
 		return false
 	}
@@ -309,8 +303,8 @@ function isMockMove(previous: Node, next: Node, dependency: string): boolean {
 }
 
 // reject merged mocks and comments that change how a test runs
-function requireDistinctMocks(review: { previous: Node[]; next: Node[]; before: string; after: string }): void {
-	const toNames = (statements: Node[]): unknown[] => statements.flatMap((item) => mockedModule(item)?.value ?? [])
+function requireDistinctMocks(review: { previous: Syntax[]; next: Syntax[]; before: string; after: string }): void {
+	const toNames = (statements: Syntax[]): unknown[] => statements.flatMap((item) => mockedModule(item)?.value ?? [])
 	const toDirectives = (text: string): string =>
 		(text.match(/@(?:vitest|jest)-environment\b.*|@ts-\w+/g) ?? []).join("\n")
 
@@ -339,7 +333,7 @@ export function reviewTestEdit({ before, after, citation, mockDependency }: Revi
 	const changed = next.filter((item, index) => JSON.stringify(item) !== JSON.stringify(previous[index]))
 
 	// accept a set of changes made only of moved mock paths
-	const isMoved = (item: Node): boolean => {
+	const isMoved = (item: Syntax): boolean => {
 		const original = previous[next.indexOf(item)]
 		return !!mockDependency && !!original && isMockMove(original, item, mockDependency)
 	}

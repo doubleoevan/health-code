@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs"
 import { join } from "node:path"
-import { filesUnder, readText, workspaceDirectories } from "./inventory.ts"
+import { filesUnder, readText, workspaceDirectories } from "./readProjectFiles.ts"
 
 const testCasePagesDirectory = "/inspection-inventory"
 type FileAndHookEntries = {

@@ -1,10 +1,10 @@
 import { Database } from "bun:sqlite"
 import { randomBytes, randomUUID } from "node:crypto"
 import { InspectionError, toInspectionMode, type Upgrade } from "health-code"
-import { readPublishedReport, type SiteEvent, type Snapshot, withheldReason } from "../publishedReport.ts"
+import type { SiteEvent, Snapshot } from "../report.ts"
 import { isReusableReport, UpgradeCache } from "./cacheUpgrades.ts"
 import type { InspectionChoice } from "./inspectionSource.ts"
-import type { Publication } from "./publishReport.ts"
+import { type Publication, readPublishedReport, withheldReason } from "./publishReport.ts"
 import { AdmissionLedger, migrateAdmissions } from "./recordAdmissions.ts"
 
 // use the final report's license once it exists and the license recorded before the run until then

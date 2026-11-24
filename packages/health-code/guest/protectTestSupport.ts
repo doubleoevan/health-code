@@ -1,8 +1,8 @@
 import { posix } from "node:path"
 import { parse as parseToml } from "smol-toml"
 import { isPackagePath } from "../src/patches/isPackagePath.ts"
+import { isSyntax, parseStatements, readPropertyName, type Syntax } from "../src/patches/readSyntax.ts"
 import { createTestAliasResolver } from "./createTestAliasResolver.ts"
-import { isSyntax, parseStatements, readPropertyName, type Syntax } from "./readSyntax.ts"
 import { compareAliases, readViteAliases, type ViteAlias } from "./readViteAliases.ts"
 
 const moduleSuffixes = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts", ".cjs", ".cts"]

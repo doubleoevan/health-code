@@ -3,7 +3,7 @@ import { existsSync } from "node:fs"
 import { matchesGlob } from "node:path"
 import { parse as toml } from "smol-toml"
 import type { PackageManager } from "../src/contracts.ts"
-import { readText } from "./inventory.ts"
+import { readText } from "./readProjectFiles.ts"
 
 export type ReleaseAge = { publishedBefore: number; excluded: string[] }
 

@@ -3,13 +3,14 @@
 | Folder | Responsibility |
 | --- | --- |
 | root | The public entry, the report and event contracts, the inspection context, prompt templates and input normalization that every folder imports. |
-| `inspection/` | Repository and project orchestration, the model engine, the Node Ecosystem Adapter and check comparison. |
+| `inspection/` | Repository and project orchestration and the model engine. |
+| `checks/` | The Node Ecosystem Adapter, Baseline and Upgrade Check comparison, test inventory and partial reports. |
 | `upgrades/` | Registry targets, release notes, release features and the upgrade menu. |
 | `models/` | Model budget, routes, prompt building, tracing and the Model Request Sandbox contract. |
 | `patches/` | Agent Attempts, source and dependency edits, test-edit review and Patch verification. |
 | `sandbox/` | The production and fake Sandbox Providers and the network policy. |
 
-Folders import in one direction: root, `models/`, `sandbox/`, `upgrades/` and `patches/`, then `inspection/`. The file names below sit in these folders.
+Folders import in one direction: root, `models/`, `sandbox/`, `upgrades/`, `checks/` and `patches/`, then `inspection/`. The file names below sit in these folders.
 
 `index.ts` is the public library entry. `contracts.ts` owns the JSON report and event types, provider interface, and typed errors. `openRepositoryRuntime.ts` owns repository runtime allocation, checkout, network lockdown and replacement admission. `inspectRepository.ts` owns one bounded recovery attempt and final cleanup. `inspectProject.ts` runs the Baseline and serial upgrade checks.
 
@@ -33,7 +34,7 @@ A confirmed install failure can enter repair after a clean observation. The supe
 
 `testInventorySummary.ts` reads current and historical test counts and test file errors. The web report and evaluation grader use the same schema.
 
-`modelRequestSandbox.ts` defines model request sandbox options and serializes lazy allocation. `runtimeMeter.ts` measures each allocation through acknowledged deletion and combines runtime upper bounds with model receipts. Incomplete cleanup retains every unresolved identity on the Inspection error.
+`modelRequestSandbox.ts` defines model request sandbox options and serializes lazy allocation. `meterRuntimes.ts` measures each allocation through acknowledged deletion and combines runtime upper bounds with model receipts. Incomplete cleanup retains every unresolved identity on the Inspection error.
 
 `readPrompt.ts` validates each Inspection’s bundled or caller-supplied Markdown and identifies effective templates by name, version and SHA-256. `buildPrompt.ts` fences bounded, redacted evidence at call time. `traceGeneration.ts` adapts an optional caller-owned tracer to the SDK’s per-call interface.
 

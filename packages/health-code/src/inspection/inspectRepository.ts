@@ -1,4 +1,5 @@
 import type { InspectionOptionsV2, InspectionReportV2, PreviousInspectionOptions } from "../agentContracts.ts"
+import { retainMeasuredStages } from "../checks/preservePartialReport.ts"
 import { bounded, InspectionContext, redactEvidence } from "../collectEvents.ts"
 import {
 	InspectionError,
@@ -9,15 +10,14 @@ import {
 	type WithSandboxProvider,
 } from "../contracts.ts"
 import type { ModelRequestSandboxInspectionReport, ModelRequestSandboxOptions } from "../models/modelRequestSandbox.ts"
+import { isApplicationVariable } from "../sandbox/buildGuestArguments.ts"
 import { createSandboxProvider } from "../sandbox/createSandboxProvider.ts"
-import { isApplicationVariable } from "../sandbox/executeGuest.ts"
 import { toInspectionMode } from "../toInspectionMode.ts"
 import { toRepositoryUrl } from "../toRepositoryUrl.ts"
 import { ModelInspection } from "./inspectModels.ts"
 import { inspectProject } from "./inspectProject.ts"
 import { hasModels, toModelOptions } from "./modelOptions.ts"
 import { RepositoryRuntime } from "./openRepositoryRuntime.ts"
-import { retainMeasuredStages } from "./preservePartialReport.ts"
 
 /**
  * Inspects a repository at one commit and releases its sandbox before returning the Inspection Report.

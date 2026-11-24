@@ -1,8 +1,8 @@
 import type { Patch } from "health-code"
 import * as z from "zod"
-import { UserError } from "./modelSettings.ts"
 import { digest, type Outcome, type SavedReport, toHash } from "./storeInspection.ts"
 import { textPage } from "./trackInspections.ts"
+import { UserError } from "./userError.ts"
 
 const artifact = z.object({
 	filename: z.string().min(1),

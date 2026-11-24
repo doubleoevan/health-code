@@ -16,7 +16,7 @@
 			"entry": [
 				"src/index.ts",
 				"guest/project.ts",
-				"guest/readSystemCallLogLines.ts",
+				"guest/observe.ts",
 				"guest/agent.ts",
 				"guest/managePatch.ts",
 				"test/**/*.test.ts"

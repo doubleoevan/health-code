@@ -1,5 +1,5 @@
 import type { InspectionReportV2, UpgradeFeatures } from "health-code"
-import { replayRepositoryUrl, type SiteEvent } from "../publishedReport.ts"
+import { replayRepositoryUrl, type SiteEvent } from "../report.ts"
 import { type InspectionSource, SiteError } from "./inspectionSource.ts"
 import type { RepositoryHead } from "./recordAdmissions.ts"
 

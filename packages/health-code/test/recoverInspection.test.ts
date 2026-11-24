@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import { preservePartialReport, retainCompletedChecks } from "../src/checks/preservePartialReport.ts"
 import {
 	type FixtureCommand,
 	InspectionError,
@@ -9,7 +10,6 @@ import {
 	type SandboxProvider,
 	SandboxUnavailableError,
 } from "../src/index.ts"
-import { preservePartialReport, retainCompletedChecks } from "../src/inspection/preservePartialReport.ts"
 import { fixtureCommit, fixtureUrl } from "./providerContract.ts"
 import { base, command, provider, report, scripts } from "./replayProjectChecks.ts"
 

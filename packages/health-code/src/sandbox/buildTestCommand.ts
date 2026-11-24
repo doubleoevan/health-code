@@ -1,5 +1,5 @@
 import type { Command } from "../contracts.ts"
-import { guestArguments, observe } from "./executeGuest.ts"
+import { buildGuestArguments, observe } from "./buildGuestArguments.ts"
 
 const projectTool = "/opt/health-code/project.mjs"
 
@@ -18,28 +18,28 @@ export function buildTestCommand(options: { command: Command; dir?: string; id: 
 	const trustedTool = node === "node" && tool === projectTool
 	const capture =
 		trustedTool && action === "tests" && option === "--inventory" ? `/var/lib/health-code/tests-${id}` : undefined
-	let guest: ReturnType<typeof guestArguments>
+	let guest: ReturnType<typeof buildGuestArguments>
 
 	// give a fresh report write access only during its test run
 	if (capture) {
-		guest = guestArguments(command, dir, { path: `${capture}/raw/report`, kind: "report", writable: true })
+		guest = buildGuestArguments(command, dir, { path: `${capture}/raw/report`, kind: "report", writable: true })
 	} else if (trustedTool && action === "registry") {
 		// Allow the guest to flush completed lookups before the remote command deadline.
 		const grace = Math.min(2000, command.timeoutMs / 4)
 		const budget = Math.max(0, Math.floor(command.timeoutMs - grace))
-		guest = guestArguments(
+		guest = buildGuestArguments(
 			{ ...command, argv: [node, tool, action, `--timeout-ms=${budget}`, ...command.argv.slice(3)] },
 			dir,
 		)
 	} else if (trustedTool && action === "integrity" && previous) {
-		guest = guestArguments(command, dir, { path: `${previous}/inventory`, kind: "inventory" })
+		guest = buildGuestArguments(command, dir, { path: `${previous}/inventory`, kind: "inventory" })
 	} else if (trustedTool && action === "report" && previous) {
-		guest = guestArguments({ ...command, argv: [...command.argv, "--protected"] }, dir, {
+		guest = buildGuestArguments({ ...command, argv: [...command.argv, "--protected"] }, dir, {
 			path: `${previous}/report`,
 			kind: "report",
 		})
 	} else {
-		guest = guestArguments(command, dir)
+		guest = buildGuestArguments(command, dir)
 	}
 
 	// wrap the prepared command in observation and capture as requested

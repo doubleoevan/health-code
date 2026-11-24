@@ -14,7 +14,7 @@ import {
 import { parse as parseToml } from "smol-toml"
 import { createServer } from "./createServer.ts"
 import { environment, inspectionFixtureUrl, key, modelSettings, repo } from "./fixtures/inspectionSettings.ts"
-import { requireSettings, toEnvironmentReference } from "./modelSettings.ts"
+import { requireSettings, toEnvironmentReference } from "./readEnvironmentSettings.ts"
 import { setupAccount } from "./setupAccount.ts"
 import { InspectionStore, protect } from "./storeInspection.ts"
 import { Inspections } from "./trackInspections.ts"
