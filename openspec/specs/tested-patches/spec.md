@@ -65,7 +65,7 @@ The engine SHALL reconstruct the proposed tree from the tested base and recheck 
 #### Scenario: Declared dependencies must move with the target
 
 - **WHEN** a repair requests newer versions of dependencies the repository already declares
-- **THEN** the supervisor updates every declaring workspace, installs the whole set under the Baseline observation rules and records one flagged commit. The report lists each earlier version. An older version, a change to the target or a new lifecycle script rejects the set.
+- **THEN** the supervisor updates every declaring workspace, installs the whole set under the Baseline observation rules and records one flagged commit. The report lists each earlier version. Listing the target at its upgraded version has no effect. An older version, a change to the target or a new lifecycle script rejects the set.
 
 #### Scenario: An installed package gains another lifecycle hook instance
 

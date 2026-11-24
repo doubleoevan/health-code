@@ -8,6 +8,7 @@ import { readLifecycleHookSignatures, readPatchVerificationInputs } from "./read
 import { readReleaseAge } from "./readReleaseAge.ts"
 import { readTestReport, reporterArguments, reportPath } from "./readTestReport.ts"
 import { installedBytes, readChangelog, readUsage } from "./readUsage.ts"
+import { removeOutdatedLockfileEntries } from "./removeOutdatedLockfileEntries.ts"
 
 function execute(argv: string[]): number {
 	// require an executable before starting a child process
@@ -22,6 +23,7 @@ function execute(argv: string[]): number {
 // resolve the lockfile without running install scripts
 function resolveLock(manager: string): number {
 	if (manager === "npm") {
+		removeOutdatedLockfileEntries()
 		return execute(["npm", "install", "--package-lock-only", "--ignore-scripts"])
 	}
 	if (manager === "yarn") {
@@ -50,7 +52,12 @@ function install(args: string[]): number {
 	if (name && target && name !== "--update-lock") {
 		bumpDependency(name, target)
 	}
+
+	// remove outdated lockfile entries only before a changed install
 	if (manager === "npm") {
+		if (name) {
+			removeOutdatedLockfileEntries()
+		}
 		return execute(["npm", name ? "install" : "ci", ...scripts])
 	}
 

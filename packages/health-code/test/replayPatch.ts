@@ -64,7 +64,12 @@ function toRequestedDependencies(mode: PatchReplay): { name: string; version: st
 	if (isLinkedReplay(mode)) {
 		const version = mode === "linked-downgrade" ? "0.9.0" : "2.0.0"
 		const names = mode === "linked-duplicate" ? ["linked-a", "linked-a"] : ["linked-a", "linked-b"]
-		return names.map((name) => ({ name, version, reason: "Move with widget" }))
+		const linkedDependencies = names.map((name) => ({ name, version, reason: "Move with widget" }))
+
+		// list the target at its upgraded version alongside the linked set
+		return mode === "linked"
+			? [{ name: "widget", version: "2.0.0", reason: "Keep the target" }, ...linkedDependencies]
+			: linkedDependencies
 	}
 
 	// add a dependency the project does not declare

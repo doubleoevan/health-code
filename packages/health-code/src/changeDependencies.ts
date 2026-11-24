@@ -42,8 +42,13 @@ export async function prepareDependencies({
 		throw new NoEditsError(match ? "The feature adoption made no edits" : "Agent returned a diagnosis without edits")
 	}
 
+	// ignore the target at its upgraded version
+	const { dependency, to } = evidence.report
+	const requested = [...(edit.dependencies ?? []), ...(edit.dependency ? [edit.dependency] : [])].filter(
+		(entry) => entry.name !== dependency || entry.version !== to,
+	)
+
 	// reject a dependency requested twice in one turn
-	const requested = [...(edit.dependencies ?? []), ...(edit.dependency ? [edit.dependency] : [])]
 	if (new Set(requested.map((entry) => entry.name)).size !== requested.length) {
 		throw new Error("A dependency can be requested once per turn")
 	}

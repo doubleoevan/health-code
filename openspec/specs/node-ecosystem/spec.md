@@ -21,7 +21,7 @@ The Node Ecosystem Adapter SHALL detect Bun, pnpm, Yarn, or npm from the root lo
 
 ### Requirement: Install and change one direct dependency
 
-The Baseline SHALL use frozen installation and the selected manager's normal lifecycle policy. When that install fails after attempting an off-registry connection, the adapter SHALL retry without install scripts, use the same policy for every later install and record that scripts were skipped. The final Baseline install result SHALL decide whether upgrade checks run. For an Upgrade the adapter SHALL update the target in every declaring workspace, preserve dependency sections, and regenerate the lockfile with that manager.
+The Baseline SHALL use frozen installation and the selected manager's normal lifecycle policy. When that install fails after attempting an off-registry connection, the adapter SHALL retry without install scripts, use the same policy for every later install and record that scripts were skipped. The final Baseline install result SHALL decide whether upgrade checks run. For an Upgrade the adapter SHALL update the target in every declaring workspace, preserve dependency sections, and regenerate the lockfile with that manager. Before npm resolves a change, the adapter SHALL remove lockfile entries whose version differs from an exact declared version.
 
 #### Scenario: Shared dependency
 

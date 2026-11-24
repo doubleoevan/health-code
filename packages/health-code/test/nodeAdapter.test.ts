@@ -101,6 +101,40 @@ test("bumps all declaring workspaces and uses the original manager lifecycle pol
 		}
 		assert.equal(readFileSync(join(cwd, "invocation"), "utf8").trim(), "install --no-frozen-lockfile")
 	}))
+test("removes npm lockfile entries that differ from an exact version", () =>
+	fixture("npm", (cwd, invoke) => {
+		// lock an outdated package with a nested copy beside a matching package
+		const lockfile = join(cwd, "package-lock.json")
+		const packages = {
+			"node_modules/widget": { version: "1.2.0" },
+			"node_modules/widget/node_modules/gadget": { version: "1.0.0" },
+			"node_modules/widget-extra": { version: "1.0.0" },
+			"node_modules/ranged": { version: "1.0.0" },
+		}
+
+		// require a newer exact version of the outdated package
+		writeFileSync(lockfile, JSON.stringify({ lockfileVersion: 3, packages }, null, "\t"))
+		const manifest = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8"))
+		manifest.dependencies = { widget: "2.0.0", "widget-extra": "1.0.0", ranged: "^2.0.0" }
+		writeFileSync(join(cwd, "package.json"), JSON.stringify(manifest))
+
+		// leave the frozen Baseline install untouched
+		const original = readFileSync(lockfile, "utf8")
+		assert.equal(invoke(["install"]).status, 0)
+		assert.equal(readFileSync(lockfile, "utf8"), original)
+
+		// remove only the outdated package before npm resolves the changed set
+		for (const command of ["--update-lock", "--resolve-lock"]) {
+			writeFileSync(lockfile, original)
+			const result = invoke(["install", command])
+			assert.equal(result.status, 0, result.stderr)
+
+			// keep the original indentation and the remaining entries
+			const text = readFileSync(lockfile, "utf8")
+			assert.match(text, /\n\t"packages"/)
+			assert.deepEqual(Object.keys(JSON.parse(text).packages), ["node_modules/widget-extra", "node_modules/ranged"])
+		}
+	}))
 test("a version change keeps the manifest's formatting", () => {
 	// start from tabs and an inline array
 	const text = '{\n\t"name": "app",\n\t"files": ["a", "b"],\n\t"dependencies": {\n\t\t"widget": "^1.0.0"\n\t}\n}\n'

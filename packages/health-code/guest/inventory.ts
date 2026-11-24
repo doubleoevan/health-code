@@ -76,7 +76,7 @@ export function filesUnder(root: string): string[] {
 	visit(root)
 	return result
 }
-function manifests(files: string[]): [string, Manifest][] {
+export function workspaceManifests(files: string[]): [string, Manifest][] {
 	// resolve workspace declarations from the root manifests
 	const root = readManifest(".")
 	const declared = root.workspaces
@@ -115,7 +115,7 @@ function includedWorkspace(dir: string, patterns: string[], excludeFirst: boolea
 
 // prefer deeper workspaces when assigning a source file
 export function workspaceDirectories(): string[] {
-	return manifests(filesUnder("."))
+	return workspaceManifests(filesUnder("."))
 		.map(([dir]) => dir)
 		.filter((dir) => dir !== ".")
 		.sort((a, b) => b.length - a.length)
@@ -227,7 +227,7 @@ function recordNames(text: string, file: string, names: Set<string>, skipped: Se
 export function detectProject(): Project {
 	// identify the package manager and its locked versions
 	const files = filesUnder(".")
-	const entries = manifests(files)
+	const entries = workspaceManifests(files)
 	const root = readManifest(".")
 	const manager = managerName(root)
 	const version = execFileSync(manager, ["--version"], { encoding: "utf8", timeout: 10000 }).trim()
@@ -278,7 +278,7 @@ export function bumpDependency(name: string, target: string): void {
 	}
 
 	// update each workspace that declares the dependency
-	for (const [dir, manifest] of manifests(filesUnder("."))) {
+	for (const [dir, manifest] of workspaceManifests(filesUnder("."))) {
 		if (bumpManifest({ dir, manifest, name, target })) {
 			writeManifest(dir, manifest)
 		}
