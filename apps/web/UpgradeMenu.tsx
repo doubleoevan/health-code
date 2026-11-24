@@ -138,16 +138,23 @@ function DependencyVersions({
 			<ul>
 				{group.targets.map((target) => (
 					<li key={target.to}>
-						<code>{toVersionChange(target)}</code> · {target.kind}{" "}
-						{target.patch ? (
-							<span className="button-link">
-								<Link href={`/r/${target.patch.inspectionId}#patch-${target.patch.sha256}`}>View tested patch</Link>
+						{/* version change and its upgrade action */}
+						<div className="button-row">
+							<span>
+								<code>{toVersionChange(target)}</code> · {target.kind}
 							</span>
-						) : (
-							<button type="button" disabled={pending} onClick={() => onSelect(target)}>
-								Test upgrade
-							</button>
-						)}
+							{target.patch ? (
+								<span className="button-link">
+									<Link href={`/r/${target.patch.inspectionId}#patch-${target.patch.sha256}`}>View tested patch</Link>
+								</span>
+							) : (
+								<button type="button" disabled={pending} onClick={() => onSelect(target)}>
+									Test upgrade
+								</button>
+							)}
+						</div>
+
+						{/* release features for this version */}
 						<ReleaseFeatures upgradeMenuId={upgradeMenuId} target={target} />
 					</li>
 				))}
@@ -233,8 +240,8 @@ function ReleaseFeatures({
 	}, [loadedOffset, preview])
 
 	const message = error ? (
-		<p role="status">
-			Release notes could not be loaded.{" "}
+		<p className="button-row" role="status">
+			<span>Release notes could not be loaded.</span>
 			<button type="button" onClick={() => setAttempt(attempt + 1)}>
 				Retry
 			</button>

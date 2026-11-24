@@ -273,10 +273,22 @@ label {
 }
 .field,
 .pager,
+.button-row,
+.stop-inspection,
 article header {
 	display: flex;
 	align-items: center;
 	gap: var(--inline-gap);
+}
+.field,
+.pager,
+.button-row,
+.stop-inspection {
+	gap: var(--inline-gap) var(--block-gap);
+}
+.button-row {
+	flex-wrap: wrap;
+	margin-block: var(--inline-gap);
 }
 :where(.field) input {
 	min-width: 0;
@@ -356,7 +368,7 @@ button:disabled {
 	align-items: center;
 }
 .mast > span > :not(button, :empty) {
-	margin-inline-end: var(--inline-gap);
+	margin-inline-end: var(--block-gap);
 }
 .mast > a {
 	margin-inline-end: auto;
@@ -563,9 +575,6 @@ td ul {
 	scrollbar-gutter: stable;
 }
 .stop-inspection {
-	display: flex;
 	flex-wrap: wrap;
-	align-items: center;
 	justify-content: center;
-	gap: var(--inline-gap);
 }
