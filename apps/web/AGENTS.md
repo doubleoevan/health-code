@@ -6,7 +6,7 @@ The `@health-code/web` workspace serves the inspection site. Bun runs its Hono e
 
 `InspectionDetails.tsx` renders the table below the inspection log with Baseline checks. `logInspection.ts` records terminal state and bounded cost evidence.
 
-`recordAdmissions.ts` owns quota reservations, UTC accounting and sharing cohorts. Its `countRemainingInspections` count enforces the daily allowance and supplies the hosted header’s “demo calls left” label. `launchLimits.ts` refreshes the limits snapshot. `verifyVisitor.ts` authenticates the operator and verifies visitor identity and Turnstile before a paid start. The limits, identity and storage checks run through the same submission path.
+`recordAdmissions.ts` owns quota reservations, UTC accounting and sharing cohorts. Its `countRemainingInspections` count enforces the daily allowance and supplies the hosted header’s “demo calls left today” label. `launchLimits.ts` refreshes the limits snapshot. `verifyVisitor.ts` authenticates the operator and verifies visitor identity and Turnstile before a paid start. The limits, identity and storage checks run through the same submission path.
 
 Use the public `health-code` package for live Inspections. In development, `replayInspection.ts` streams the version 2 Inspection Report and event intervals from `fixtures/recorded/`. Tests also read the original version 1 recording. Production rejects replay configuration.
 

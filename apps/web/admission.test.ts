@@ -269,11 +269,11 @@ test("the hosted header counts the demo calls left for the visitor and network",
 	const headers = { "x-envoy-external-address": "203.0.113.1" }
 	const readHeader = async (init?: RequestInit): Promise<string | undefined> =>
 		/<small>(.*?)<\/small>/.exec(await (await app.request(origin, init)).text())?.[1]?.replaceAll("<!-- -->", "")
-	assert.equal(await readHeader({ headers }), "2 demo calls left")
+	assert.equal(await readHeader({ headers }), "2 demo calls left today")
 
 	// Spend the allowance from the same network and check each label.
 	const { identity } = identifyVisitor(new Request(origin, { headers }), launch.visitorKey, false)
-	for (const expected of ["1 demo call left", "0 demo calls left"]) {
+	for (const expected of ["1 demo call left today", "0 demo calls left today"]) {
 		store.admission.admit({
 			key: expected,
 			head: { repositoryId: "1", sizeKiB: 1, revision: "a".repeat(40) },
@@ -284,7 +284,7 @@ test("the hosted header counts the demo calls left for the visitor and network",
 		})
 		assert.equal(await readHeader({ headers }), expected)
 	}
-	assert.equal(await readHeader({ headers: { "x-envoy-external-address": "203.0.113.2" } }), "2 demo calls left")
+	assert.equal(await readHeader({ headers: { "x-envoy-external-address": "203.0.113.2" } }), "2 demo calls left today")
 
 	// Hide the label when the visitor or the limits are unknown.
 	assert.equal(await readHeader(), undefined)

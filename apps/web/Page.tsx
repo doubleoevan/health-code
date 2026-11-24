@@ -367,7 +367,7 @@ export function Page(props: PageProps): ReactElement {
 				{props.siteMode === "replay" && <small>Recorded example</small>}
 				{props.demoCallsLeft !== undefined && (
 					<small>
-						{props.demoCallsLeft} demo {props.demoCallsLeft === 1 ? "call" : "calls"} left
+						{props.demoCallsLeft} demo {props.demoCallsLeft === 1 ? "call" : "calls"} left today
 					</small>
 				)}
 				<nav aria-label="Project">
