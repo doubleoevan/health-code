@@ -32,14 +32,16 @@ Preflight needs no credentials. Doppler project `health-code`, config `dev`, hol
 
 ## Run the site locally
 
-Build the library and play the mocked recording without credentials:
+Build the library and serve live local inspections with hot reload:
 
 ```sh
 bun run --cwd packages/health-code build
-bun run --cwd apps/web replay
+doppler run --project health-code --config dev -- bun run --cwd apps/web dev
 ```
 
-Open `http://localhost:3000`. Run `bun run --cwd apps/web dev` for live inspections. It uses the required settings from MCP setup. Run setup once so Runta holds your key and leave `MODEL_API_KEY` set for the site. The [site guide](apps/web/AGENTS.md) covers hosting.
+Open `http://localhost:3000` and inspect any public repository. The site uses the required settings from MCP setup. Run setup once so Runta holds your key and leave `MODEL_API_KEY` set for the site. Live inspections spend your own Runta and model credits.
+
+Without credentials, `bun run --cwd apps/web replay` plays one recorded inspection for interface work. The [hosting guide](apps/web/HOSTING.md) covers deployment.
 
 ## Model inspections
 
