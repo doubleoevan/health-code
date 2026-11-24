@@ -48,12 +48,12 @@ async function submit(
 	const group = page
 		.locator("article")
 		.filter({
-			has: page.getByRole("button", { name: "Try upgrade" }).or(page.getByRole("link", { name: "View tested patch" })),
+			has: page.getByRole("button", { name: "Try upgrade" }).or(page.getByRole("link", { name: "See patch" })),
 		})
 		.first()
 
 	const target = group.locator("li").first()
-	const ready = target.getByRole("link", { name: "View tested patch" })
+	const ready = target.getByRole("link", { name: "See patch" })
 
 	// Follow the existing patch directly when its report is already available.
 	if (await ready.count()) {

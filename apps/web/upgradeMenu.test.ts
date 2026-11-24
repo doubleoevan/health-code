@@ -31,7 +31,7 @@ test("browse an inspected upgrade menu, choose one release and reopen its licens
 
 		// Ignore the patch filter until a tested patch exists.
 		const unfiltered = await (await app.request(`/r/${upgradeMenu.id}?ready=on`)).text()
-		expect(unfiltered).not.toContain("Tested patch available")
+		expect(unfiltered).not.toContain("Patch available")
 		expect(unfiltered).toContain("Try upgrade")
 
 		// Read release features for the selected version before starting its tests.
@@ -72,8 +72,8 @@ test("browse an inspected upgrade menu, choose one release and reopen its licens
 
 		// show the patch link and its filter on the refreshed menu
 		const refreshed = await (await app.request(`/r/${upgradeMenu.id}`)).text()
-		expect(refreshed).toContain("View tested patch")
-		expect(refreshed).toContain("Tested patch available")
+		expect(refreshed).toContain("See patch")
+		expect(refreshed).toContain("Patch available")
 	} finally {
 		store.database.close()
 	}

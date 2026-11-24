@@ -45,7 +45,7 @@ The engine SHALL allow added cases and reject weakened assertions. A changed exi
 
 ### Requirement: Independently verify the final tree
 
-The engine SHALL reconstruct the proposed tree from the tested base and recheck changed paths, dependency commits, lifecycle scripts, install actions, applicable typechecking and test evidence. During final install and tests it SHALL compare all observed destination hosts with the corresponding Baseline phase. Any new host, incomplete comparison, unexpected install finding, new lifecycle script, unflagged new dependency or file outside the frozen allowed set SHALL reject the Patch.
+The engine SHALL reconstruct the proposed tree from the tested base and recheck changed paths, dependency commits, lifecycle scripts, install actions, applicable typechecking and test evidence. Final typechecking SHALL accept only errors identified in the Baseline. During final install and tests it SHALL compare all observed destination hosts with the corresponding Baseline phase. Any new host, incomplete comparison, unexpected install finding, new lifecycle script, unflagged new dependency or file outside the frozen allowed set SHALL reject the Patch.
 
 #### Scenario: Registry is allowed but new to this phase
 

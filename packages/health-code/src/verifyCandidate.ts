@@ -4,6 +4,7 @@ import type { Patch, PatchOperation, PatchVerification, UpgradeReportV2 } from "
 import { lockfiles } from "./bumpManifest.ts"
 import type { NodeAdapter } from "./checkProject.ts"
 import { bounded, type InspectionContext } from "./collectEvents.ts"
+import { excludeBaselineFailures } from "./confirmCheck.ts"
 import { InspectionError, type InspectionReport, type Observation, type Sandbox } from "./contracts.ts"
 import type { ReleaseNote } from "./readReleases.ts"
 import type { UsageEvidence } from "./readUpgradeEvidence.ts"
@@ -190,18 +191,18 @@ export function cleanInstall(current: Observation, baseline: Observation): boole
 
 export async function verifyTree(evidence: PatchEvidence, state: State): Promise<PatchVerification> {
 	requireBaseline(evidence)
-	const { adapter, baselinePatchVerificationInputs, baseInstall, baseTests } = evidence
+	const { adapter, baselinePatchVerificationInputs, baseInstall, baseTests, inspectionReport } = evidence
 
 	// reinstall the candidate and compare its network and file observations
 	const install = await adapter.install()
 	reportNewDestinations("install", adapter.lastObservation, baseInstall)
 	if (install.status !== "passed" || !adapter.lastObservation || !cleanInstall(adapter.lastObservation, baseInstall)) {
-		throw new Error("Final installation evidence failed")
+		throw new Error(toEvidenceError("Final installation evidence failed", adapter.lastObservation))
 	}
 	const installation = adapter.lastObservation
 
-	// require the final typecheck when the project provides one
-	const typecheck = await adapter.typecheck()
+	// require a final typecheck without new errors when the project provides one
+	const typecheck = excludeBaselineFailures(await adapter.typecheck(), inspectionReport.baseline.typecheck)
 	if (adapter.project?.typecheck !== "none" && typecheck.status !== "passed") {
 		throw new Error("Final typecheck failed")
 	}
@@ -214,7 +215,7 @@ export async function verifyTree(evidence: PatchEvidence, state: State): Promise
 		!adapter.lastObservation?.complete ||
 		!adapter.lastObservation.destinations?.every((host) => baseTests?.destinations?.includes(host))
 	) {
-		throw new Error("Final test evidence incomplete")
+		throw new Error(toEvidenceError("Final test evidence incomplete", adapter.lastObservation))
 	}
 
 	// verify that repository commands preserved the committed tree
@@ -247,6 +248,10 @@ export async function verifyTree(evidence: PatchEvidence, state: State): Promise
 		.filter(([file, name]) => !prior.has(JSON.stringify([file, name])))
 		.map(([file, name]) => ({ file, name }))
 	return { install, typecheck, tests, installation, testNetwork: adapter.lastObservation, addedCases }
+}
+
+function toEvidenceError(message: string, observation: Observation | undefined): string {
+	return [message, observation?.reason].filter(Boolean).join(": ")
 }
 
 function reportNewDestinations(phase: string, current: Observation | undefined, baseline: Observation): void {

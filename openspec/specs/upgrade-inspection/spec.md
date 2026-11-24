@@ -16,7 +16,7 @@ An inspection SHALL select at most six distinct dependency and target pairs by d
 
 ### Requirement: Establish a comparable Baseline
 
-The engine SHALL capture install, applicable typecheck, and test results at the inspected commit before attributing failures to upgrades. A failed Baseline install SHALL prevent upgrade checks. If the install succeeds and the required Baseline build fails, Health Code SHALL retain independent upgrade install and test evidence and mark the overall comparison partial.
+The engine SHALL capture install, applicable typecheck, and test results at the inspected commit before attributing failures to upgrades. A failed Baseline install SHALL prevent upgrade checks. If the install succeeds and the required Baseline build fails, Health Code SHALL retain independent upgrade install and test evidence and mark the overall comparison partial. A failed Baseline typecheck whose errors are all identified by file and message SHALL remain comparable.
 
 #### Scenario: Broken Baseline install
 
@@ -25,7 +25,7 @@ The engine SHALL capture install, applicable typecheck, and test results at the 
 
 #### Scenario: Broken Baseline build
 
-- **WHEN** frozen install succeeds and the required Baseline build fails
+- **WHEN** frozen install succeeds and the required Baseline build fails without identified errors
 - **THEN** the report shows the independent install and test results, the skipped typecheck and an Untested Verdict
 
 #### Scenario: Sandbox loss during checks
@@ -37,6 +37,11 @@ The engine SHALL capture install, applicable typecheck, and test results at the 
 
 - **WHEN** the Baseline has named failing tests or file-load failures
 - **THEN** the Inspection Report retains their identities and excludes those failures when comparing the upgraded project
+
+#### Scenario: Known Baseline type errors
+
+- **WHEN** the Baseline typecheck reports only identified errors and the upgraded project reports the same errors
+- **THEN** the Upgrade Check excludes them and runs its tests. A new error is confirmed and can be repaired
 
 ### Requirement: Gate each Upgrade Check on installation evidence
 

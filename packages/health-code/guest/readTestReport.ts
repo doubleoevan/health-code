@@ -6,16 +6,64 @@ import { jsonCaseName, xmlCaseName } from "../src/testCaseName.ts"
 import { readText, workspaceDirectories } from "./inventory.ts"
 
 export const reportPath = ".health-code/test-results"
+
+// the bundle uploaded next to the project tool
+const nodeReporter = "/opt/health-code/nodeTestReporter.mjs"
+
+// the flags that leave the reporter and the loaded modules unchanged
+const nodeTestFlag = /^--(?:test-(?:concurrency|timeout)=\d+|test-force-exit|experimental-[\w-]+)$/
+
+/**
+ * Recognizes scripts whose last command runs Node's test runner directly or through tsx.
+ */
+export function isNodeTestScript(script: string): boolean {
+	// read the last command's arguments
+	const [runner, ...args] = toLastCommand(script)
+		.replace(/\s--import(?:=|\s+)tsx(?=\s)/, "")
+		.split(/\s+/)
+
+	// allow only the runner, known flags and test files
+	return (
+		(runner === "tsx" || runner === "node") &&
+		args.includes("--test") &&
+		args.every((arg) => arg === "--test" || nodeTestFlag.test(arg) || /^["']?[\w.@*][\w./@*-]*["']?$/.test(arg))
+	)
+}
+
+/**
+ * Adds the JSON reporter to Node's test runner through its environment.
+ */
+export function reporterEnvironment(script: string, path = reportPath): NodeJS.ProcessEnv {
+	if (!isNodeTestScript(script)) {
+		return {}
+	}
+
+	// keep the readable output beside the structured report
+	const options = [
+		"--test-reporter=spec",
+		"--test-reporter-destination=stdout",
+		`--test-reporter=${nodeReporter}`,
+		`--test-reporter-destination=${path}`,
+	]
+	return { NODE_OPTIONS: [process.env.NODE_OPTIONS, ...options].filter(Boolean).join(" ") }
+}
+
+// package managers append arguments to the last command in a script
+function toLastCommand(script: string): string {
+	return /[;|<>`$\n]/.test(script) ? "" : (script.split("&&").at(-1)?.trim() ?? "")
+}
+
 export function reporterArguments(script: string, path = reportPath): string[] {
-	if (!/^(?:bun test|vitest(?: run)?|jest)(?:\s+[\w./=-]+)*$/.test(script)) {
+	const command = toLastCommand(script)
+	if (!/^(?:bun test|vitest(?: run)?|jest)(?:\s+[\w./=-]+)*$/.test(command)) {
 		return []
 	}
 
 	// choose the runner's supported machine-readable reporter
-	if (script.startsWith("bun test")) {
+	if (command.startsWith("bun test")) {
 		return ["--reporter=junit", `--reporter-outfile=${path}`]
 	}
-	if (script.startsWith("jest")) {
+	if (command.startsWith("jest")) {
 		return ["--json", `--outputFile=${path}`, "--runInBand"]
 	}
 	return ["--run", "--reporter=json", `--outputFile=${path}`]
@@ -72,7 +120,7 @@ export function readTestReport(
 	failures: TestFailure[]
 } {
 	// use exit status for scripts without structured reporters
-	if (!reporterArguments(script).length) {
+	if (!reporterArguments(script).length && !isNodeTestScript(script)) {
 		return { complete: true, granularity: "exit", failures: [] }
 	}
 	const path = protectedReport ? "/inspection-report" : reportPath

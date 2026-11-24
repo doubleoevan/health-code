@@ -6,17 +6,17 @@ import { bumpDependency, detectProject, managerName, readManifest } from "./inve
 import { measureTests } from "./measureTests.ts"
 import { readLifecycleHookSignatures, readPatchVerificationInputs } from "./readPatchVerificationInputs.ts"
 import { readReleaseAge } from "./readReleaseAge.ts"
-import { readTestReport, reporterArguments, reportPath } from "./readTestReport.ts"
+import { readTestReport, reporterArguments, reporterEnvironment, reportPath } from "./readTestReport.ts"
 import { installedBytes, readChangelog, readUsage } from "./readUsage.ts"
 import { removeOutdatedLockfileEntries } from "./removeOutdatedLockfileEntries.ts"
 
-function execute(argv: string[]): number {
+function execute(argv: string[], environment: NodeJS.ProcessEnv = {}): number {
 	// require an executable before starting a child process
 	const [file, ...args] = argv
 	if (!file) {
 		throw new Error("Missing command")
 	}
-	const result = spawnSync(file, args, { stdio: "inherit" })
+	const result = spawnSync(file, args, { stdio: "inherit", env: { ...process.env, ...environment } })
 	return result.status ?? 1
 }
 
@@ -94,10 +94,11 @@ function tests(protectedReport = false): number {
 		rmSync(reportPath, { force: true })
 	}
 
-	// pass reporter flags through the package manager
-	const args = reporterArguments(script, protectedReport ? "/inspection-report" : reportPath)
+	// pass the reporter through the package manager or the environment
+	const path = protectedReport ? "/inspection-report" : reportPath
+	const args = reporterArguments(script, path)
 	const argv = [manager, "run", "test", ...(manager === "npm" && args.length ? ["--"] : []), ...args]
-	return execute(argv)
+	return execute(argv, reporterEnvironment(script, path))
 }
 
 function discoverVersions(args: string[]): ReturnType<typeof fetchRegistryVersions> {

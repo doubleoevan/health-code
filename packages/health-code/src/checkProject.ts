@@ -26,6 +26,7 @@ import {
 	type RegistryVersions,
 	toRegistryLookupIssue,
 } from "./parseRegistryVersions.ts"
+import { readCheckErrors } from "./readTypeErrors.ts"
 import { selectUpgrades } from "./selectUpgrades.ts"
 
 const projectSchema = z.object({
@@ -282,7 +283,7 @@ export class NodeAdapter implements EcosystemAdapter {
 				let check: CheckResult =
 					raw.exitCode === 0
 						? { status: "passed", evidence: [evidence] }
-						: { status: "failed", evidence: [evidence], failingTests: [] }
+						: { status: "failed", evidence: [evidence], failingTests: readCheckErrors(args, raw) }
 				if (raw.timedOut) {
 					check = untested("command-timeout", [evidence])
 				} else if (stage === "tests") {

@@ -1,0 +1,20 @@
+{
+	"version": 1,
+	"id": "existing-failures",
+	"kind": "upgrade",
+	"repositoryUrl": "https://github.com/runta-dev/jot",
+	"commit": "55c3082e88955cd24da2bf5417af0d8ae3c4c7af",
+	"memoryMib": 8192,
+	"upgrade": {
+		"dependency": "@vitejs/plugin-react",
+		"from": "5.2.0",
+		"to": "6.3.0"
+	},
+	"expected": {
+		"check": "failed",
+		"confirmed": true,
+		"verdict": "Fixed",
+		"existingTestChanges": false,
+		"linkedDependencies": ["vite"]
+	}
+}

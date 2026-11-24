@@ -23,6 +23,7 @@ export const upgradeCaseIds = [
 	"linked-dependencies",
 	"matching-versions",
 	"mocked-import-path",
+	"existing-failures",
 ] as const
 export type UpgradeCaseId = (typeof upgradeCaseIds)[number]
 

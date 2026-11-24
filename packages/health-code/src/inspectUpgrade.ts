@@ -1,4 +1,4 @@
-import { confirm, untested } from "./confirmCheck.ts"
+import { confirm, excludeBaselineFailures, isComparable, untested } from "./confirmCheck.ts"
 import type { Baseline, CheckResult, EcosystemAdapter, Observation, UpgradeReport } from "./contracts.ts"
 
 function getInstallVerificationIssue(observation: Observation): string | undefined {
@@ -23,7 +23,7 @@ export async function inspectUpgrade({
 	afterInstall?: () => Promise<void>
 }): Promise<void> {
 	// Preserve independently comparable checks when the original build is unavailable.
-	if (adapter.project?.typecheck !== "none" && baseline.typecheck.status !== "passed") {
+	if (adapter.project?.typecheck !== "none" && !isComparable(baseline.typecheck)) {
 		report.coverage = "partial"
 		report.typecheck = untested("baseline-typecheck-unavailable")
 	}
@@ -79,8 +79,8 @@ async function runAvailableUpgradeChecks(
 ): Promise<void> {
 	// Keep diagnostic results under the locked policy while withholding attribution and patches.
 	report.coverage = "partial"
-	if (baseline.typecheck.status === "passed") {
-		report.typecheck = await adapter.typecheck()
+	if (isComparable(baseline.typecheck)) {
+		report.typecheck = excludeBaselineFailures(await adapter.typecheck(), baseline.typecheck)
 	} else {
 		report.typecheck = untested(
 			adapter.project?.typecheck === "none" ? "no-tsconfig" : "baseline-typecheck-unavailable",
@@ -144,8 +144,8 @@ async function repeatCheck({
 	if (stage === "typecheck") {
 		return adapter.typecheck()
 	}
-	if (baseline.typecheck.status === "passed") {
-		const typecheck = await adapter.typecheck()
+	if (isComparable(baseline.typecheck)) {
+		const typecheck = excludeBaselineFailures(await adapter.typecheck(), baseline.typecheck)
 
 		// preserve a missing confirmation build as untested
 		if (typecheck.status !== "passed") {

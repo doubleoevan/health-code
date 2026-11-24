@@ -344,6 +344,7 @@ export function connectProvider(
 					["observe.mjs", "observe.mjs"],
 					["agent.mjs", "agent.mjs"],
 					["patch.mjs", "patch.mjs"],
+					["nodeTestReporter.mjs", "nodeTestReporter.mjs"],
 				] as const) {
 					// upload the pinned guest bundle from the release package
 					const contents = await readFile(new URL(`../../dist/${local}`, import.meta.url))

@@ -11,6 +11,8 @@ const verdicts: Record<PatchReplay, Verdict> = {
 	"linked-duplicate": "Can't fix",
 	"linked-conflict": "Can't fix",
 	"install-break": "Fixed",
+	"type-errors": "Fixed",
+	"new-type-error": "Can't fix",
 	"unresolved-lock": "Can't fix",
 	"new-test": "Fixed",
 	undeclared: "Can't fix",
@@ -36,7 +38,9 @@ for (const [mode, verdict] of Object.entries(verdicts)) {
 		assert.equal(report.verdict, verdict, report.diagnosis?.stopReason ?? "")
 		assert.equal(
 			report.patches.length,
-			["passes", "repair", "test", "new-test", "dependency", "linked", "install-break"].includes(mode) ? 1 : 0,
+			["passes", "repair", "test", "new-test", "dependency", "linked", "install-break", "type-errors"].includes(mode)
+				? 1
+				: 0,
 		)
 
 		// verify the stop reason when lockfile recovery fails

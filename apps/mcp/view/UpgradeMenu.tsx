@@ -115,7 +115,7 @@ export function UpgradeMenu({
 						defaultChecked={query.readyOnly}
 						onChange={(event) => event.currentTarget.form?.requestSubmit()}
 					/>{" "}
-					Tested patch available
+					Patch available
 				</label>
 				<button type="submit" className="secondary" disabled={isPending}>
 					Search
@@ -225,7 +225,7 @@ function TargetVersion({
 				</span>
 				{patch ? (
 					<button type="button" disabled={isPending} onClick={() => onInspect(patch.inspectionId)}>
-						View tested patch
+						See patch
 					</button>
 				) : (
 					<button type="button" disabled={isPending} onClick={() => onTest(target)}>

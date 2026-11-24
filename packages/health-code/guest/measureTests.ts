@@ -52,8 +52,15 @@ export function measureTests(directory: string, argv: string[]): number {
 			process.stderr.write(execution.stderr.slice(-60000))
 		}
 
-		// preserve the runner status when it produces no report
+		// capture an empty inventory and keep the status of a runner without a report
 		if (!statSync(report).size) {
+			writeInventoryPages(join(directory, "inventory"), {
+				counts: { passed: 0, failed: 0, skipped: 0, todo: 0 },
+				cases: [],
+				discoveredFiles: [],
+				testFileErrors: [],
+			})
+			writeFileSync(join(directory, "report"), "")
 			return execution.status
 		}
 

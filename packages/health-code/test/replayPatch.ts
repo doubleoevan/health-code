@@ -12,6 +12,13 @@ import { evaluatePatch } from "../src/verifyPatch.ts"
 const base = "a".repeat(40)
 const oldTest = 'test("behavior", () => expect(api()).toBe("old"))'
 const green: CheckResult = { status: "passed", evidence: [] }
+
+// a typecheck whose error already exists on the original commit
+const typeError: CheckResult = {
+	status: "failed",
+	evidence: [],
+	failingTests: [{ workspace: ".", file: "other.ts", name: "TS2322: Type mismatch." }],
+}
 const failed: CheckResult = {
 	status: "failed",
 	evidence: [],
@@ -32,6 +39,8 @@ const scope = { complete: true, findings: [], destinations: ["registry.npmjs.org
 // select install and dependency changes for replay
 export type PatchReplay =
 	| "install-break"
+	| "type-errors"
+	| "new-type-error"
 	| "unresolved-lock"
 	| "new-test"
 	| "dependency"
@@ -358,7 +367,8 @@ export async function replayPatch(
 		adapter.lastObservation = scope
 		return green
 	}
-	adapter.typecheck = async (): Promise<CheckResult> => green
+	adapter.typecheck = async (): Promise<CheckResult> =>
+		mode === "type-errors" || mode === "new-type-error" ? typeError : green
 
 	// return the test outcome and observed destinations for the current tree
 	adapter.test = async (): Promise<CheckResult> => {
@@ -386,7 +396,10 @@ export async function replayPatch(
 	}
 
 	// assemble inspected usage and Baseline inputs for patch evaluation
-	const inspectionReport = { repository: { url: options.repositoryUrl, commit: base } } as InspectionReport
+	const inspectionReport = {
+		repository: { url: options.repositoryUrl, commit: base },
+		baseline: { install: green, typecheck: mode === "type-errors" ? typeError : green, tests: green },
+	} as InspectionReport
 	const evidence: PatchEvidence = {
 		report,
 		inspectionReport,

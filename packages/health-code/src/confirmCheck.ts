@@ -64,13 +64,16 @@ export async function confirm(
 	}
 
 	// exclude known baseline failures by workspace and identity
-	const known = new Set(baseline.status === "failed" ? baseline.failingTests.map(toTestFailureKey) : [])
+	const compared = excludeBaselineFailures(first, baseline)
+	if (compared.status === "passed") {
+		return compared
+	}
+
+	// keep only failures the baseline does not have
+	const known = toKnownFailures(baseline)
 	const added = first.failingTests.filter((test) => !known.has(toTestFailureKey(test)))
 	if (baseline.status === "failed" && (!first.failingTests.length || !known.size)) {
 		return untested("opaque-baseline", first.evidence)
-	}
-	if (first.failingTests.length && !added.length) {
-		return { status: "passed", evidence: first.evidence, excluded: first.failingTests }
 	}
 
 	// retry new failures before attributing them to the upgrade
@@ -92,6 +95,36 @@ export async function confirm(
 	}
 	return compareAttempts({ first, second, known, added })
 }
+
+/**
+ * Passes a check whose every failure also occurs in the Baseline.
+ */
+export function excludeBaselineFailures(check: CheckResult, baseline: CheckResult): CheckResult {
+	// compare only checks whose failures are all identified
+	const known = toKnownFailures(baseline)
+	if (
+		check.status !== "failed" ||
+		!check.failingTests.length ||
+		!check.failingTests.every((test) => known.has(toTestFailureKey(test)))
+	) {
+		return check
+	}
+
+	// retain the excluded failures beside the passing result
+	return { status: "passed", evidence: check.evidence, excluded: check.failingTests }
+}
+
+/**
+ * Accepts a Baseline check that passed or identified each of its failures.
+ */
+export function isComparable(baseline: CheckResult): boolean {
+	return baseline.status === "passed" || (baseline.status === "failed" && baseline.failingTests.length > 0)
+}
+
+function toKnownFailures(baseline: CheckResult): Set<string> {
+	return new Set(baseline.status === "failed" ? baseline.failingTests.map(toTestFailureKey) : [])
+}
+
 type FailedCheck = Extract<CheckResult, { status: "failed" }>
 function compareAttempts({
 	first,

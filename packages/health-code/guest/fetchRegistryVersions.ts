@@ -13,7 +13,7 @@ type RegistryOptions = {
 }
 
 // publish dates need the larger metadata response
-const summaryLookup = { accept: "application/vnd.npm.install-v1+json", timeoutMs: 8000, maxBytes: 8 * 1024 * 1024 }
+const summaryLookup = { accept: "application/vnd.npm.install-v1+json", timeoutMs: 8000, maxBytes: 16 * 1024 * 1024 }
 const datedLookup = { accept: "application/json", timeoutMs: 20000, maxBytes: 48 * 1024 * 1024 }
 
 type RegistryRecord = { versions?: unknown; time?: Record<string, unknown> }

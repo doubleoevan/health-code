@@ -121,7 +121,7 @@ export function isReusableReport(report: InspectionReport | ModelRequestSandboxI
 	// Require comparable checks for a complete inspection cache hit.
 	const incompleteBaseline =
 		report.baseline.install.status !== "passed" ||
-		report.baseline.typecheck.status === "failed" ||
+		(report.baseline.typecheck.status === "failed" && !report.baseline.typecheck.failingTests.length) ||
 		(report.baseline.typecheck.status === "untested" && report.baseline.typecheck.reason !== "no-tsconfig") ||
 		(report.baseline.tests.status === "untested" && report.baseline.tests.reason !== "missing-test-script")
 

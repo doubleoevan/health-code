@@ -57,7 +57,7 @@ export function UpgradeMenu({
 				</button>
 				{hasTestedPatch && (
 					<label>
-						<input type="checkbox" name="ready" defaultChecked={readyOnly} onChange={handleFilterChange} /> Tested patch
+						<input type="checkbox" name="ready" defaultChecked={readyOnly} onChange={handleFilterChange} /> Patch
 						available
 					</label>
 				)}
@@ -145,7 +145,7 @@ function DependencyVersions({
 							</span>
 							{target.patch ? (
 								<span className="button-link">
-									<Link href={`/r/${target.patch.inspectionId}#patch-${target.patch.sha256}`}>View tested patch</Link>
+									<Link href={`/r/${target.patch.inspectionId}#patch-${target.patch.sha256}`}>See patch</Link>
 								</span>
 							) : (
 								<button type="button" disabled={pending} onClick={() => onSelect(target)}>

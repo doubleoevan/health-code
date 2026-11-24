@@ -55,7 +55,7 @@
 	],
 	"types": "./dist/index.d.ts",
 	"scripts": {
-		"build": "tsc -p tsconfig.build.json && bun build guest/project.ts --target=node --format=esm --outfile=dist/guest.mjs && bun build guest/readSystemCallLogLines.ts --target=node --format=esm --outfile=dist/observe.mjs && bun build guest/agent.ts --target=node --format=esm --outfile=dist/agent.mjs && bun build guest/managePatch.ts --target=node --format=esm --outfile=dist/patch.mjs",
+		"build": "tsc -p tsconfig.build.json && bun build guest/project.ts --target=node --format=esm --outfile=dist/guest.mjs && bun build guest/readSystemCallLogLines.ts --target=node --format=esm --outfile=dist/observe.mjs && bun build guest/agent.ts --target=node --format=esm --outfile=dist/agent.mjs && bun build guest/managePatch.ts --target=node --format=esm --outfile=dist/patch.mjs && bun build guest/nodeTestReporter.ts --target=node --format=esm --outfile=dist/nodeTestReporter.mjs",
 		"prepack": "bun run build && bun run --cwd ../../apps/mcp build"
 	},
 	"bin": {

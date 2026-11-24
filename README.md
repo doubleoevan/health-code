@@ -28,7 +28,7 @@ The health inspector runs your checks in a Runta sandbox and tries to repair wha
 
 ## What it does
 
-Pick an upgrade. The health inspector tries it on your code, attempts to repair what breaks and retests the patch. You get a report with a tested patch when it works.
+Pick an upgrade. The health inspector tries it on your code. It attempts to repair what breaks and retests the patch. You get a report with a tested patch when it works.
 
 Your model key stays outside the sandbox.
 

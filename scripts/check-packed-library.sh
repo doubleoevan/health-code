@@ -79,7 +79,7 @@ assert.equal(migrating.limits.agent.repair.maxTurns,1)
 assert.equal(migrating.limits.agent.featureAdoption.maxTurns,0)
 assert.deepEqual(replay,reportV2.timeline)
 assert.equal(replay.at(-1).type,"inspection.finished")
-for(const asset of ["dist/guest.mjs","dist/observe.mjs","dist/agent.mjs","dist/patch.mjs",
+for(const asset of ["dist/guest.mjs","dist/observe.mjs","dist/agent.mjs","dist/patch.mjs","dist/nodeTestReporter.mjs",
   ...["repair","featureAdoption","releaseSummary","featureMatch"].map(role=>"prompts/"+role+".md")]) {
   assert.ok(readFileSync("node_modules/health-code/"+asset).length)
 }
