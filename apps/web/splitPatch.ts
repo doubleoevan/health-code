@@ -18,20 +18,22 @@ export function splitPatch(patch: string): PatchSection[] {
 		const filePath = /^diff --git a\/.+ b\/(.+)$/m.exec(text.slice(0, text.indexOf("\n")))?.[1]
 		if (filePath && lockfilePattern.test(filePath)) {
 			const changedLineCount = text.slice(text.indexOf("\n@@")).match(/^[+-](?!- $)/gm)?.length ?? 0
-			return {
-				text: `${filePath} · ${changedLineCount} changed lines. Download the patch to see them.`,
-				isFolded: true,
-			}
+
+			// describe the fold on one line
+			const foldedText = `${filePath} · ${changedLineCount} changed lines. Download the patch to see them.`
+			return { text: foldedText, isFolded: true }
+		}
+
+		// show sections within the display limit
+		shownCharacters += text.length
+		if (shownCharacters <= maximumShownCharacters) {
+			return { text, isFolded: false }
 		}
 
 		// fold sections past the display limit
-		shownCharacters += text.length
-		if (shownCharacters > maximumShownCharacters) {
-			const foldedText = filePath
-				? `${filePath} · Download the patch to see this file.`
-				: "More commits · Download the patch to see them."
-			return { text: foldedText, isFolded: true }
-		}
-		return { text, isFolded: false }
+		const foldedText = filePath
+			? `${filePath} · Download the patch to see this file.`
+			: "More commits · Download the patch to see them."
+		return { text: foldedText, isFolded: true }
 	})
 }
