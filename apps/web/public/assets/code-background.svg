@@ -12,14 +12,14 @@
     .num { fill: #d48943; }
     .cmt { fill: #8b92a1; font-style: italic; }
 
-    .col { animation: fade var(--d, 16s) ease-in-out var(--delay, 0s) infinite; }
-    .c1  { --d: 15s; --delay: -2s; }
-    .c2  { --d: 21s; --delay: -9s; }
-    .c3  { --d: 17s; --delay: -13s; }
-    .c4  { --d: 23s; --delay: -6s; }
+    .col { animation: fade var(--d, 9s) ease-in-out var(--delay, 0s) infinite; }
+    .c1  { --d: 8s; --delay: -1s; }
+    .c2  { --d: 11s; --delay: -5s; }
+    .c3  { --d: 9s; --delay: -7s; }
+    .c4  { --d: 12s; --delay: -3s; }
 
     @keyframes fade {
-      0%, 100% { opacity: 0.15; }
+      0%, 100% { opacity: 0.05; }
       50%      { opacity: 1; }
     }
 
