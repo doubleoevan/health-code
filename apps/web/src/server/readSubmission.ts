@@ -6,6 +6,8 @@ import { type InspectionChoice, SiteError } from "./inspectionSource.ts"
 type Submission = {
 	repositoryUrl: string
 	challenge?: unknown
+
+	// Describe the requested work, including the older menuId name.
 	action?: unknown
 	upgradeMenuId?: unknown
 	menuId?: unknown
@@ -34,6 +36,8 @@ export function resolveChoice(input: Submission, inspections: Inspections): Insp
 	if (input.action === "discover") {
 		return { mode: "listUpgrades" }
 	}
+
+	// Accept the older menuId field when it agrees with upgradeMenuId.
 	const upgradeMenuId = input.upgradeMenuId ?? input.menuId
 	if (
 		input.action !== "select" ||
@@ -46,6 +50,8 @@ export function resolveChoice(input: Submission, inspections: Inspections): Insp
 	// Resolve the exact version against the server's saved upgrade menu.
 	const report = inspections.store.snapshot(upgradeMenuId)?.card
 	const target = report?.upgradeMenu?.find((item) => item.dependency === input.dependency && item.to === input.to)
+
+	// Reject a target missing from the menu or saved for another repository.
 	if (
 		!report ||
 		!target ||
@@ -53,6 +59,8 @@ export function resolveChoice(input: Submission, inspections: Inspections): Insp
 	) {
 		throw new SiteError("Choose an available dependency and version from this repository’s upgrade menu.")
 	}
+
+	// Reopen a tested patch locally and send hosted requests through admission.
 	return {
 		readyId: inspections.launch ? undefined : target.patch?.inspectionId,
 		revision: report.repository.commit,

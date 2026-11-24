@@ -10,7 +10,7 @@
 | `patches/` | Agent Attempts, source and dependency edits, test-edit review and Patch verification. |
 | `sandbox/` | The production and fake Sandbox Providers and the network policy. |
 
-Folders import in one direction: root, `models/`, `sandbox/`, `upgrades/`, `checks/` and `patches/`, then `inspection/`. The file names below sit in these folders.
+Folders import in one direction: root, `models/`, `sandbox/`, `upgrades/`, `checks/` and `patches/`, then `inspection/`. The exception is the `ModelInspection` type, which `patches/` imports from `inspection/inspectModels.ts`. The file names below sit in these folders.
 
 `index.ts` is the public library entry. `contracts.ts` owns the JSON report and event types, provider interface, and typed errors. `openRepositoryRuntime.ts` owns repository runtime allocation, checkout, network lockdown and replacement admission. `inspectRepository.ts` owns one bounded recovery attempt and final cleanup. `inspectProject.ts` runs the Baseline and serial upgrade checks.
 

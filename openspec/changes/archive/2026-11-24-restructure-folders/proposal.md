@@ -15,7 +15,7 @@
 
 ## Capabilities
 
-No capability changes. Behavior, the public library entry and both published tarballs stay the same.
+No capability changes. Behavior, the public library exports and the launcher stay the same. The library tarball’s internal `dist/` layout and the package build scripts change.
 
 ## Impact
 
