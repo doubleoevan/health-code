@@ -146,3 +146,58 @@ test("a release note cut at its limit keeps only whole lines", async () => {
 	assert.ok(text.length > 3900 && text.length <= 4000)
 	assert.ok(text.endsWith(line))
 })
+
+test("release paging stops at an installed version and reports no coverage gap", async () => {
+	const pages: string[] = []
+	const { notes, gaps } = await readReleases({
+		upgrade: { dependency: "widget", kind: "minor", from: { ".": "1.0.0" }, to: "1.1.0" },
+		changelog: "",
+		request: async (input): Promise<Response> => {
+			const url = new URL(String(input))
+			if (url.hostname === "registry.npmjs.org") {
+				return Response.json({ repository: "github:example/widget" })
+			}
+
+			// fill every page so only the installed version can end the lookup
+			pages.push(url.searchParams.get("page") ?? "")
+			const versions = ["1.1.0", ...Array.from({ length: 49 }, (_, index) => `0.${50 - index}.0`)]
+			return Response.json(
+				versions.map((version) => ({
+					tag_name: `v${version}`,
+					body: "Adds an option.",
+					draft: false,
+					prerelease: false,
+				})),
+			)
+		},
+	})
+	assert.deepEqual(pages, ["1"])
+	assert.equal(notes.length, 1)
+	assert.deepEqual(gaps, [])
+})
+
+test("a rejected credential falls back to the public release endpoint", async () => {
+	const paths: string[] = []
+	const { notes, gaps } = await readReleases({
+		upgrade: { dependency: "widget", kind: "minor", from: { ".": "1.0.0" }, to: "1.1.0" },
+		githubToken: "fixture",
+		changelog: "",
+		request: async (input, init): Promise<Response> => {
+			const url = new URL(String(input))
+			if (url.hostname === "registry.npmjs.org") {
+				return Response.json({ repository: "github:example/widget" })
+			}
+			paths.push(url.pathname)
+
+			// reject the credentialed query and serve the public page without it
+			if (url.pathname === "/graphql") {
+				return new Response(null, { status: 401 })
+			}
+			assert.equal(new Headers(init?.headers).has("authorization"), false)
+			return Response.json([{ tag_name: "v1.1.0", body: "Adds an option.", draft: false, prerelease: false }])
+		},
+	})
+	assert.deepEqual(paths, ["/graphql", "/repos/example/widget/releases"])
+	assert.equal(notes.length, 1)
+	assert.deepEqual(gaps, [])
+})

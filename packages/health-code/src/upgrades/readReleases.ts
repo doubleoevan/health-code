@@ -4,6 +4,7 @@ import type { Upgrade } from "../contracts.ts"
 import { readBoundedJson } from "./readBoundedJson.ts"
 
 const maxReleaseBytes = 4 * 1024 * 1024
+const maxReleasePages = 8
 
 export type ReleaseNote = { source: string; text: string; workspaces: string[] }
 type Options = {
@@ -57,28 +58,16 @@ export async function readReleases({
 			throw new Error()
 		}
 
-		// page through a bounded number of releases
-		const repository = `${parsed[1]}/${parsed[2]}`
-		let cursor: string | null = null
-		for (let page = 1; page <= 4; page++) {
-			const batch = await readReleasePage({ repository, githubToken, signal, request, page, cursor })
-			if ("gap" in batch) {
-				gaps.push(batch.gap)
-				break
-			}
-
-			// keep only notes for versions between the current and target releases
-			notes.push(...toReleaseNotes({ releases: batch.releases, repository, upgrade }))
-			if (!batch.next) {
-				break
-			}
-			cursor = batch.next
-
-			// record when the page limit leaves release coverage incomplete
-			if (page === 4) {
-				gaps.push("Release page limit reached")
-			}
-		}
+		// collect release notes and any coverage gap from the upstream repository
+		const repositoryNotes = await readRepositoryNotes({
+			repository: `${parsed[1]}/${parsed[2]}`,
+			upgrade,
+			githubToken,
+			signal,
+			request,
+		})
+		notes.push(...repositoryNotes.notes)
+		gaps.push(...repositoryNotes.gaps)
 	} catch {
 		gaps.push("Package repository or release metadata unavailable")
 	}
@@ -89,6 +78,46 @@ export async function readReleases({
 		gaps.push("No matching release notes")
 	}
 	return { notes: notes.slice(0, 40), gaps }
+}
+
+// page through a bounded number of releases, newest first
+async function readRepositoryNotes(options: {
+	repository: string
+	upgrade: Upgrade
+	githubToken?: string
+	signal: AbortSignal
+	request: typeof fetch
+}): Promise<{ notes: ReleaseNote[]; gaps: string[] }> {
+	// collect matching notes across pages
+	const { repository, upgrade, signal, request } = options
+	const notes: ReleaseNote[] = []
+
+	// start with the credential and the first page
+	let githubToken = options.githubToken
+	let cursor: string | null = null
+	for (let page = 1; page <= maxReleasePages; page++) {
+		let batch = await readReleasePage({ repository, githubToken, signal, request, page, cursor })
+
+		// Read the public endpoint when GitHub rejects the credential for this repository.
+		if ("isRejected" in batch && githubToken && page === 1) {
+			githubToken = undefined
+			batch = await readReleasePage({ repository, signal, request, page, cursor })
+		}
+		if ("gap" in batch) {
+			return { notes, gaps: [batch.gap] }
+		}
+
+		// keep only notes for versions between the current and target releases
+		const pageNotes = toReleaseNotes({ releases: batch.releases, repository, upgrade })
+		notes.push(...pageNotes.notes)
+
+		// Stop once the notes are found and the page reaches a release every workspace already has.
+		if (!batch.next || (pageNotes.hasReachedInstalledVersion && notes.length)) {
+			return { notes, gaps: [] }
+		}
+		cursor = batch.next
+	}
+	return { notes, gaps: ["Release page limit reached"] }
 }
 
 // request visibility alongside release notes in the same authenticated query
@@ -108,7 +137,7 @@ async function readReleasePage(options: {
 	request: typeof fetch
 	page: number
 	cursor: string | null
-}): Promise<{ releases: z.infer<typeof release>[]; next: string | null } | { gap: string }> {
+}): Promise<{ releases: z.infer<typeof release>[]; next: string | null } | { gap: string; isRejected?: true }> {
 	// choose the authenticated or public release endpoint
 	const { repository, githubToken, signal, request, page, cursor } = options
 	const [owner, name] = repository.split("/")
@@ -129,7 +158,8 @@ async function readReleasePage(options: {
 	// retain a coverage gap when the release service rejects the request
 	if (!response.ok) {
 		await response.body?.cancel()
-		return { gap: `GitHub releases unavailable (${response.status})` }
+		const gap = `GitHub releases unavailable (${response.status})`
+		return response.status === 401 || response.status === 403 ? { gap, isRejected: true } : { gap }
 	}
 	const json = await readBoundedJson(response, maxReleaseBytes)
 	if (!githubToken) {
@@ -164,9 +194,10 @@ function toReleaseNotes({
 	releases: z.infer<typeof release>[]
 	repository: string
 	upgrade: Upgrade
-}): ReleaseNote[] {
+}): { notes: ReleaseNote[]; hasReachedInstalledVersion: boolean } {
 	// normalize release tags before comparing versions
 	const notes: ReleaseNote[] = []
+	let hasReachedInstalledVersion = false
 	for (const entry of releases) {
 		const tag = entry.tag_name
 		const raw = tag.startsWith(`${upgrade.dependency}@`)
@@ -179,6 +210,7 @@ function toReleaseNotes({
 			continue
 		}
 		const workspaces = toAffectedWorkspaces(upgrade, version)
+		hasReachedInstalledVersion ||= workspaces.length === 0
 
 		// retain source links and workspaces alongside bounded notes
 		if (workspaces.length && entry.body) {
@@ -189,7 +221,7 @@ function toReleaseNotes({
 			})
 		}
 	}
-	return notes
+	return { notes, hasReachedInstalledVersion }
 }
 
 // select workspaces whose current version precedes the release
