@@ -1,7 +1,7 @@
 # inspection-contract Specification
 
 ## Purpose
-Give a site, an MCP server, or a scheduled worker the same portable inspection result and live progress stream.
+Give a site, a CI command or a scheduled worker the same portable inspection result and live progress stream.
 
 ## Requirements
 

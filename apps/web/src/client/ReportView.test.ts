@@ -120,7 +120,7 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 			"Required upgrade patch",
 			"Copy report link",
 			"dashboard.runta.com",
-			"mcp-setup",
+			"ci-setup",
 		]) {
 			expect(html).toContain(expected)
 		}
@@ -192,10 +192,10 @@ test("the summary names the outcome and whether a patch is available", async () 
 	const incomplete = { ...card, upgrades: [{ ...tested, verdict: "Untested" as const }] }
 	expect(toSummary(incomplete)).toBe("No patch. The health inspector couldn’t finish testing this upgrade.")
 
-	// Point to the MCP when a working patch is withheld for its license.
+	// Point to CI when a working patch is withheld for its license.
 	const withheld = { ...card, license: null, upgrades: [{ ...tested, verdict: "Fixed" as const }] }
 	expect(toSummary(withheld)).toBe(
-		"A tested patch works but can’t be shown here because GitHub found no confirmed open-source license. Use the MCP to get a patch.",
+		"A tested patch works but can’t be shown here because GitHub found no confirmed open-source license. Run the library in CI to get the patch.",
 	)
 
 	// Count the upgrades without a patch beside a ready one.

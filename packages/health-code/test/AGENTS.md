@@ -2,7 +2,7 @@
 
 `providerContract.ts` defines the checks shared by the fake and production providers. `live.ts` adds two public projects at fixed commit IDs. The Nano ID Baseline must pass its test script, which exercises oxlint's sparse virtual memory allocation. Run the credentialed suite through the root `bun run test:provider` command.
 
-`fixtures/recorded/` holds inert npm, pnpm, Bun, and Yarn project inputs and transcripts. `fixtures/recorded/npm/sandbox.json` records the sandbox commands for that npm project, and the developer CLI, the packed-package check and the MCP tests replay it. Unit tests read fixtures locally and execute the fake provider. The root test command covers the library alongside the repository checks.
+`fixtures/recorded/` holds inert npm, pnpm, Bun, and Yarn project inputs and transcripts. `fixtures/recorded/npm/sandbox.json` records the sandbox commands for that npm project, and the developer CLI, the packed-package check and the CI command tests replay it. Unit tests read fixtures locally and execute the fake provider. The root test command covers the library alongside the repository checks.
 
 The legacy Bun fixture stores its exact lockfile bytes as Base64. The adapter test decodes them in a temporary project before invoking Bun.
 
@@ -14,6 +14,6 @@ The legacy Bun fixture stores its exact lockfile bytes as Base64. The adapter te
 
 `testInventory.test.ts` checks suite discovery and repeated case identities during final patch verification. `protectTestSupport.test.ts` covers protected test support files and mock edits.
 
-`modelRequestSandbox.test.ts` covers time and cost admission, fenced prompt parity and both HTTPS protocols. `modelRequestSandboxProvider.test.ts` exercises verified binding replacement, network readback and recovery by exact allocation name. The live MCP acceptance uses a packed stdio process with just the sandbox token.
+`modelRequestSandbox.test.ts` covers time and cost admission, fenced prompt parity and both HTTPS protocols. `modelRequestSandboxProvider.test.ts` exercises verified binding replacement, network readback and recovery by exact allocation name.
 
 `replayProjectChecks.ts` supplies recorded commands for inspection and recovery tests. `recoverInspection.test.ts` covers partial results, replacement runtimes and registry discovery.

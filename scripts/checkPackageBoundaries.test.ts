@@ -23,7 +23,7 @@ beforeEach(() => {
 	for (const [folder, name] of Object.entries({
 		"packages/health-code": "health-code",
 		"apps/web": "@health-code/web",
-		"apps/mcp": "@health-code/mcp",
+		"apps/cli": "@health-code/cli",
 	})) {
 		const app = folder.startsWith("apps/")
 		write(
@@ -59,10 +59,10 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { force: true, recursive: true }))
 
 test("both apps can use the library's public entry and their own files", () => {
-	for (const app of ["site", "mcp"]) {
+	for (const app of ["site", "cli"]) {
 		write(
 			`apps/${app}/index.ts`,
-			`export { value } from "health-code"\nimport "./local.ts"\n// import "@health-code/mcp"\n`,
+			`export { value } from "health-code"\nimport "./local.ts"\n// import "@health-code/cli"\n`,
 		)
 		write(`apps/${app}/local.ts`, `export type { Options } from "test-tool"`)
 	}
@@ -70,16 +70,16 @@ test("both apps can use the library's public entry and their own files", () => {
 })
 
 test.each([
-	["apps/web", 'import type { T } from "@health-code/mcp"', "@health-code/mcp"],
-	["apps/mcp", 'export * from "@health-code/web/tools"', "@health-code/web"],
+	["apps/web", 'import type { T } from "@health-code/cli"', "@health-code/cli"],
+	["apps/cli", 'export * from "@health-code/web/tools"', "@health-code/web"],
 	["packages/health-code", 'require("@health-code/web")', "@health-code/web"],
-	["apps/mcp", 'type T = import("health-code/private").T', "public entry"],
+	["apps/cli", 'type T = import("health-code/private").T', "public entry"],
 	["apps/web", 'import("health-code/private")', "public entry"],
 	["apps/web", 'import "../../packages/health-code/private.ts"', "inside their workspace"],
 	["apps/web", 'import "#internal"', "public package name"],
-	["apps/web", 'import "../mcp/index.js"', "inside their workspace"],
+	["apps/web", 'import "../cli/index.js"', "inside their workspace"],
 	["apps/web", 'import "third-party"', "declare third-party"],
-	["apps/mcp", 'import "test-tool"', "runtime imports"],
+	["apps/cli", 'import "test-tool"', "runtime imports"],
 ])("%s flags %s with its source location", (workspace, statement, message) => {
 	// include the offending import and its source line in the diagnostic
 	write(`${workspace}/index.ts`, `\n${statement}`)
@@ -96,12 +96,12 @@ test("test files can import a declared development dependency", () => {
 
 test("manifest-only dependencies on another app fail", () => {
 	write(
-		"apps/mcp/package.json",
-		JSON.stringify({ name: "@health-code/mcp", optionalDependencies: { "@health-code/web": "workspace:*" } }),
+		"apps/cli/package.json",
+		JSON.stringify({ name: "@health-code/cli", optionalDependencies: { "@health-code/web": "workspace:*" } }),
 	)
 	const result = check()
 	expect(result.status).toBe(1)
-	expect(result.output).toContain("apps/mcp/package.json: @health-code/web is an app")
+	expect(result.output).toContain("apps/cli/package.json: @health-code/web is an app")
 })
 
 test("a workspace dependency needs a matching TypeScript reference", () => {
@@ -131,7 +131,7 @@ test("inherited JSONC paths resolve relative to the declaring config", () => {
 		`{
 		// Check the second mapping when the first has no matching file.
 		"compilerOptions": { "paths": { "#library/*": ["./missing/*", "../packages/health-code/*"], }, },
-		"references": [{ "path": "../apps/mcp" }],
+		"references": [{ "path": "../apps/cli" }],
 	}`,
 	)
 	write("configs/site.json", '{"extends":"./base"}')

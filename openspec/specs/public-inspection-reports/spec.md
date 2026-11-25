@@ -79,13 +79,13 @@ The site SHALL publish tested Patches for public Repositories when GitHub detect
 
 ### Requirement: Continue in a coding agent
 
-The page header SHALL link to Health Code MCP setup and real Runta signup. Any displayed Health Code account or paid tier SHALL carry an explicit mocked label.
+The page header SHALL link to Health Code CI setup and real Runta signup. Any displayed Health Code account or paid tier SHALL carry an explicit mocked label.
 
-#### Scenario: Continue with or without MCP
+#### Scenario: Continue from a report
 
 - **WHEN** a visitor opens a report
 - **THEN** they see setup and signup destinations
-- **AND** when the report has a published Patch, “Upgrade prompt for your coding agent” supports direct Patch retrieval with an MCP alternative when its retrieval tool is available
+- **AND** when the report has a published Patch, “Upgrade prompt for your coding agent” supports direct Patch retrieval
 
 ### Requirement: Keep internal run settings off the report page
 
@@ -98,9 +98,9 @@ The saved Inspection Report SHALL record effective model prompt names and versio
 
 ### Requirement: Offer a useful next step at the daily limit
 
-The public home and admission response SHALL explain when new paid Inspections are paused for the daily budget, show the UTC reset and link to the personally funded MCP setup. The existing report and Patch URLs SHALL remain available.
+The public home and admission response SHALL explain when new paid Inspections are paused for the daily budget, show the UTC reset and link to the personally funded CI setup. The existing report and Patch URLs SHALL remain available.
 
 #### Scenario: Share a report during a pause
 
 - **WHEN** a visitor opens a shared report while daily paid admission is paused
-- **THEN** the report, its evidence, the Patch handoff and the MCP setup destination remain accessible
+- **THEN** the report, its evidence, the Patch handoff and the CI setup destination remain accessible

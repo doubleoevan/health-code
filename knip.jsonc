@@ -8,9 +8,9 @@
 		},
 		"packages/*": {},
 		"apps/*": {},
-		"apps/mcp": {
-			"entry": ["src/cli.ts", "src/view/client.tsx", "src/*.test.ts"],
-			"project": ["*.ts", "src/*.ts", "src/view/**/*.{ts,tsx}"]
+		"apps/cli": {
+			"entry": ["src/cli.ts", "src/*.test.ts"],
+			"project": ["src/**/*.ts"]
 		},
 		"packages/health-code": {
 			"entry": [
@@ -22,8 +22,8 @@
 				"test/**/*.test.ts"
 			],
 
-			// Include dependencies used by the shipped declarations and compiled MCP executable.
-			"ignoreDependencies": ["@types/json-schema", "@modelcontextprotocol/server"],
+			// Include dependencies used by the shipped declarations.
+			"ignoreDependencies": ["@types/json-schema"],
 			"project": ["src/**/*.ts", "guest/**/*.ts", "test/**/*.ts"]
 		}
 	}

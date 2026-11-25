@@ -1,0 +1,13 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"rootDir": "src",
+		"outDir": "../../packages/health-code/dist/cli",
+		"composite": false,
+		"declaration": false,
+		"emitDeclarationOnly": false,
+		"rewriteRelativeImportExtensions": true
+	},
+	"include": ["src/*.ts"],
+	"exclude": ["src/*.test.ts", "dist", ".tsbuild", "node_modules"]
+}

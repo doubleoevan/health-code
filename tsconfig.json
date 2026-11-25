@@ -11,7 +11,7 @@
 			"path": "apps/web"
 		},
 		{
-			"path": "apps/mcp"
+			"path": "apps/cli"
 		}
 	]
 }

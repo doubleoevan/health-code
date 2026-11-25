@@ -12,7 +12,7 @@ import type {
 
 // link the project pages and the recorded example
 export const readmeUrl = "https://github.com/doubleoevan/health-code#readme"
-export const mcpSetupUrl = "https://github.com/doubleoevan/health-code#mcp-setup"
+export const ciSetupUrl = "https://github.com/doubleoevan/health-code#ci-setup"
 export const runtaSignupUrl = "https://dashboard.runta.com/"
 export const replayRepositoryUrl = "https://github.com/example/project"
 
@@ -190,7 +190,7 @@ function toMissingPatchReason({ upgrades, license, baseline, stoppedReason }: Pu
 	// Distinguish a withheld patch from an upgrade without one.
 	const successes: (Verdict | undefined)[] = ["Passes as is", "Fixed", "Fixed with test changes"]
 	if (!license && verdicts.some((verdict) => successes.includes(verdict))) {
-		return "A tested patch works but can’t be shown here because GitHub found no confirmed open-source license. Use the MCP to get a patch."
+		return "A tested patch works but can’t be shown here because GitHub found no confirmed open-source license. Run the library in CI to get the patch."
 	}
 
 	// Explain the check that kept the upgrades from a tested patch.

@@ -5,34 +5,27 @@ set -euo pipefail
 npm_token="${NPM_TOKEN:-}"
 unset NPM_TOKEN
 
-# Match both manifests and the launcher's dependency to the same public release.
+# Match the command workspace to the library release that ships it.
 version=$(node -p 'require("./packages/health-code/package.json").version')
-test "$version" = "$(node -p 'require("./apps/mcp/package.json").version')"
-test "$version" = "$(node -p 'require("./apps/mcp/package.json").dependencies["health-code"]')"
+test "$version" = "$(node -p 'require("./apps/cli/package.json").version')"
+test "$version" = "$(node -p 'require("./apps/cli/package.json").dependencies["health-code"]')"
 artifacts=$(mktemp -d)
 trap 'rm -rf "$artifacts"' EXIT
 
 # Build and audit exactly the bytes intended for publication.
 bun run --cwd packages/health-code prepack
-for path in ./packages/health-code ./apps/mcp; do
-  npm pack "$path" --ignore-scripts --json --pack-destination "$artifacts" > "$artifacts/$(basename "$path").json"
-done
+npm pack ./packages/health-code --ignore-scripts --json --pack-destination "$artifacts" > "$artifacts/health-code.json"
 
-# Require a README and only publishable artifacts in each tarball.
-for name in health-code mcp; do
+# Require a README and only publishable artifacts in the tarball.
+for name in health-code; do
   jq -e '.[0].files | any(.path=="README.md") and all(.path | test("(^|/)([.]env([.][^/]*)?|node_modules|fixtures|src|test)(/|$)")|not)' "$artifacts/$name.json" >/dev/null
 done
 
-# Run the clean consumer against the same tarballs that will be staged.
-HEALTH_CODE_RELEASE_ARTIFACTS="$artifacts" bun test apps/mcp/package.test.ts
-
 # Exercise npm staging locally without making a registry change.
 if [[ "${1:-}" == "--dry-run" ]]; then
-  for manifest in "$artifacts/health-code.json" "$artifacts/mcp.json"; do
-    archive=$(jq -r '.[0].filename' "$manifest")
-    npm_config_offline=true npm stage publish --dry-run --provenance --ignore-scripts --access public "$artifacts/$archive"
-  done
-  echo "Both npm staging dry runs passed."
+  archive=$(jq -r '.[0].filename' "$artifacts/health-code.json")
+  npm_config_offline=true npm stage publish --dry-run --provenance --ignore-scripts --access public "$artifacts/$archive"
+  echo "The npm staging dry run passed."
   exit 0
 fi
 
@@ -56,8 +49,8 @@ registry=https://registry.npmjs.org
 
 pending=()
 
-# Verify any already public sibling before staging the remaining tarballs.
-for name in health-code mcp; do
+# Verify an already public release before staging the tarball.
+for name in health-code; do
   manifest="$artifacts/$name.json"
   package=$(jq -r '.[0].name' "$manifest")
   archive=$(jq -r '.[0].filename' "$manifest")
@@ -103,7 +96,7 @@ if [[ -n "$npm_token" ]]; then
   export npm_config_userconfig="$artifacts/npmrc"
 fi
 
-# Stop after staging. The maintainer approves each version on npmjs.com.
+# Stop after staging. The maintainer approves the version on npmjs.com.
 for archive in "${pending[@]}"; do
   NPM_TOKEN="$npm_token" npm stage publish --registry="$registry" --provenance --access public "$artifacts/$archive"
 done

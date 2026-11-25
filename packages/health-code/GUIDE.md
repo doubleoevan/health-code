@@ -8,7 +8,7 @@ Registry lookup has its own three-minute timeout. Set `limits.timeouts.registry`
 
 The sandbox timeline counts distinct stored model credentials across roles. After project detection, the Runta provider also reports how many distinct repository environment variables it supplied as placeholders. Both counts omit names and values. Older reports can lack either measurement.
 
-For the local MCP server, run `npx health-code mcp setup`. See the [MCP guide](https://github.com/doubleoevan/health-code/blob/main/apps/mcp/README.md#setup) for account setup and supported Node releases.
+For a CI job, run `npx health-code check`. See the [CI guide](https://github.com/doubleoevan/health-code/blob/main/apps/cli/README.md#setup) for account setup and supported Node releases.
 
 Pass complete versioned Markdown templates in the optional `prompts` map. Each Inspection Report lists the name, version and SHA-256 of the prompts used. Its `promptVersions.model` list identifies distinct dispatched templates. Its `promptVersions.handoff` list identifies distinct templates used to prepare Patch instructions. Pass an OpenTelemetry `Tracer` in `telemetry` to record call timing, status and usage. Tracing is off by default.
 
@@ -44,7 +44,7 @@ Pass configured model handles in `models.releaseSummary` and `models.featureMatc
 
 An Inspection with models defaults to 60 minutes and $15. Repair gets up to 40 turns, 20 minutes and $4. Feature adoption gets up to 25 turns, 10 minutes and $2. Each agent turn allows up to 8,192 output tokens. Set a lower turn limit with `limits.agent.repair.maxTurns` or `limits.agent.featureAdoption.maxTurns`. Set total spending and time under `limits`. Existing model-free calls and legacy string dictionaries return version 1.
 
-Use `readModelRoutes(environment)` to build routes from the `HEALTH_CODE_MODEL` settings. `health-code mcp setup` stores the key under the Runta secret these routes name. Pass a route and key to `createHostModel` for the summary and matching handles. Both accept Anthropic and OpenAI-compatible hosts. `HEALTH_CODE_MODEL_HOST` uses `/v1` unless it includes another API path. A caller can use the same configured model for summaries and matching. The guest route carries the stored credential name. The two model handles stay in the calling process.
+Use `readModelRoutes(environment)` to build routes from the `HEALTH_CODE_MODEL` settings. `health-code setup` stores the key under the Runta secret these routes name. Pass a route and key to `createHostModel` for the summary and matching handles. Both accept Anthropic and OpenAI-compatible hosts. `HEALTH_CODE_MODEL_HOST` uses `/v1` unless it includes another API path. A caller can use the same configured model for summaries and matching. The guest route carries the stored credential name. The two model handles stay in the calling process.
 
 ```ts
 import { inspectRepository } from "health-code"

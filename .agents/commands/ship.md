@@ -95,7 +95,7 @@ each new type's fields, each new string a user reads, and each repeated class
 list. A second copy gets a shared helper now (code-style rule 18).
 
 Put the shared piece where every caller can import it without side effects:
-the library's public types for anything the site and the MCP both read, and a
+the library's public types for anything the site and the CI command both read, and a
 shared module inside an app for anything only that app uses. Leave apart code
 that only looks alike but means different things. Fix every copy in this pass,
 rerun step 3, and report what was shared, where it now lives, and what was left
@@ -165,7 +165,7 @@ continue.
 Audit the whole diff three ways, aggressively, with the codebase as the
 reference for every finding: name the existing convention that a finding
 compares against. For a large diff, split the read across parallel read-only
-audit agents by area (the library, the site, the MCP, the docs and specs), then
+audit agents by area (the library, the site, the CI command, the docs and specs), then
 apply the fixes yourself.
 
 1. **Comments: clarity and relevance.** Every comment justifies itself or gets

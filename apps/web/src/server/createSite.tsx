@@ -3,7 +3,7 @@ import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { HTTPException } from "hono/http-exception"
 import type { PageProps } from "../client/Page.tsx"
-import { mcpSetupUrl } from "../report.ts"
+import { ciSetupUrl } from "../report.ts"
 import { adminPage } from "./adminPage.tsx"
 import { buildReportInvestigationPrompt } from "./buildReportInvestigationPrompt.ts"
 import type { Inspections } from "./executeInspection.ts"
@@ -54,7 +54,7 @@ function admissionFailure(context: Context, error: unknown, key?: string): Respo
 			{
 				message: error.message,
 				...(error.status === 403 ? { siteKey: key } : {}),
-				...(error.cap || error.status === 503 ? { mcpSetupUrl } : {}),
+				...(error.cap || error.status === 503 ? { ciSetupUrl } : {}),
 			},
 			error.status,
 		)

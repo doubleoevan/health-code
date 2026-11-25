@@ -2,7 +2,7 @@ FROM oven/bun:1.4.4
 WORKDIR /app
 COPY package.json bun.lock tsconfig.base.json ./
 COPY packages/health-code/package.json packages/health-code/
-COPY apps/mcp/package.json apps/mcp/
+COPY apps/cli/package.json apps/cli/
 COPY apps/web/package.json apps/web/
 RUN bun install --frozen-lockfile
 COPY packages/health-code packages/health-code

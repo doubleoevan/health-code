@@ -14,7 +14,6 @@ An **Inspection** targets a **Repository** at one inspected commit. An **Ecosyst
 | Baseline | The install, typecheck, and tests on the Repository before any change. | Exclude tests that fail here when attributing failures to an Upgrade. |
 | Upgrade | Moving one dependency from its current version to a newer one. | Identify the dependency and both versions. |
 | Upgrade menu | The eligible versions of direct dependencies at a Repository commit. | Use upgrade menu in copy and upgradeMenuId when a caller opens, pages or selects from a saved upgrade menu. |
-| App view | The interactive page an MCP client shows with a tool result. | Covers the upgrade menu, live progress and results. |
 | Linked dependency | A declared dependency upgraded in the same Patch because the packages must move together. | Check it with its Upgrade and list it under **Dependency changes**. |
 | Minimum release age | The repository’s package manager setting for how old a release must be before install. | Offer only releases old enough to install. |
 | Release feature | A change described in a dependency’s release notes. | Use “What’s new” in the upgrade menu. Cite the release. A Code Feature Match also identifies where the change applies in the Repository. |

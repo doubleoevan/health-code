@@ -15,8 +15,8 @@ Use the Bun version in `.bun-version`. From the repository root, run `bun instal
 | `bun run test` | Runs the tooling and workspace test suites with Bun. |
 | `bun run --cwd packages/health-code build` | Builds the ESM library, declarations and the sandbox guest tools. |
 | `bun run inspect <repo-url> [--fake]` | Prints the live inspection log and saves the versioned Inspection Report to `logs/`. Use `--fake` for a credential-free fixture replay. For a live inspection, use `doppler run -- bun run inspect <repo-url>`. |
-| `bun run --cwd apps/mcp build` | Compiles the Node CLI and the app view from `apps/mcp` into `packages/health-code/dist/mcp/`. |
-| `bun test ./apps/mcp` | Exercises the MCP tools, account setup, private storage and the packed Node subprocess offline. |
+| `bun run --cwd apps/cli build` | Compiles the Node CLI from `apps/cli` into `packages/health-code/dist/cli/`. |
+| `bun test ./apps/cli` | Exercises the CI command, account setup and sandbox recovery offline. |
 | `bun run --cwd apps/web build` | Builds the Vite browser entry for the Hono server. |
 | `bun run --cwd apps/web start` | Serves the built page, Inspection API and event stream. |
 | `bun run --cwd apps/web dev` or `replay` | Serves live local inspections (`dev`) or a recorded example (`replay`) with hot reload. |
@@ -39,16 +39,16 @@ bun run --cwd packages/health-code build
 doppler run --project health-code --config dev -- bun run --cwd apps/web dev
 ```
 
-Open `http://localhost:3000` and inspect any public repository. The site uses the required settings from MCP setup. Run setup once so Runta holds your key and leave `MODEL_API_KEY` set for the site. Live inspections spend your own Runta and model credits.
+Open `http://localhost:3000` and inspect any public repository. The site uses the required settings from the CI guide. Run setup once so Runta holds your key and leave `MODEL_API_KEY` set for the site. Live inspections spend your own Runta and model credits.
 
 Without credentials, `bun run --cwd apps/web replay` plays one recorded inspection for interface work. The [hosting guide](apps/web/HOSTING.md) covers deployment.
 
 ## Model inspections
 
-Run `bun run test:credential` with the sandbox token and the model settings from the [MCP guide](apps/mcp/README.md#setup) to verify the live gateway. Run `bun run eval --case removed-apis` to score a pinned repair against the default budgets. The `baseline-test-counts` case supports `--record` for a new measurement. Scoring requires reviewed counts and test file errors.
+Run `bun run test:credential` with the sandbox token and the model settings from the [CI guide](apps/cli/README.md#setup) to verify the live gateway. Run `bun run eval --case removed-apis` to score a pinned repair against the default budgets. The `baseline-test-counts` case supports `--record` for a new measurement. Scoring requires reviewed counts and test file errors.
 
 ## Release and hosted verification
 
-Run `bash scripts/release-packages.sh --dry-run` to build and inspect both npm tarballs locally. Both packages trust `doubleoevan/health-code` and `release.yml` with staged publishing permission and no GitHub environment. While npm rejects the repository’s immutable sign-in subject ([npm/cli#9969](https://github.com/npm/cli/issues/9969)), set a short-lived `NPM_TOKEN` secret to stage a release. Delete it after approval. A matching tag stages both tarballs with provenance. Approve the library and then the scoped MCP version on npmjs.com. Run the release workflow manually against the same tag to verify the public digests and signed provenance. If a stage is already pending, review it on npmjs.com before retrying the workflow.
+Run `bash scripts/release-packages.sh --dry-run` to build and inspect the npm tarball locally. The package trusts `doubleoevan/health-code` and `release.yml` with staged publishing permission and no GitHub environment. While npm rejects the repository’s immutable sign-in subject ([npm/cli#9969](https://github.com/npm/cli/issues/9969)), set a short-lived `NPM_TOKEN` secret to stage a release. Delete it after approval. A matching tag stages the tarball with provenance. Approve the version on npmjs.com. Run the release workflow manually against the same tag to verify the public digests and signed provenance. If a stage is already pending, review it on npmjs.com before retrying the workflow.
 
 Run `bun x playwright install chromium` once for browser acceptance. Use `bun run test:hosted` with the deployment origin, its Runta namespace and its inventory credentials supplied through Doppler. The browser uses the public submission form, including Turnstile. Each completed case writes its report URL, revision, prompt versions and observed verdicts under `logs/hosted/`. A new hosted deployment commit starts a fresh inspection cache. Existing report links keep working. Retrying a partial inspection checks the baseline again, reuses completed upgrades at the same commit and release, and runs the remaining upgrades under the usual limits. Each reused upgrade links to the inspection that tested it. The script reopens the first repository through the cache and checks provider inventory for leftover runtimes. A daily cap can require continuing the suite after midnight UTC.

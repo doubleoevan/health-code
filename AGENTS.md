@@ -1,7 +1,7 @@
 # Health Code
 
 Health Code inspects dependency upgrades in public GitHub repositories inside a Runta sandbox.
-The TypeScript library owns inspections. The site and MCP server expose the library to people and tools.
+The TypeScript library owns inspections. The site and the CI command expose the library to people and pipelines.
 
 ## Module map
 
@@ -9,7 +9,7 @@ The TypeScript library owns inspections. The site and MCP server expose the libr
 | --- | --- |
 | `packages/health-code/` | Library workspace. Owns inspection behavior and the public package entry. Read its AGENTS.md for the boundary. |
 | `apps/web/` | Web application (`@health-code/web`). Owns submission, SQLite persistence, SSE, browser interactions and Inspection Report publication. |
-| `apps/mcp/` | Source for the `health-code mcp` and `health-code check` Node commands and the published `@health-code/mcp` launcher. Owns account setup, MCP tools, Inspection storage and Patch handoff. |
+| `apps/cli/` | Source for the `health-code check` and `health-code setup` Node commands that ship in the library package. Owns account setup and the CI run. |
 | `evals/` | On-demand, pinned inspection cases and the Baseline test inventory for maintainer review. |
 | `DEVELOPMENT.md` | Contributor commands and release verification. |
 | `scripts/` | Repository checks, preflight, and the developer inspection CLI. Use `bun run inspect <repo-url> [--fake]` for a rolling log and a local JSON Inspection Report. |
@@ -17,7 +17,7 @@ The TypeScript library owns inspections. The site and MCP server expose the libr
 | `openspec/` | Specifications and change artifacts. |
 | `.agents/` | Project skills and commands. Claude Code uses the links under `.claude/`. |
 
-The library ships the inspection engine. The site and MCP workspaces consume the public library entry. A workspace imports a sibling package by its public name. Apps never import another app. Packages never depend on an app.
+The library ships the inspection engine. The site and command workspaces consume the public library entry. A workspace imports a sibling package by its public name. Apps never import another app. Packages never depend on an app.
 
 ## Route work
 
@@ -28,8 +28,7 @@ The library ships the inspection engine. The site and MCP workspaces consume the
 | Package-manager detection, install, bump, typecheck, tests, or upgrade discovery | `packages/health-code/` | Ecosystem Adapter boundary. |
 | Model-facing instructions, evidence interpolation, or model calls | `packages/health-code/` | prompt-authoring, ai-sdk |
 | Hosted submission, recovery, SSE, live log, timeline, or Inspection Report publication | `apps/web/` | jsx-conventions, vercel-react-best-practices, web-design-guidelines |
-| MCP app view | `apps/mcp/src/view/` | jsx-conventions, vercel-react-best-practices, web-design-guidelines |
-| MCP tools, arguments, or protocol responses | `apps/mcp/` | Consume the library through its public entry. |
+| The CI command, its arguments, output files or account setup | `apps/cli/` | Consume the library through its public entry. |
 | Lint, types, dependency policy, import rules, or test discovery | `scripts/` and root tool configs | See scripts/AGENTS.md and DEVELOPMENT.md. |
 | CI or dependency updates | `.github/` | CI and /ship both invoke `bash scripts/preflight.sh`. |
 | Naming or documentation | `.agents/skills/` and the affected module guide | domain-model, write-docs |

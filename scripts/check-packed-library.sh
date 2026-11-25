@@ -85,6 +85,9 @@ for(const asset of ["dist/project.mjs","dist/observe.mjs","dist/agent.mjs","dist
 }
 JS
 
+# confirm the packed command starts and names its two commands
+(node node_modules/health-code/dist/cli/cli.js help 2>&1 || true) | grep -q "Usage: health-code setup"
+
 # Exercise the guest bundles without workspace module resolution.
 mkdir -p standalone/project
 cp node_modules/health-code/dist/{project,observe}.mjs standalone/

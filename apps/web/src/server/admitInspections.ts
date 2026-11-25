@@ -105,7 +105,7 @@ export class LaunchService {
 			throw new AdmissionError(413, "Repository exceeds the hosted size limit.")
 		}
 		if (!workerAvailable() || !this.configured || !this.settings.available) {
-			throw new AdmissionError(503, "Inspection limits are temporarily unavailable. Use the local MCP.")
+			throw new AdmissionError(503, "Inspection limits are temporarily unavailable. Run the library in CI.")
 		}
 
 		// Derive quota identities only for fresh work.

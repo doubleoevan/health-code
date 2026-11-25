@@ -10,7 +10,7 @@
 [![License](https://img.shields.io/npm/l/health-code?style=flat-square)](https://github.com/doubleoevan/health-code/blob/main/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/doubleoevan/health-code?style=flat-square)](https://github.com/doubleoevan/health-code/stargazers)
 
-[Demo](https://runhealthcode.dev) · [GitHub](https://github.com/doubleoevan/health-code) · [Guide](https://github.com/doubleoevan/health-code/blob/main/packages/health-code/GUIDE.md) · [MCP](https://www.npmjs.com/package/@health-code/mcp)
+[Demo](https://runhealthcode.dev) · [GitHub](https://github.com/doubleoevan/health-code) · [Guide](https://github.com/doubleoevan/health-code/blob/main/packages/health-code/GUIDE.md) · [CI](https://github.com/doubleoevan/health-code/blob/main/apps/cli/README.md)
 
 </div>
 
@@ -68,12 +68,12 @@ const report = await getUpgrade({
 console.log(report.upgrades[0].verdict, report.upgrades[0].patches)
 ```
 
-## Use it in Claude Code or Codex
+## Use it in CI
 
 ```sh
-npx health-code mcp setup
+npx health-code check https://github.com/owner/repository
 ```
 
-The [MCP guide](https://github.com/doubleoevan/health-code/blob/main/apps/mcp/README.md#setup) lists the settings it needs. Then ask `Use health-code to list upgrades`.
+The command tries the first eligible upgrade and writes the Inspection Report and any patch. The [CI guide](https://github.com/doubleoevan/health-code/blob/main/apps/cli/README.md#setup) lists the settings it needs and a GitHub Actions job.
 
 [MIT License](https://github.com/doubleoevan/health-code/blob/main/LICENSE)

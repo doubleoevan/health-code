@@ -24,21 +24,19 @@ The health inspector runs your checks in a Runta sandbox and tries to repair wha
 
 </div>
 
-<!-- MCP VIDEO: replace this line with the video -->
-
 ## What it does
 
 Pick an upgrade. The health inspector tries it on your code. It attempts to repair what breaks and retests the patch. You get a report with a tested patch when it works.
 
-Your model key stays outside the sandbox.
-
-<a id="mcp-setup"></a>
+The upgraded code runs in a Runta sandbox with the network locked to package registries. Your model key and your CI secrets stay outside it.
 
 ## Quick start
 
 **On the web:** paste a public JavaScript or TypeScript repository at [runhealthcode.dev](https://runhealthcode.dev).
 
-**In Claude Code or Codex:** needs [Node.js](https://nodejs.org/) 22.18+ or 24.11+, a [Runta](https://dashboard.runta.com) account and a model key.
+<a id="ci-setup"></a>
+
+**In CI:** needs [Node.js](https://nodejs.org/) 22.18+ or 24.11+, a [Runta](https://dashboard.runta.com) account and a model key. Store the model key in Runta once from your own machine:
 
 ```sh
 export RUNTA_TOKEN=...
@@ -46,35 +44,54 @@ export MODEL_API_KEY=...   # setup only
 export HEALTH_CODE_MODEL_HOST=https://api.anthropic.com
 export HEALTH_CODE_MODEL=claude-opus-5-5
 
-npx health-code mcp setup
+npx health-code setup
 ```
 
-Paste the printed entry into your client and restart it. Then ask:
+Then add a job that tries an upgrade and keeps the report and patch:
 
-```text
-Use health-code to list upgrades
+```yaml
+name: Try dependency upgrades
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+jobs:
+  health-code:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: npx health-code check https://github.com/${{ github.repository }}
+        env:
+          RUNTA_TOKEN: ${{ secrets.RUNTA_TOKEN }}
+          HEALTH_CODE_MODEL_HOST: https://api.anthropic.com
+          HEALTH_CODE_MODEL: claude-opus-5-5
+      - uses: actions/upload-artifact@v4
+        with:
+          name: health-code-report
+          path: health-code-report
 ```
 
-See the [MCP guide](apps/mcp/README.md#setup) for settings.
+See the [CI guide](apps/cli/README.md) for settings and options.
 
 ## Packages
 
 | Package | Use |
 | --- | --- |
-| [`health-code`](https://www.npmjs.com/package/health-code) | Inspection library, MCP server and CI command |
-| [`@health-code/mcp`](https://www.npmjs.com/package/@health-code/mcp) | Shortcut to the MCP server |
+| [`health-code`](https://www.npmjs.com/package/health-code) | Inspection library and CI command |
 | [`apps/web`](apps/web) | Demo site |
 
-Guides: [library](packages/health-code/GUIDE.md) · [MCP](apps/mcp/README.md) · [development](DEVELOPMENT.md)
+Guides: [library](packages/health-code/GUIDE.md) · [CI](apps/cli/README.md) · [development](DEVELOPMENT.md)
 
 ## Architecture
 
 ```mermaid
 flowchart LR
   Browser --> Web["Web · Hono · React · SQLite"]
-  Agent["Claude Code or Codex"] --> MCP["MCP · stdio"]
+  CI["CI job"] --> Command["health-code check"]
   Web --> Library["health-code"]
-  MCP --> Library
+  Command --> Library
   Library --> Runta["Runta sandbox"]
 ```
 

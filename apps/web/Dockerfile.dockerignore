@@ -13,8 +13,8 @@
 !packages/health-code/prompts/
 !packages/health-code/prompts/**
 !apps/
-!apps/mcp/
-!apps/mcp/package.json
+!apps/cli/
+!apps/cli/package.json
 !apps/web/
 !apps/web/package.json
 !apps/web/tsconfig.json

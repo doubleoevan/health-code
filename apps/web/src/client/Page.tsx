@@ -1,7 +1,7 @@
 import type { UpgradeMenuTarget } from "health-code"
 import { type FormEvent, type KeyboardEvent, type ReactElement, useCallback, useEffect, useState } from "react"
 import {
-	mcpSetupUrl,
+	ciSetupUrl,
 	readmeUrl,
 	replayRepositoryUrl,
 	runtaSignupUrl,
@@ -53,8 +53,8 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 		target?: UpgradeMenuTarget
 	} | null>(null)
 	const [pending, setPending] = useState(false)
-	const [offerMcp, setOfferMcp] = useState(false)
-	const submit = useSubmit(upgradeMenu?.id, { setPending, setError, setOfferMcp, setVerification })
+	const [offerCi, setOfferCi] = useState(false)
+	const submit = useSubmit(upgradeMenu?.id, { setPending, setError, setOfferCi, setVerification })
 	const verified = useCallback(
 		(token: string): void => {
 			if (verification) {
@@ -67,8 +67,8 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 	const retry = useCallback((): void => {
 		setVerification(null)
 		setPending(false)
-		setOfferMcp(true)
-		setError("Verification could not finish. Retry the inspection or use the MCP.")
+		setOfferCi(true)
+		setError("Verification could not finish. Retry the inspection or run the library in CI.")
 	}, [])
 	function handleSubmit(event: FormEvent<HTMLFormElement>): void {
 		event.preventDefault()
@@ -84,7 +84,7 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 			{/* submission error */}
 			{error && (
 				<p role="alert">
-					{error} {offerMcp && <Link href={mcpSetupUrl}>MCP setup</Link>}
+					{error} {offerCi && <Link href={ciSetupUrl}>CI setup</Link>}
 				</p>
 			)}
 		</div>
@@ -131,7 +131,7 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 					{paused && (
 						<p role="status">
 							The hosted budget is reserved or temporarily unavailable. The daily allowance resets at 00:00 UTC. Cached
-							reports remain available. <Link href={mcpSetupUrl}>Use the MCP with your Runta account</Link>.
+							reports remain available. <Link href={ciSetupUrl}>Run it in CI with your Runta account</Link>.
 						</p>
 					)}
 					<form onSubmit={handleSubmit}>
@@ -151,7 +151,7 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 								onChange={() => {
 									setVerification(null)
 									setError("")
-									setOfferMcp(false)
+									setOfferCi(false)
 								}}
 								defaultValue={replay ? replayRepositoryUrl : ""}
 							/>
@@ -172,12 +172,12 @@ function useSubmit(
 	{
 		setPending,
 		setError,
-		setOfferMcp,
+		setOfferCi,
 		setVerification,
 	}: {
 		setPending: (pending: boolean) => void
 		setError: (message: string) => void
-		setOfferMcp: (offer: boolean) => void
+		setOfferCi: (offer: boolean) => void
 		setVerification: (input: Verification) => void
 	},
 ): (repositoryUrl: string, target?: UpgradeMenuTarget, challenge?: string) => Promise<void> {
@@ -185,7 +185,7 @@ function useSubmit(
 		async (repositoryUrl: string, target?: UpgradeMenuTarget, challenge?: string): Promise<void> => {
 			setPending(true)
 			setError("")
-			setOfferMcp(false)
+			setOfferCi(false)
 			try {
 				const response = await fetch("/api/inspections", {
 					method: "POST",
@@ -206,7 +206,7 @@ function useSubmit(
 						setVerification({ siteKey: body.siteKey, repositoryUrl, target })
 						return
 					}
-					setOfferMcp(Boolean(body.mcpSetupUrl || challenge))
+					setOfferCi(Boolean(body.ciSetupUrl || challenge))
 					throw new Error(body.message ?? "Could not start the inspection.")
 				}
 				window.location.assign(`/r/${body.id}`)
@@ -215,7 +215,7 @@ function useSubmit(
 				setPending(false)
 			}
 		},
-		[upgradeMenuId, setPending, setError, setOfferMcp, setVerification],
+		[upgradeMenuId, setPending, setError, setOfferCi, setVerification],
 	)
 }
 
@@ -381,7 +381,7 @@ export function Page(props: PageProps): ReactElement {
 				)}
 				<nav aria-label="Project">
 					<HeaderLink href={runtaSignupUrl}>Runta</HeaderLink>
-					<HeaderLink href={mcpSetupUrl}>MCP</HeaderLink>
+					<HeaderLink href={ciSetupUrl}>CI</HeaderLink>
 					<HeaderLink href={readmeUrl}>GitHub</HeaderLink>
 				</nav>
 				{props.snapshot?.card && !props.upgradeMenu && <Copy label="Copy report link" text={props.url} />}

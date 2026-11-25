@@ -11,7 +11,6 @@
 		"@ai-sdk/anthropic": "4.0.105",
 		"@ai-sdk/openai-compatible": "3.0.92",
 		"@babel/parser": "8.1.2",
-		"@modelcontextprotocol/server": "2.4.0",
 		"@opentelemetry/api": "1.9.0",
 		"@runta/runta-sdk": "0.2.0",
 		"@types/json-schema": "7.0.15",
@@ -29,7 +28,7 @@
 		"@types/semver": "7.8.0",
 		"@types/yarnpkg__lockfile": "1.1.9"
 	},
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"description": "Try dependency upgrades on your code in a Runta sandbox and get tested patches for what breaks",
 	"keywords": [
 		"dependencies",
@@ -42,7 +41,6 @@
 		"sandbox",
 		"runta",
 		"agent",
-		"mcp",
 		"patch",
 		"typescript"
 	],
@@ -55,11 +53,11 @@
 	],
 	"types": "./dist/index.d.ts",
 	"scripts": {
-		"build": "rm -f .tsbuild/publish.tsbuildinfo && mkdir -p dist && find dist -mindepth 1 -maxdepth 1 ! -name mcp -exec rm -rf {} + && tsc -p tsconfig.build.json && bun build guest/project.ts --target=node --format=esm --outfile=dist/project.mjs && bun build guest/observe.ts --target=node --format=esm --outfile=dist/observe.mjs && bun build guest/agent.ts --target=node --format=esm --outfile=dist/agent.mjs && bun build guest/managePatch.ts --target=node --format=esm --outfile=dist/patch.mjs && bun build guest/nodeTestReporter.ts --target=node --format=esm --outfile=dist/nodeTestReporter.mjs",
-		"prepack": "bun run build && bun run --cwd ../../apps/mcp build"
+		"build": "rm -f .tsbuild/publish.tsbuildinfo && mkdir -p dist && find dist -mindepth 1 -maxdepth 1 ! -name cli -exec rm -rf {} + && tsc -p tsconfig.build.json && bun build guest/project.ts --target=node --format=esm --outfile=dist/project.mjs && bun build guest/observe.ts --target=node --format=esm --outfile=dist/observe.mjs && bun build guest/agent.ts --target=node --format=esm --outfile=dist/agent.mjs && bun build guest/managePatch.ts --target=node --format=esm --outfile=dist/patch.mjs && bun build guest/nodeTestReporter.ts --target=node --format=esm --outfile=dist/nodeTestReporter.mjs",
+		"prepack": "bun run build && bun run --cwd ../../apps/cli build"
 	},
 	"bin": {
-		"health-code": "dist/mcp/cli.js"
+		"health-code": "dist/cli/cli.js"
 	},
 	"engines": {
 		"node": "^22.18.0 || >=24.11.0"

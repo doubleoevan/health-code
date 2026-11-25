@@ -26,7 +26,7 @@ Inspected commit: ${commit}
 Applies to commit: ${patch.base}${patch.testedTip ? `\nTested commit: ${patch.testedTip}` : ""}
 ${prerequisite}${patch.role === "upgrade" ? "Upgrade" : "Feature"} patch: ${reportUrl.origin}${toPatchPath(patch.digest)}
 SHA-256: ${patch.digest}
-If your Health Code MCP has this patch, fetch it with get_tested_patch using the MCP inspection's own inspectionId and sha256 ${patch.digest}. Follow nextOffset and concatenate the pages verbatim. Otherwise use the patch URL. Verify the SHA-256 of each mailbox before applying it. Use a branch for this upgrade. If other upgrades have changed the checkout, check compatibility and rerun typecheck and tests on the combined tree.`
+Verify the SHA-256 of each mailbox before applying it. Use a branch for this upgrade. If other upgrades have changed the checkout, check compatibility and rerun typecheck and tests on the combined tree.`
 }
 
 // link public destinations. a tested commit exists only in the sandbox

@@ -155,7 +155,7 @@ export class AdmissionLedger {
 		if (hold <= 0 || this.liability(day) + hold > limits.dailyMicros) {
 			throw new AdmissionError(
 				429,
-				"The daily inspection budget is reserved or used. It resets at 00:00 UTC. Use Health Code MCP with your Runta account.",
+				"The daily inspection budget is reserved or used. It resets at 00:00 UTC. Run the library in CI with your Runta account.",
 				"budgetHits",
 			)
 		}

@@ -10,7 +10,7 @@ Run these commands from the repository root. The root package manifest names the
 | `preflight.sh` | Runs the offline checks in order. CI, /ship, and `bun run check` invoke this file. |
 | `check-packed-library.sh` | Packs the release through its prepack hook and checks Node, Bun, and declaration consumers. |
 | `check-structure.sh` | Checks tracked and untracked package manifests with Git. |
-| `checkPackageBoundaries.ts` | Discovers app and package workspaces. Checks literal imports, declarations, and project references. The bundled app view can import development dependencies. |
+| `checkPackageBoundaries.ts` | Discovers app and package workspaces. Checks literal imports, declarations, and project references. |
 | `checkDependencyPins.ts` | Compares the package manager with the Bun version file. Verifies each patched dependency exists at the specified version in the lockfile. |
 | `checkDependencyAdvisories.ts` | Validates Bun's registry response and the reviewed advisory exceptions. Runs in its own CI job. |
 

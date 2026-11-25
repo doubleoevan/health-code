@@ -109,7 +109,7 @@ A Sandbox Provider MAY offer a Model Request Sandbox. The capability SHALL send 
 #### Scenario: A request uses the developer’s stored credential
 
 - **WHEN** the model request sandbox sends a model request
-- **THEN** the provider has verified the effective egress policy and exact HTTPS destination, path, header and stored-secret reference. Only the gateway supplies the model key. The local MCP, both runtimes, diagnostics and Inspection Report never receive it.
+- **THEN** the provider has verified the effective egress policy and exact HTTPS destination, path, header and stored-secret reference. Only the gateway supplies the model key. The CI command, both runtimes, diagnostics and Inspection Report never receive it.
 
 #### Scenario: Two roles select different hosts
 
@@ -143,7 +143,7 @@ An Inspection SHALL lazily allocate at most one Model Request Sandbox at the fir
 #### Scenario: Reaping similarly named runtimes
 
 - **WHEN** recovery inventories a repository sandbox and its model request sandbox sibling for an interrupted Inspection
-- **THEN** the reaper recognizes both from the owning namespace and exact Inspection identity, even when the creation response was lost. It preserves live siblings, lookalike names, other deployments and other active MCP sessions.
+- **THEN** the reaper recognizes both from the owning namespace and exact Inspection identity, even when the creation response was lost. It preserves live siblings, lookalike names, other deployments and other active CI runs.
 
 #### Scenario: Model request sandbox call deadline
 

@@ -222,7 +222,7 @@ test("launch settings retain the last valid snapshot and pause after three minut
 	}
 })
 
-test("a budget refusal links to MCP and explains the UTC reset on the home page", async () => {
+test("a budget refusal links to CI setup and explains the UTC reset on the home page", async () => {
 	const store = new InspectionStore(":memory:")
 	const launch = new LaunchService({ HEALTH_CODE_DAILY_COST_USD: "0" }, true)
 	const worker = new Inspections(store, createReplaySource(), 2, launch)
@@ -240,7 +240,7 @@ test("a budget refusal links to MCP and explains the UTC reset on the home page"
 
 	// Offer the same self-funded path in the API response and the server-rendered page.
 	const home = await (await app.request(origin)).text()
-	assert.ok(home.includes(problem.mcpSetupUrl))
+	assert.ok(home.includes(problem.ciSetupUrl))
 	assert.ok(home.includes("Cached reports remain available"))
 	assert.equal(JSON.parse(store.admission.daily()[0]!.counts).budgetHits, 1)
 	worker.stop()

@@ -31,7 +31,7 @@ The site SHALL return a durable ID before starting an admitted cache miss and en
 #### Scenario: Worker dispatches a selected upgrade
 
 - **WHEN** the worker calls the public library API
-- **THEN** it passes configured limits, the Runta secret name for the model key and an optional GitHub token. It reads the same model settings as the MCP and chooses no model itself. A missing model setting keeps the worker from starting. A directly configured site names the setting. A site that loads settings at runtime keeps serving reports and retries.
+- **THEN** it passes configured limits, the Runta secret name for the model key and an optional GitHub token. It reads the same model settings as the CI command and chooses no model itself. A missing model setting keeps the worker from starting. A directly configured site names the setting. A site that loads settings at runtime keeps serving reports and retries.
 
 #### Scenario: Concurrent submissions
 
@@ -54,7 +54,7 @@ On startup the site SHALL mark every running Inspection interrupted, show that a
 
 #### Scenario: Shared runtime account
 
-- **WHEN** the inventory contains a live Inspection’s runtime, another deployment’s runtime and CLI or MCP runtimes
+- **WHEN** the inventory contains a live Inspection’s runtime, another deployment’s runtime and CI command runtimes
 - **THEN** recovery preserves all of them, even when their names share the generic Health Code prefix
 
 #### Scenario: Repeat recovery after a partial cleanup
@@ -174,7 +174,7 @@ The site SHALL enforce the approved challenge, daily visitor allowance, concurre
 #### Scenario: Concurrent final budget claims
 
 - **WHEN** two distinct eligible requests compete for the last available budget
-- **THEN** only work that fits receives a reservation and queue entry, and a refused visitor sees the reset and personally funded MCP option
+- **THEN** only work that fits receives a reservation and queue entry, and a refused visitor sees the reset and personally funded CI option
 
 #### Scenario: Visitor allowance is exhausted
 
