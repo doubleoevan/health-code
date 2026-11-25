@@ -174,7 +174,11 @@ function toOutcome(report: PublishedReport): string {
 
 	// Count the upgrades that still lack a patch.
 	const missingCount = upgrades.filter((upgrade) => !upgrade.patches.length).length
-	const ready = patchCount === 1 ? "Your tested patch is ready." : `Your ${patchCount} tested patches are ready.`
+	const patchedUpgrade = upgrades.find((upgrade) => upgrade.patches.length)
+	const ready =
+		patchCount === 1
+			? `Your tested ${patchedUpgrade?.dependency} patch is ready.`
+			: `Your ${patchCount} tested patches are ready.`
 	return missingCount ? `${ready} No patch for ${missingCount} of ${upgrades.length} upgrades.` : ready
 }
 

@@ -200,7 +200,7 @@ test("the summary names the outcome and whether a patch is available", async () 
 
 	// Count the upgrades without a patch beside a ready one.
 	const mixed = { ...card, upgrades: [{ ...upgrade, observation, patches: upgrade.patches.slice(0, 1) }, skipped] }
-	expect(toSummary(mixed)).toBe("Your tested patch is ready. No patch for 1 of 2 upgrades.")
+	expect(toSummary(mixed)).toBe(`Your tested ${upgrade.dependency} patch is ready. No patch for 1 of 2 upgrades.`)
 	expect(toReportHeading(mixed)).toBe("Inspection complete")
 	expect(toSummary({ ...card, upgrades: [] })).toBe("No patch. No upgrades were tested.")
 })

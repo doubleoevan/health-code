@@ -17,13 +17,23 @@ export function ReportView({
 	upgradeMenuId?: string
 	investigationPrompt?: string
 }): ReactElement {
+	// Set the patched dependency apart in the one-patch summary.
+	const summary = toSummary(report)
+	const summaryLead = "Your tested "
+	const patchedDependency = summary.startsWith(summaryLead)
+		? report.upgrades.find((upgrade) => upgrade.patches.length)?.dependency
+		: ""
 	return (
 		<>
 			{/* link back, inspection summary and coding agent handoff */}
 			<header className="inspection-heading">
 				<UpgradeMenuLink id={upgradeMenuId} repositoryUrl={report.repository.url} />
 				<h1>{toReportHeading(report)}</h1>
-				<p>{toSummary(report)}</p>
+				<p>
+					{patchedDependency ? summaryLead : summary}
+					{patchedDependency && <strong>{patchedDependency}</strong>}
+					{patchedDependency && summary.slice(summaryLead.length + patchedDependency.length)}
+				</p>
 				{durationMs !== undefined && <p>Inspection time · {toDuration(durationMs)}</p>}
 				<ReportActions report={report} url={url} investigationPrompt={investigationPrompt} />
 			</header>

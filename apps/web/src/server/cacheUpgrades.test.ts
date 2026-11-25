@@ -179,6 +179,71 @@ test("an upgrade menu joins only the ready target from the current checkout and 
 	store.database.close()
 })
 
+test("a released report keeps the scope that joins tested patches to its upgrade menu", async () => {
+	const store = new InspectionStore(":memory:")
+	const source = createReplaySource(async () => {})
+	const output = await source.inspect(replayRepositoryUrl, () => {})
+	const request = {
+		identify: () => ({ visitor: "visitor", network: "network" }),
+		challenge: undefined,
+		hostname: "local",
+	}
+	const options = { input: replayRepositoryUrl, request, source, store, workerAvailable: () => true, wake: () => {} }
+	const launch = new LaunchService({ NF_DEPLOYMENT_SHA: "first" }, true)
+	const { id } = await launch.admit(options)
+	const admitted = store.database.query<{ key: string }, [string]>("SELECT cacheKey key FROM admissions WHERE id=?")
+	const before: unknown[] = JSON.parse(admitted.get(id)?.key ?? "[]")
+
+	// Finish with a registry lookup issue so the report is released for a fresh submission.
+	output.report.selection.registryLookupIssue = "Registry lookup timed out"
+	store.finish(id, publishReport(output, "MIT"))
+	const after: unknown[] = JSON.parse(admitted.get(id)?.key ?? "[]")
+	assert.deepEqual(after.slice(0, 4), before.slice(0, 4))
+	assert.equal(after.at(-1), "released")
+	assert.equal((await launch.admit(options)).reused, false)
+	store.database.close()
+})
+
+test("a patch that fails only Baseline failures says so without listing them", async () => {
+	const source = createReplaySource(async () => {})
+	const output = await source.inspect(replayRepositoryUrl, () => {})
+	const patch = output.report.upgrades.flatMap((upgrade) => upgrade.patches)[0]
+	assert.ok(patch)
+
+	// Fail the same test in the Baseline and in the replayed patch.
+	const passed = { status: "passed" as const, evidence: [] }
+	const failed = {
+		status: "failed" as const,
+		evidence: [],
+		failingTests: [{ file: "a.test.ts", name: "already broken", workspace: "." }],
+	}
+	output.report.baseline.tests = failed
+	const observed = { complete: true, findings: [] }
+	const verification = {
+		install: passed,
+		typecheck: passed,
+		tests: failed,
+		installation: observed,
+		testNetwork: observed,
+		addedCases: [],
+	}
+	patch.verification = verification
+	const checks = publishReport(output, "MIT")
+		.card.upgrades.flatMap((upgrade) => upgrade.patches)
+		.find((item) => item.digest === patch.digest)?.checks
+	assert.equal(checks?.tests, "only the failures from before the upgrade remain")
+
+	// Name a failure the Baseline did not have.
+	patch.verification = {
+		...verification,
+		tests: { ...failed, failingTests: [{ file: "b.test.ts", name: "new", workspace: "." }] },
+	}
+	const changed = publishReport(output, "MIT")
+		.card.upgrades.flatMap((upgrade) => upgrade.patches)
+		.find((item) => item.digest === patch.digest)?.checks
+	assert.match(changed?.tests ?? "", /^failed · new$/)
+})
+
 test("release lookups share a result until its coverage-specific expiry", async () => {
 	let now = 0
 	let calls = 0

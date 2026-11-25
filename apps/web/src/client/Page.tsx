@@ -74,6 +74,21 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 		event.preventDefault()
 		void submit(String(new FormData(event.currentTarget).get("repositoryUrl")))
 	}
+
+	// Show how the server answered a submission that did not start an inspection.
+	const inspectionSubmissionResponse = (
+		<div className="inspection-submission-response">
+			{/* visitor verification */}
+			{verification && <Challenge siteKey={verification.siteKey} onToken={verified} onFailure={retry} />}
+
+			{/* submission error */}
+			{error && (
+				<p role="alert">
+					{error} {offerMcp && <Link href={mcpSetupUrl}>MCP setup</Link>}
+				</p>
+			)}
+		</div>
+	)
 	return (
 		<section className={upgradeMenu ? "home" : "home landing"}>
 			{/* inspection overview */}
@@ -86,6 +101,7 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 							{upgradeMenu.commit.slice(0, 8)}
 						</p>
 					</header>
+					{inspectionSubmissionResponse}
 					<UpgradeMenu
 						view={upgradeMenu.view}
 						issue={upgradeMenu.issue}
@@ -146,14 +162,7 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 					</form>
 				</>
 			)}
-			{verification && <Challenge siteKey={verification.siteKey} onToken={verified} onFailure={retry} />}
-
-			{/* submission error */}
-			{error && (
-				<p role="alert">
-					{error} {offerMcp && <Link href={mcpSetupUrl}>MCP setup</Link>}
-				</p>
-			)}
+			{!upgradeMenu && inspectionSubmissionResponse}
 		</section>
 	)
 }

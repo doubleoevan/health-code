@@ -348,9 +348,12 @@ export class InspectionStore {
 				this.upgrades.save({ id, report, published: publication.card })
 			}
 
-			// Release incomplete reports for a fresh submission.
+			// Release incomplete reports for a fresh submission and keep their scope for tested patches.
 			if (!isReusableReport(report)) {
-				this.database.query("UPDATE admissions SET cacheKey=NULL WHERE id=?").run(id)
+				this.database
+					.query(`UPDATE admissions SET cacheKey=CASE WHEN json_valid(cacheKey)
+						THEN json_insert(cacheKey,'$[#]','released') END WHERE id=?`)
+					.run(id)
 			} else if (report.selection.omitted.length && report.selection.limit !== undefined) {
 				// Match the complete report to a limit lowered before dispatch.
 				this.database

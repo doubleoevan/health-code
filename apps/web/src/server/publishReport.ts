@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto"
-import type { Baseline, InspectionReport, ModelRequestSandboxInspectionReport, UpgradeReportV2 } from "health-code"
+import type {
+	Baseline,
+	InspectionReport,
+	ModelRequestSandboxInspectionReport,
+	TestFailure,
+	UpgradeReportV2,
+} from "health-code"
 import { testInventorySummarySchema, toInspectionMode } from "health-code"
 import { type Citation, type PatchLink, type PublishedReport, toCheckText, type UpgradeCard } from "../report.ts"
 
@@ -19,6 +25,30 @@ function toChecks(checks: Baseline): UpgradeCard["checks"] {
 		typecheck: toCheckText(checks.typecheck),
 		tests: toCheckText(checks.tests),
 	}
+}
+
+// Say when a replayed patch fails only what already failed in the Baseline.
+function toPatchChecks(checks: Baseline, baseline: Baseline): UpgradeCard["checks"] {
+	const patchChecks = toChecks(checks)
+	for (const checkName of ["typecheck", "tests"] as const) {
+		const check = checks[checkName]
+		const baselineCheck = baseline[checkName]
+		if (check.status !== "failed" || baselineCheck.status !== "failed" || !check.failingTests.length) {
+			continue
+		}
+
+		// Compare failures by workspace and test or file identity
+		const toFailureKey = (test: TestFailure): string => JSON.stringify([test.workspace, test.file, test.name])
+		const baselineFailureKeys = new Set(baselineCheck.failingTests.map(toFailureKey))
+
+		// Replace the long name list with the totals when nothing new fails.
+		if (check.failingTests.every((test) => baselineFailureKeys.has(toFailureKey(test)))) {
+			const counts = check.inventory?.counts
+			const totals = counts ? ` · ${counts.passed} passed, ${counts.failed} failed, ${counts.skipped} skipped` : ""
+			patchChecks[checkName] = `only the failures from before the upgrade remain${totals}`
+		}
+	}
+	return patchChecks
 }
 
 function toUntestedReason(upgrade: InspectionReport["upgrades"][number]): string | undefined {
@@ -100,7 +130,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 					prompt: patch.prompt,
 					testedTip: patch.testedTip,
 					prerequisite: toPrerequisiteDigest(patch.prerequisite, byId),
-					checks: patch.verification && toChecks(patch.verification),
+					checks: patch.verification && toPatchChecks(patch.verification, report.baseline),
 				})
 			}
 		}

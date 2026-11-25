@@ -70,3 +70,23 @@
 	transform: translateY(-75%) rotate(45deg);
 	pointer-events: none;
 }
+
+/* float the inspection submission response over the long upgrade menu */
+.home:not(.landing) .inspection-submission-response {
+	position: fixed;
+	inset: auto 0 var(--section-gap);
+	z-index: 1;
+	width: fit-content;
+	max-width: calc(100% - 2 * var(--block-gap));
+	margin-inline: auto;
+}
+.home:not(.landing) .inspection-submission-response:not(:empty) {
+	padding: var(--inline-gap) var(--block-gap);
+	border: 1px solid var(--rule);
+	border-radius: 0.5rem;
+	background: var(--panel);
+	box-shadow: 0 0.5rem 2rem rgb(0 0 0 / 30%);
+}
+.home:not(.landing) .inspection-submission-response p {
+	margin: 0;
+}

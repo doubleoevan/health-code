@@ -35,12 +35,20 @@ export function UpgradeMenu({
 	function handleFilterChange(event: ChangeEvent<HTMLInputElement | HTMLSelectElement>): void {
 		event.currentTarget.form?.requestSubmit()
 	}
+
+	// Show every upgrade again as soon as the search is cleared.
+	function handleSearchChange(event: ChangeEvent<HTMLInputElement>): void {
+		if (event.currentTarget.value === "") {
+			event.currentTarget.form?.requestSubmit()
+		}
+	}
 	return (
 		<section>
 			{/* dependency filters */}
 			<form method="get" className="upgrade-menu-filters">
 				<label>
-					Search dependencies <input type="search" name="search" defaultValue={search} maxLength={256} />
+					Search dependencies{" "}
+					<input type="search" name="search" defaultValue={search} maxLength={256} onChange={handleSearchChange} />
 				</label>
 				<label>
 					Sort by{" "}

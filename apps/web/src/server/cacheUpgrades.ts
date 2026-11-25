@@ -24,7 +24,9 @@ export class UpgradeCache {
 		return (
 			this.database
 				.query<{ scope: string | null }, [string]>(
-					"SELECT CASE WHEN json_valid(cacheKey) THEN json_remove(cacheKey,'$[5]','$[4]') ELSE cacheKey END scope FROM admissions WHERE id=?",
+					`SELECT CASE WHEN json_valid(cacheKey) THEN json_array(json_extract(cacheKey,'$[0]'),
+						json_extract(cacheKey,'$[1]'),json_extract(cacheKey,'$[2]'),json_extract(cacheKey,'$[3]'))
+						ELSE cacheKey END scope FROM admissions WHERE id=?`,
 				)
 				.get(id)?.scope ?? null
 		)

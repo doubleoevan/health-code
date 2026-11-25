@@ -73,6 +73,30 @@ export function CheckOutcome({ text }: { text: string }): ReactElement {
 	)
 }
 
+// Show a release summary with its section headings and list entries set apart.
+function ReleaseSummary({ text }: { text: string }): ReactElement {
+	return (
+		<div className="long-text release-summary">
+			{text.split("\n").map((line, index) => {
+				const entry = /^(\s*)- (.*)$/.exec(line)
+				if (entry) {
+					return (
+						// biome-ignore lint/suspicious/noArrayIndexKey: summary lines have no identity and never reorder
+						<p key={index} className={entry[1] ? "entry nested" : "entry"}>
+							{entry[2]}
+						</p>
+					)
+				}
+
+				// treat a line in capitals as a section heading
+				const heading = /^[A-Z][A-Z ]+$/.test(line.trim())
+				// biome-ignore lint/suspicious/noArrayIndexKey: summary lines have no identity and never reorder
+				return heading ? <h4 key={index}>{line.trim()}</h4> : <p key={index}>{line}</p>
+			})}
+		</div>
+	)
+}
+
 function CodeFeatureMatches({ matches }: { matches: UpgradeCard["matches"] }): ReactElement {
 	if (!matches.length) {
 		return <span>No matching use in this repository was recorded.</span>
@@ -161,14 +185,16 @@ function PatchDetails({
 					<>
 						<dt>Patch verification</dt>
 						<dd>
-							{/* each check as its own sentence */}
+							{/* each check on its own line with long results collapsed */}
 							{Object.entries({
 								Install: patch.checks.install,
 								Typecheck: patch.checks.typecheck,
 								Tests: patch.checks.tests,
-							})
-								.map(([label, text]) => `${label} · ${text.replace(/\.$/, "")}.`)
-								.join(" ")}
+							}).map(([label, text]) => (
+								<div key={label}>
+									<strong>{label}</strong> · <CheckOutcome text={text} />
+								</div>
+							))}
 						</dd>
 					</>
 				)}
@@ -308,7 +334,7 @@ export function UpgradeView({ upgrade, repositoryUrl }: { upgrade: UpgradeCard; 
 			</dl>
 
 			{/* release summary and feature matches */}
-			<p>{upgrade.summary ?? "Release summary unavailable."}</p>
+			<ReleaseSummary text={upgrade.summary ?? "Release summary unavailable."} />
 			<dl>
 				<dt>Where this fits in your code</dt>
 				<dd>
