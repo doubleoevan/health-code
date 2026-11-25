@@ -76,7 +76,8 @@ export function CheckOutcome({ text }: { text: string }): ReactElement {
 // Show a release summary with its section headings and list entries set apart.
 function ReleaseSummary({ text }: { text: string }): ReactElement {
 	return (
-		<div className="long-text release-summary">
+		// biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users scroll the box
+		<div className="release-summary" tabIndex={0}>
 			{text.split("\n").map((line, index) => {
 				const entry = /^(\s*)- (.*)$/.exec(line)
 				if (entry) {
@@ -334,7 +335,7 @@ export function UpgradeView({ upgrade, repositoryUrl }: { upgrade: UpgradeCard; 
 			</dl>
 
 			{/* release summary and feature matches */}
-			<ReleaseSummary text={upgrade.summary ?? "Release summary unavailable."} />
+			{upgrade.summary ? <ReleaseSummary text={upgrade.summary} /> : <p>Release summary unavailable.</p>}
 			<dl>
 				<dt>Where this fits in your code</dt>
 				<dd>
