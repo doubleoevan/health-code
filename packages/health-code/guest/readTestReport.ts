@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs"
 import { isAbsolute, relative } from "node:path"
 import { XMLParser } from "fast-xml-parser"
 import type { TestFailure } from "../src/contracts.ts"
-import { jsonCaseName, xmlCaseName } from "../src/patches/testCaseName.ts"
+import { decodeXmlText, jsonCaseName, xmlCaseName } from "../src/patches/testCaseName.ts"
 import { readText, workspaceDirectories } from "./readProjectFiles.ts"
 
 export const reportPath = ".health-code/test-results"
@@ -86,7 +86,7 @@ function fileName(path: string): string {
 function reportedXmlName(item: XmlCase, structured: boolean): string {
 	return structured && item.name
 		? xmlCaseName(item.name, item.classname)
-		: [item.classname, item.name].filter(Boolean).join(" ")
+		: decodeXmlText([item.classname, item.name].filter(Boolean).join(" "))
 }
 function xmlFailures(suites: XmlSuite[], structured: boolean): TestFailure[] {
 	// collect failures recursively from nested xml suites

@@ -44,6 +44,18 @@ export function caseMatchesTitle(identity: string | undefined, title: string): b
 	}
 }
 
+const xmlEntities: Record<string, string> = { "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'", "&amp;": "&" }
+
+/**
+ * Decodes the five predefined XML entities in text the parser leaves undecoded.
+ */
+export function decodeXmlText(text: string): string {
+	return text.replace(/&(?:lt|gt|quot|apos|amp);/g, (entity) => xmlEntities[entity] ?? entity)
+}
+
 export function xmlCaseName(name: string, classname?: string): string {
-	return jsonCaseName({ title: name, ancestorTitles: classname ? [classname] : [] })
+	return jsonCaseName({
+		title: decodeXmlText(name),
+		ancestorTitles: classname ? [decodeXmlText(classname)] : [],
+	})
 }

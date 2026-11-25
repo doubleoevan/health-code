@@ -135,3 +135,9 @@ test("a test file that fails to load is listed once", () => {
 	})
 	assert.deepEqual(check.status === "failed" && check.failingTests, reported)
 })
+
+test("XML test names decode the predefined entities", async () => {
+	const { xmlCaseName } = await import("../src/patches/testCaseName.ts")
+	assert.equal(xmlCaseName("keeps the post&apos;s &lt;img&gt; &amp; &quot;alt&quot;"), `keeps the post's <img> & "alt"`)
+	assert.equal(xmlCaseName("a&amp;lt;b", "suite&apos;s"), JSON.stringify(["suite's", "a&lt;b"]))
+})
