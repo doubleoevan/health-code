@@ -168,7 +168,11 @@ export function connectHost(events: HostEvents): Host {
 
 		// report a message that the client declines
 		async sendMessage(text): Promise<void> {
-			const result = await request("ui/message", { role: "user", content: [{ type: "text", text }] }, answerTimeoutMs)
+			const result = await request(
+				"ui/message",
+				{ role: "user", content: [{ type: "text", text }] },
+				quickAnswerTimeoutMs,
+			)
 			if (result.isError) {
 				throw new Error("The client did not accept the message.")
 			}

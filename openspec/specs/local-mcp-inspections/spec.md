@@ -182,18 +182,13 @@ The server SHALL attach one app view to `list_upgrades`, `start_inspection` and 
 
 #### Scenario: Choose and test an upgrade
 
-- **WHEN** a developer selects an upgrade in the view
-- **THEN** the view starts one inspection, follows its events and shows the Verdict, checks and patches when it finishes
-
-#### Scenario: The client drops the view's tool call
-
-- **WHEN** a developer selects an upgrade and the client refuses or never answers the call
+- **WHEN** a developer selects an upgrade in a client that accepts messages from the view
 - **THEN** the view sends one message that names the upgrade menu, dependency and version, and the coding agent calls `get_upgrade`. The result shows the Verdict, checks and patch without another call.
 
-#### Scenario: Ask the coding agent from the view
+#### Scenario: The client accepts no message
 
-- **WHEN** a developer asks the coding agent to try an upgrade in a client that accepts messages
-- **THEN** the view sends the same message without calling a tool first
+- **WHEN** a developer selects an upgrade and the client accepts no message
+- **THEN** the view starts one inspection, follows its events and shows the Verdict, checks and patches when it finishes. A client that also drops the call leaves the request text for the developer to send.
 
 #### Scenario: Test an upgrade that is already running
 

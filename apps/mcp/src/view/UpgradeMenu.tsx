@@ -66,46 +66,36 @@ export function UpgradeMenu({
 	const [startedIds, setStartedIds] = useState<Record<string, string>>({})
 	const [startProgress, setStartProgress] = useState<StartProgress>()
 	async function handleTest(target: Target): Promise<void> {
-		const { dependency, to } = target
 		const key = toTargetKey(target)
 		setIsPending(true)
 		setStartProgress({ key, kind: "starting" })
+
+		// ask the coding agent first. a client accepts one request for each press
+		const request = toTryRequest(menu.upgradeMenuId, target)
+		const isSent =
+			request !== undefined &&
+			host.canMessage() &&
+			(await host.sendMessage(request).then(
+				() => true,
+				() => false,
+			))
+		setStartProgress(isSent ? { key, kind: "sent" } : await startInspection(target, request))
+		setIsPending(false)
+	}
+
+	// start the inspection from the page and follow it here
+	async function startInspection(target: Target, request?: string): Promise<StartProgress | undefined> {
+		const key = toTargetKey(target)
 		try {
-			const selection = { upgradeMenuId: menu.upgradeMenuId, dependency, to }
+			const selection = { upgradeMenuId: menu.upgradeMenuId, dependency: target.dependency, to: target.to }
 			const input = { repositoryUrl: menu.repository.url, selection }
 			const { inspectionId } = await callQuickTool<{ inspectionId: string }>(host, "start_inspection", input)
 			setStartedIds((earlier) => ({ ...earlier, [key]: inspectionId }))
-			setStartProgress(undefined)
 			onInspect(inspectionId)
+			return undefined
 		} catch (error) {
-			const isDropped = error instanceof UndeliveredError
-			setStartProgress(isDropped ? await askAgent(target) : { key, kind: "failed", text: toFailureText(error) })
-		}
-		setIsPending(false)
-	}
-
-	async function handleAsk(target: Target): Promise<void> {
-		setIsPending(true)
-		setStartProgress(await askAgent(target))
-		setIsPending(false)
-	}
-
-	// hand the upgrade to the coding agent in one chat message
-	async function askAgent(target: Target): Promise<StartProgress> {
-		const key = toTargetKey(target)
-		const request = toTryRequest(menu.upgradeMenuId, target)
-		if (!request) {
-			return { key, kind: "failed", text: "Ask your coding agent to try this upgrade." }
-		}
-		const unsent: StartProgress = { key, kind: "failed", text: `Tell your coding agent · ${request}` }
-		if (!host.canMessage()) {
-			return unsent
-		}
-		try {
-			await host.sendMessage(request)
-			return { key, kind: "sent" }
-		} catch {
-			return unsent
+			const isDropped = error instanceof UndeliveredError && request
+			return { key, kind: "failed", text: isDropped ? `Tell your coding agent · ${request}` : toFailureText(error) }
 		}
 	}
 
@@ -205,7 +195,6 @@ export function UpgradeMenu({
 								progress={startProgress?.key === toTargetKey(target) ? startProgress : undefined}
 								onInspect={onInspect}
 								onTest={handleTest}
-								onAsk={handleAsk}
 							/>
 						))}
 					</ul>
@@ -262,7 +251,6 @@ function TargetVersion({
 	progress,
 	onInspect,
 	onTest,
-	onAsk,
 }: MenuActions & {
 	upgradeMenuId: string
 	target: Target
@@ -270,7 +258,6 @@ function TargetVersion({
 	isPending: boolean
 	progress?: StartProgress
 	onTest: (target: Target) => void
-	onAsk: (target: Target) => void
 }): ReactElement {
 	const { patch } = target
 	return (
@@ -289,11 +276,6 @@ function TargetVersion({
 						Try upgrade
 					</button>
 				)}
-				{!patch && host.canMessage() && (
-					<button type="button" className="secondary" disabled={isPending} onClick={() => onAsk(target)}>
-						Ask coding agent
-					</button>
-				)}
 				{startedId && !patch && (
 					<button type="button" className="secondary" disabled={isPending} onClick={() => onInspect(startedId)}>
 						View inspection
@@ -303,7 +285,7 @@ function TargetVersion({
 
 			{/* answer to the last click on this version */}
 			{progress?.kind === "starting" && <CurrentStep text="Starting inspection…" />}
-			{progress?.kind === "sent" && <p role="status">Sent to your coding agent.</p>}
+			{progress?.kind === "sent" && <p role="status">Sent to your coding agent. The inspection starts in the chat.</p>}
 			{progress?.kind === "failed" && <p role="alert">{progress.text}</p>}
 
 			{/* release features for this version */}

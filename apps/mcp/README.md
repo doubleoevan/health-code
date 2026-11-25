@@ -8,7 +8,7 @@ Inspect a public GitHub repository from Claude Code or Codex using your own Runt
 npx @health-code/mcp setup
 ```
 
-Follow the printed client instructions. Claude and other clients with MCP Apps support show an app view. Choose an upgrade, follow its inspection and read the verdict and patch on one page. Select **Apply with agent** to ask your coding agent to apply a patch. Other clients receive the same results as text.
+Follow the printed client instructions. Claude and other clients with MCP Apps support show an app view. Choose an upgrade, follow its inspection and read the verdict and patch on one page. Select **Apply** to ask your coding agent to apply a patch. Other clients receive the same results as text.
 
 To start the stdio server directly, run `npx @health-code/mcp`. Each release runs the executable from the matching version of the `health-code` package.
 

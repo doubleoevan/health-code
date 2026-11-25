@@ -620,10 +620,10 @@ td ul {
 }
 
 /* keep the scrollbar visible where the system hides it until scrolling */
-.release-summary::-webkit-scrollbar {
+:is(.release-summary, .test-names)::-webkit-scrollbar {
 	width: 0.75rem;
 }
-.release-summary::-webkit-scrollbar-thumb {
+:is(.release-summary, .test-names)::-webkit-scrollbar-thumb {
 	border: 0.2rem solid transparent;
 	border-radius: 1rem;
 	background: var(--muted);

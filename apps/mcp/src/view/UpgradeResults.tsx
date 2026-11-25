@@ -151,16 +151,21 @@ function PatchView({
 	}
 	return (
 		<div className="target">
-			<h3>{patch.role === "upgrade" ? "Upgrade patch" : "Optional feature patch"}</h3>
-			<p className="digest">{`SHA-256 ${patch.sha256}`}</p>
-
-			{/* apply and preview controls */}
-			<div className="button-row">
+			{/* request that applies the patch */}
+			<h3>
+				{patch.role === "upgrade" ? "Upgrade prompt for your coding agent" : "Feature prompt for your coding agent"}
+			</h3>
+			<div className="prompt">
+				<p>{applyRequest}</p>
 				{host.canMessage() && (
 					<button type="button" disabled={isPending} onClick={handleApply}>
-						Apply with agent
+						Apply
 					</button>
 				)}
+			</div>
+
+			{/* patch preview control */}
+			<div className="button-row">
 				<button
 					type="button"
 					className="secondary"
@@ -170,11 +175,6 @@ function PatchView({
 					{text === undefined ? "Show patch" : "Hide patch"}
 				</button>
 			</div>
-			{!host.canMessage() && (
-				<p>
-					Tell your coding agent · <code>{applyRequest}</code>
-				</p>
-			)}
 			{status && <p role="status">{status}</p>}
 
 			{/* patch text */}
