@@ -59,7 +59,7 @@ The `health-code check` command SHALL test one eligible upgrade with the caller'
 
 ### Requirement: Open a pull request
 
-With `--pull-request` the command SHALL apply each upgrade’s tested patches on its own branch of the current checkout at the inspected commit, push the branch and open or update one pull request through the caller’s `git` and `gh`. The pull request SHALL state the Verdict and check results, link to Health Code, Runta and the CI setup and include no repository, release or command text. The command SHALL hold no GitHub credential of its own.
+With `--pull-request` the command SHALL apply each upgrade’s tested patches on its own branch of the current checkout at the inspected commit, push the branch and open or update one pull request through the caller’s `git` and `gh`. The pull request SHALL state the Verdict and check results, link to Health Code, Runta and the CI setup and include no repository, release or command text. The command SHALL hold no GitHub credential of its own. Its `git` steps SHALL run with the checkout’s hooks off and a time limit, and SHALL return the checkout to the commit it started on.
 
 #### Scenario: A tested patch exists
 
@@ -75,6 +75,16 @@ With `--pull-request` the command SHALL apply each upgrade’s tested patches on
 
 - **WHEN** the same repository already has an open pull request from that branch
 - **THEN** the command updates its title and results and opens no second one. A fork’s pull request from a branch with the same name stays unchanged.
+
+#### Scenario: The checkout has Git hooks
+
+- **WHEN** the checkout has hooks installed
+- **THEN** no hook runs while the command switches branches, applies patches or pushes
+
+#### Scenario: A patch fails to apply
+
+- **WHEN** `git` rejects a patch
+- **THEN** the command clears the unfinished patch, returns the checkout to its starting commit and reports the failure
 
 #### Scenario: No patch
 

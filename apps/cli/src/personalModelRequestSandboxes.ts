@@ -89,7 +89,7 @@ export async function personalProvider(token: string, end = Date.now() + 120000)
 	const provider = createSandboxProvider({ token })
 	const modelRequestSandbox = provider.modelRequestSandbox
 	if (!modelRequestSandbox) {
-		throw new UserError("Model request sandbox unavailable. Restart your client and try again.")
+		throw new UserError("Model request sandbox unavailable. Try again.")
 	}
 
 	// Resolve ownership before inspecting any local record.

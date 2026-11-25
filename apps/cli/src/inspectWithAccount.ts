@@ -1,7 +1,5 @@
 import {
-	type InspectionEvent,
 	type InspectionOptions,
-	type InspectionReport,
 	inspectRepository,
 	type ModelRequestSandboxEvent,
 	type ModelRequestSandboxInspectionReport,
@@ -11,18 +9,21 @@ import { configureModels } from "./configureModels.ts"
 import { type PersonalProvider, personalProvider } from "./personalModelRequestSandboxes.ts"
 import { accountToken, readGithubToken, requireSettings } from "./readEnvironmentSettings.ts"
 
-// accept either supported event and report format from the inspection engine
-type Choice = Pick<InspectionOptions, "revision" | "mode" | "upgrade" | "limits" | "applicationEnvironment">
-export type Inspect = (
-	options: Choice & {
-		repositoryUrl: string
-		signal: AbortSignal
-		onEvent: (event: InspectionEvent | ModelRequestSandboxEvent) => void
-	},
-) => Promise<InspectionReport | ModelRequestSandboxInspectionReport>
+// the choices a caller makes for one inspection
+export type InspectOptions = Pick<
+	InspectionOptions,
+	"revision" | "mode" | "upgrade" | "limits" | "applicationEnvironment"
+> & {
+	repositoryUrl: string
+	signal: AbortSignal
+	onEvent: (event: ModelRequestSandboxEvent) => void
+}
 
+/**
+ * Runs an inspection on the account's sandboxes with the models its settings name.
+ */
 export function inspectWithAccount(
-	options: Parameters<Inspect>[0] & { sandboxProvider?: PersonalProvider },
+	options: InspectOptions & { sandboxProvider?: PersonalProvider },
 	environment: NodeJS.ProcessEnv,
 ): Promise<ModelRequestSandboxInspectionReport> {
 	// resolve the developer's model roles and sandbox account for this inspection

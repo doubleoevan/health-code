@@ -40,7 +40,9 @@ test("check writes the report and its verified patch", async () => {
 			sandboxProvider: provider,
 			log: (line) => lines.push(line),
 			run: async (file, args) => {
-				commands.push([file, ...args.filter((argument) => !argument.includes("user."))].join(" "))
+				// keep the checkout's hooks away from the patched code
+				assert.ok(file !== "git" || args.includes("core.hooksPath=/dev/null"))
+				commands.push([file, ...args.filter((argument) => !/^(-c|(core|user)\..*)$/.test(argument))].join(" "))
 				return ""
 			},
 		})
@@ -61,11 +63,11 @@ test("check writes the report and its verified patch", async () => {
 		assert.match(branch ?? "", /^health-code\/[a-z0-9.-]+$/)
 		assert.deepEqual(
 			commands.map((command) => command.split(" ").slice(0, 2).join(" ")),
-			["git switch", "git -c", "git push", "gh api", "gh pr"],
+			["git switch", "git am", "git push", "git checkout", "gh api", "gh pr"],
 		)
 		assert.ok(commands[1]?.endsWith(join(output, patch)))
-		assert.ok(commands[3]?.includes(`state=open&head={owner}:${branch}`))
-		assert.ok(commands[4]?.includes(`--head ${branch}`) && commands[4].includes("Verdict: "))
+		assert.ok(commands[4]?.includes(`state=open&head={owner}:${branch}`))
+		assert.ok(commands[5]?.includes(`--head ${branch}`) && commands[5].includes("Verdict: "))
 
 		// update the pull request a second run finds open
 		const { upgrades } = JSON.parse(await readFile(join(output, "inspection-report.json"), "utf8"))
@@ -80,6 +82,22 @@ test("check writes the report and its verified patch", async () => {
 		})
 		assert.ok(reruns.at(-1)?.startsWith("gh api --method PATCH repos/{owner}/{repo}/pulls/7 "))
 		assert.ok(reruns.at(-1)?.includes("Verdict: ") && !reruns.some((command) => command.startsWith("gh pr create")))
+
+		// clear a patch that fails to apply and return to the starting commit
+		const failures: string[] = []
+		const failing = openPullRequest({
+			upgrade: upgrades[0],
+			output,
+			run: async (_file, args) => {
+				failures.push(args.slice(6).join(" "))
+				if (failures.length === 2) {
+					throw new Error("patch does not apply")
+				}
+				return ""
+			},
+		})
+		await assert.rejects(failing, /patch does not apply/)
+		assert.deepEqual(failures.slice(2), ["am --abort", "checkout -"])
 	} finally {
 		restore()
 		await rm(output, { recursive: true, force: true })

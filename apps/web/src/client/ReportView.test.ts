@@ -195,7 +195,7 @@ test("the summary names the outcome and whether a patch is available", async () 
 	// Point to CI when a working patch is withheld for its license.
 	const withheld = { ...card, license: null, upgrades: [{ ...tested, verdict: "Fixed" as const }] }
 	expect(toSummary(withheld)).toBe(
-		"A tested patch works but can’t be shown here because GitHub found no confirmed open-source license. Run the library in CI to get the patch.",
+		"A tested patch works but can’t be shown here because GitHub found no confirmed open-source license. Run Health Code in CI to get the patch.",
 	)
 
 	// Count the upgrades without a patch beside a ready one.

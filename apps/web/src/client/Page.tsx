@@ -1,7 +1,7 @@
 import type { UpgradeMenuTarget } from "health-code"
 import { type FormEvent, type KeyboardEvent, type ReactElement, useCallback, useEffect, useState } from "react"
 import {
-	ciSetupUrl,
+	continuousIntegrationSetupUrl,
 	readmeUrl,
 	replayRepositoryUrl,
 	runtaSignupUrl,
@@ -53,8 +53,13 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 		target?: UpgradeMenuTarget
 	} | null>(null)
 	const [pending, setPending] = useState(false)
-	const [offerCi, setOfferCi] = useState(false)
-	const submit = useSubmit(upgradeMenu?.id, { setPending, setError, setOfferCi, setVerification })
+	const [shouldOfferContinuousIntegration, setShouldOfferContinuousIntegration] = useState(false)
+	const submit = useSubmit(upgradeMenu?.id, {
+		setPending,
+		setError,
+		setShouldOfferContinuousIntegration,
+		setVerification,
+	})
 	const verified = useCallback(
 		(token: string): void => {
 			if (verification) {
@@ -67,8 +72,8 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 	const retry = useCallback((): void => {
 		setVerification(null)
 		setPending(false)
-		setOfferCi(true)
-		setError("Verification could not finish. Retry the inspection or run the library in CI.")
+		setShouldOfferContinuousIntegration(true)
+		setError("Verification could not finish. Retry the inspection or run Health Code in CI.")
 	}, [])
 	function handleSubmit(event: FormEvent<HTMLFormElement>): void {
 		event.preventDefault()
@@ -84,7 +89,7 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 			{/* submission error */}
 			{error && (
 				<p role="alert">
-					{error} {offerCi && <Link href={ciSetupUrl}>CI setup</Link>}
+					{error} {shouldOfferContinuousIntegration && <Link href={continuousIntegrationSetupUrl}>CI setup</Link>}
 				</p>
 			)}
 		</div>
@@ -131,7 +136,8 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 					{paused && (
 						<p role="status">
 							The hosted budget is reserved or temporarily unavailable. The daily allowance resets at 00:00 UTC. Cached
-							reports remain available. <Link href={ciSetupUrl}>Run it in CI with your Runta account</Link>.
+							reports remain available.{" "}
+							<Link href={continuousIntegrationSetupUrl}>Run it in CI with your Runta account</Link>.
 						</p>
 					)}
 					<form onSubmit={handleSubmit}>
@@ -151,7 +157,7 @@ function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "p
 								onChange={() => {
 									setVerification(null)
 									setError("")
-									setOfferCi(false)
+									setShouldOfferContinuousIntegration(false)
 								}}
 								defaultValue={replay ? replayRepositoryUrl : ""}
 							/>
@@ -172,12 +178,12 @@ function useSubmit(
 	{
 		setPending,
 		setError,
-		setOfferCi,
+		setShouldOfferContinuousIntegration,
 		setVerification,
 	}: {
 		setPending: (pending: boolean) => void
 		setError: (message: string) => void
-		setOfferCi: (offer: boolean) => void
+		setShouldOfferContinuousIntegration: (offer: boolean) => void
 		setVerification: (input: Verification) => void
 	},
 ): (repositoryUrl: string, target?: UpgradeMenuTarget, challenge?: string) => Promise<void> {
@@ -185,7 +191,7 @@ function useSubmit(
 		async (repositoryUrl: string, target?: UpgradeMenuTarget, challenge?: string): Promise<void> => {
 			setPending(true)
 			setError("")
-			setOfferCi(false)
+			setShouldOfferContinuousIntegration(false)
 			try {
 				const response = await fetch("/api/inspections", {
 					method: "POST",
@@ -206,7 +212,7 @@ function useSubmit(
 						setVerification({ siteKey: body.siteKey, repositoryUrl, target })
 						return
 					}
-					setOfferCi(Boolean(body.ciSetupUrl || challenge))
+					setShouldOfferContinuousIntegration(Boolean(body.continuousIntegrationSetupUrl || challenge))
 					throw new Error(body.message ?? "Could not start the inspection.")
 				}
 				window.location.assign(`/r/${body.id}`)
@@ -215,7 +221,7 @@ function useSubmit(
 				setPending(false)
 			}
 		},
-		[upgradeMenuId, setPending, setError, setOfferCi, setVerification],
+		[upgradeMenuId, setPending, setError, setShouldOfferContinuousIntegration, setVerification],
 	)
 }
 
@@ -381,7 +387,7 @@ export function Page(props: PageProps): ReactElement {
 				)}
 				<nav aria-label="Project">
 					<HeaderLink href={runtaSignupUrl}>Runta</HeaderLink>
-					<HeaderLink href={ciSetupUrl}>CI</HeaderLink>
+					<HeaderLink href={continuousIntegrationSetupUrl}>CI</HeaderLink>
 					<HeaderLink href={readmeUrl}>GitHub</HeaderLink>
 				</nav>
 				{props.snapshot?.card && !props.upgradeMenu && <Copy label="Copy report link" text={props.url} />}

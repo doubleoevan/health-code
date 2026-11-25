@@ -55,7 +55,7 @@ for name in health-code; do
   package=$(jq -r '.[0].name' "$manifest")
   archive=$(jq -r '.[0].filename' "$manifest")
 
-  # Compare against the exact tarball that passed the package smoke test.
+  # Compare against the exact tarball audited above.
   digest=$(jq -r '.[0].integrity' "$manifest")
   endpoint="$registry/$(jq -nr --arg package "$package" '$package|@uri')/$version"
   status=$(curl --silent --show-error --output "$artifacts/registry.json" --write-out '%{http_code}' "$endpoint")

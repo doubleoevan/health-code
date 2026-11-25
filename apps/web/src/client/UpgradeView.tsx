@@ -54,36 +54,43 @@ export function TestFileErrorList({ errors }: { errors: NonNullable<UpgradeCard[
 }
 
 export function CheckOutcome({ text }: { text: string }): ReactElement {
-	const outcome = text.replace(/&(?:lt|gt|quot|apos|amp);/g, (entity) => xmlEntities[entity] ?? entity)
-	if (outcome.length <= 160 && !outcome.includes("\n")) {
-		return <>{outcome}</>
+	const checkOutcome = text.replace(/&(?:lt|gt|quot|apos|amp);/g, (entity) => xmlEntities[entity] ?? entity)
+	if (checkOutcome.length <= 160 && !checkOutcome.includes("\n")) {
+		return <>{checkOutcome}</>
 	}
 
 	// show test counts before the long list of names
-	const countsMatch = /(\d+) passed, (\d+) failed, (\d+) skipped, (\d+) todo/.exec(outcome)
-	if (!countsMatch) {
+	const testCountsMatch = /(\d+) passed, (\d+) failed, (\d+) skipped, (\d+) todo/.exec(checkOutcome)
+	if (!testCountsMatch) {
 		return (
 			<details>
-				<summary>{`${outcome.slice(0, 100)}…`}</summary>
-				<p>{outcome}</p>
+				<summary>{`${checkOutcome.slice(0, 100)}…`}</summary>
+				<p>{checkOutcome}</p>
 			</details>
 		)
 	}
-	const counts = countsMatch.slice(1).map(Number)
+	const counts = testCountsMatch.slice(1).map(Number)
 	const total = counts.reduce((sum, count) => sum + count, 0)
 
 	// separate the totals from the failing test names. a saved report joins the names with commas
-	const totalsEnd = countsMatch.index + countsMatch[0].length
-	const namesText = outcome.slice(totalsEnd).replace(/^ · /, "")
-	const testNames = namesText ? namesText.split(namesText.includes("\n") ? "\n" : ", ") : []
+	const testTotalsEnd = testCountsMatch.index + testCountsMatch[0].length
+	const failingTestNamesText = checkOutcome.slice(testTotalsEnd).replace(/^ · /, "")
+	const failingTestNames = failingTestNamesText
+		? failingTestNamesText.split(failingTestNamesText.includes("\n") ? "\n" : ", ")
+		: []
 	return (
 		<details>
+			{/* total and failed counts */}
 			<summary>
-				{`${outcome.startsWith("failed") ? "failed · " : ""}${total.toLocaleString("en")} ${total === 1 ? "test" : "tests"} · ${counts[1]?.toLocaleString("en")} failed`}
+				{`${checkOutcome.startsWith("failed") ? "failed · " : ""}${total.toLocaleString("en")} ${total === 1 ? "test" : "tests"} · ${counts[1]?.toLocaleString("en")} failed`}
 			</summary>
-			<p>{outcome.slice(0, totalsEnd)}</p>
+
+			{/* measured totals */}
+			<p>{checkOutcome.slice(0, testTotalsEnd)}</p>
+
+			{/* failing test names */}
 			<ul className="test-names">
-				{testNames.map((testName, index) => (
+				{failingTestNames.map((testName, index) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: test names repeat and never reorder
 					<li key={index}>{testName}</li>
 				))}
@@ -92,7 +99,7 @@ export function CheckOutcome({ text }: { text: string }): ReactElement {
 	)
 }
 
-// the entities that older reports kept in test names
+// the XML entities a saved report can hold in test names
 const xmlEntities: Record<string, string> = { "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'", "&amp;": "&" }
 
 // Show a release summary with its section headings and list entries set apart.

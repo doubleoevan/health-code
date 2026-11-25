@@ -3,7 +3,7 @@ import { basename, join } from "node:path"
 import { parseArgs } from "node:util"
 import type { ModelRequestSandboxInspectionReport } from "health-code"
 import { z } from "zod"
-import { type Inspect, inspectWithAccount } from "./inspectWithAccount.ts"
+import { type InspectOptions, inspectWithAccount } from "./inspectWithAccount.ts"
 import { openPullRequest, type RunCommand } from "./openPullRequest.ts"
 import { type PersonalProvider, personalProvider } from "./personalModelRequestSandboxes.ts"
 import { accountToken, requireSettings } from "./readEnvironmentSettings.ts"
@@ -15,10 +15,10 @@ type CheckArguments = {
 	revision?: string
 	dependency?: string
 	to?: string
+	applicationEnvironment?: Record<string, string>
 
 	// where the results go
 	output: string
-	applicationEnvironment?: Record<string, string>
 	shouldOpenPullRequest: boolean
 }
 
@@ -50,7 +50,7 @@ export async function checkRepository(
 	const provider = sandboxProvider ?? (await personalProvider(accountToken(environment)))
 
 	// print step and sandbox progress without command output
-	const inspect = (choice: Partial<Parameters<Inspect>[0]>): Promise<ModelRequestSandboxInspectionReport> =>
+	const inspect = (choice: Partial<InspectOptions>): Promise<ModelRequestSandboxInspectionReport> =>
 		inspectWithAccount(
 			{
 				...choice,
@@ -113,8 +113,8 @@ async function removePreviousPatches(output: string): Promise<void> {
 // pin a requested dependency to the commit that lists it as eligible
 async function selectTarget(
 	{ revision, dependency, to }: CheckArguments,
-	inspect: (choice: Partial<Parameters<Inspect>[0]>) => Promise<ModelRequestSandboxInspectionReport>,
-): Promise<Partial<Parameters<Inspect>[0]>> {
+	inspect: (choice: Partial<InspectOptions>) => Promise<ModelRequestSandboxInspectionReport>,
+): Promise<Partial<InspectOptions>> {
 	if (!dependency) {
 		return { revision, limits: { maxUpgrades: 1 } }
 	}
@@ -165,10 +165,10 @@ type ParsedArguments = {
 		dependency?: string
 		to?: string
 		revision?: string
+		env: string[]
 
 		// where the results go
 		output: string
-		env: string[]
 		"pull-request": boolean
 	}
 	positionals: string[]

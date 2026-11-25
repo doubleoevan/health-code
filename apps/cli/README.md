@@ -28,7 +28,7 @@ You need Node 22.18 or later on the 22.x line. Node 24.11 or later also works.
 | `HEALTH_CODE_MODEL_PROTOCOL` | `anthropic` or `openai-compatible`. Defaults to `anthropic` for `https://api.anthropic.com` and `openai-compatible` for other hosts. Set `anthropic` for a proxy that uses the Anthropic API. |
 | `HEALTH_CODE_INPUT_USD_PER_MILLION` | Highest price per million input tokens. Defaults to `10`. |
 | `HEALTH_CODE_OUTPUT_USD_PER_MILLION` | Highest price per million output tokens. Defaults to `50`. |
-| `GITHUB_TOKEN` | Release notes and the public repository check. |
+| `GITHUB_TOKEN` | Higher GitHub rate limits when reading release notes. |
 
 The prices apply to every model you set and drive the spend limits. Set them when your model costs more than the defaults or to use more of each limit with a cheaper model. Run setup again after changing the host or protocol.
 
@@ -39,13 +39,13 @@ The prices apply to every model you set and drive the spend limits. Set them whe
 npx health-code check https://github.com/owner/repository --dependency zod --to 4.0.0
 ```
 
-Omit the target to test the first eligible upgrade. The command writes `inspection-report.json` and any `.patch` files to `health-code-report/`. Use `--output` to change the folder and `--revision` to pin a commit. It exits nonzero when the inspection fails or stops early. An upgrade without a patch still exits zero, so read its verdict in the report.
+Omit the target to test the first eligible upgrade. The command writes `inspection-report.json` and any `.patch` files to `health-code-report/`. Use `--output` to change the folder and `--revision` to pin a commit. It exits nonzero when the inspection fails or stops early. A cancelled job deletes its sandboxes before it exits. If CI kills the job first, delete any sandbox named `health-code-…` in the Runta dashboard. An upgrade without a patch still exits zero, so read its verdict in the report.
 
 Tests receive placeholder environment values. Supply a non-secret value with `--env NAME=value`, repeated as needed. The sandbox and its saved output can expose these values.
 
-Add `--pull-request` to open a pull request with the tested patches. Run it from a full checkout of the repository with `git` and `gh` available and `GH_TOKEN` set. The command applies the patches on a `health-code/<dependency>-<version>` branch at the inspected commit, pushes it and opens the pull request with the verdict and check results. Running the same upgrade again replaces that branch and updates its open pull request.
+Add `--pull-request` to open a pull request with the tested patches. Run it from a full checkout of the repository with `git` and `gh` available and `GH_TOKEN` set. The command applies the patches on a `health-code/<dependency>-<version>` branch at the inspected commit, pushes it and opens the pull request with the verdict and check results. Running the same upgrade again replaces that branch and updates its open pull request. Commits pushed to that branch by hand are lost, so merge or move them first. The checkout's Git hooks stay off for these steps and the checkout returns to its starting commit afterward.
 
-GitHub blocks this by default. Turn on **Allow GitHub Actions to create and approve pull requests** in the repository under Settings > Actions > General.
+GitHub blocks this by default. Turn on **Allow GitHub Actions to create and approve pull requests** in the repository under Settings > Actions > General. With `github.token` the pushed branch starts no other workflow. A personal access token in `GH_TOKEN` lets the push start your other workflows on the patched code before anyone reviews it.
 
 This GitHub Actions job tries the first eligible upgrade every Monday, opens a pull request and keeps the report:
 

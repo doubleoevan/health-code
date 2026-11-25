@@ -7,8 +7,11 @@ import { UserError } from "./userError.ts"
 type Upgrade = ModelRequestSandboxInspectionReport["upgrades"][number]
 export type RunCommand = (file: string, args: string[]) => Promise<string>
 
-// the committer for patches applied by the command
-const committer = ["-c", "user.name=Health Code", "-c", "user.email=health-code@users.noreply.github.com"]
+// the committer for patches applied by the command. the checkout's hooks stay off while it holds model-written code
+const gitSettings = [
+	...["-c", "core.hooksPath=/dev/null"],
+	...["-c", "user.name=Health Code", "-c", "user.email=health-code@users.noreply.github.com"],
+]
 
 /**
  * Applies an upgrade's tested patches on a new branch of the current checkout and opens or updates its pull request.
@@ -26,39 +29,49 @@ export async function openPullRequest({
 	const patches = [...upgrade.patches].sort(
 		(first, second) => Number(first.role !== "upgrade") - Number(second.role !== "upgrade"),
 	)
-	const base = patches[0]?.base
-	if (!base) {
+	const baseCommit = patches[0]?.base
+	if (!baseCommit) {
 		throw new UserError(`${upgrade.dependency} ${upgrade.to} has no tested patch to open a pull request with.`)
 	}
 
 	// start the branch at the commit the patches were tested on
 	const branch = `health-code/${`${upgrade.dependency}-${upgrade.to}`.replace(/[^a-z0-9.]+/gi, "-").replace(/^-|-$/g, "")}`
-	await run("git", ["switch", "--force-create", branch, base])
-	for (const patch of patches) {
-		await run("git", [...committer, "am", join(output, patch.filename)])
-	}
+	await run("git", [...gitSettings, "switch", "--force-create", branch, baseCommit])
+	try {
+		for (const patch of patches) {
+			await run("git", [...gitSettings, "am", join(output, patch.filename)])
+		}
 
-	// replace the branch from an earlier run of the same upgrade
-	await run("git", ["push", "--force", "origin", branch])
-	const title = `Upgrade ${upgrade.dependency} to ${upgrade.to}`
-	const body = toDescription(upgrade)
+		// replace the branch from an earlier run of the same upgrade
+		await run("git", [...gitSettings, "push", "--force", "origin", branch])
+	} catch (error) {
+		// clear an unfinished patch so the next run can switch branches
+		await run("git", [...gitSettings, "am", "--abort"]).catch(() => undefined)
+		throw error
+	} finally {
+		// return the checkout to the commit the job started on
+		await run("git", [...gitSettings, "checkout", "-"])
+	}
+	const pullRequestTitle = `Upgrade ${upgrade.dependency} to ${upgrade.to}`
+	const pullRequestBody = toPullRequestDescription(upgrade)
 
 	// find the branch's open pull request. the owner filter leaves out forks with the same branch name
-	const query = `repos/{owner}/{repo}/pulls?state=open&head={owner}:${branch}`
-	const openNumber = (await run("gh", ["api", query, "--jq", ".[0].number // empty"])).trim()
-	if (!openNumber) {
-		await run("gh", ["pr", "create", "--head", branch, "--title", title, "--body", body])
+	const openPullRequestQuery = `repos/{owner}/{repo}/pulls?state=open&head={owner}:${branch}`
+	const pullRequestNumber = (await run("gh", ["api", openPullRequestQuery, "--jq", ".[0].number // empty"])).trim()
+	if (!pullRequestNumber) {
+		await run("gh", ["pr", "create", "--head", branch, "--title", pullRequestTitle, "--body", pullRequestBody])
 		return branch
 	}
 
 	// replace the earlier run's results
-	const path = `repos/{owner}/{repo}/pulls/${openNumber}`
-	await run("gh", ["api", "--method", "PATCH", path, "--raw-field", `title=${title}`, "--raw-field", `body=${body}`])
+	const pullRequestPath = `repos/{owner}/{repo}/pulls/${pullRequestNumber}`
+	const pullRequestFields = ["--raw-field", `title=${pullRequestTitle}`, "--raw-field", `body=${pullRequestBody}`]
+	await run("gh", ["api", "--method", "PATCH", pullRequestPath, ...pullRequestFields])
 	return branch
 }
 
 // describe the result only with values the library sets
-function toDescription({ verdict, install, typecheck, tests }: Upgrade): string {
+function toPullRequestDescription({ verdict, install, typecheck, tests }: Upgrade): string {
 	return [
 		"[Health Code](https://runhealthcode.dev) tried this upgrade in a [Runta](https://runta.com) sandbox and retested the patch in a fresh checkout.",
 		"",
@@ -73,19 +86,19 @@ function toDescription({ verdict, install, typecheck, tests }: Upgrade): string 
 
 const execute = promisify(execFile)
 
-// name the missing tool or sign-in when a command fails
+// name the missing tool or sign-in when a command fails or stalls
 async function runCommand(file: string, args: string[]): Promise<string> {
 	try {
-		const { stdout } = await execute(file, args)
+		const { stdout } = await execute(file, args, { timeout: 120000 })
 		return stdout
 	} catch {
-		const step = args.find((argument) => !argument.startsWith("-") && !argument.includes("=")) ?? ""
+		const subcommand = args.find((argument) => !argument.startsWith("-") && !argument.includes("=")) ?? ""
 
 		// point at the GitHub setting that blocks pull requests from Actions
-		const setting =
+		const actionsHint =
 			file === "gh" ? " In GitHub Actions, allow it to create pull requests under Settings, Actions, General." : ""
 		throw new UserError(
-			`${file} ${step} failed. Run --pull-request from a full checkout of the repository with git and gh signed in.${setting}`,
+			`${file} ${subcommand} failed. Run --pull-request from a full checkout of the repository with git and gh signed in.${actionsHint}`,
 		)
 	}
 }

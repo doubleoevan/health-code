@@ -240,7 +240,7 @@ test("a budget refusal links to CI setup and explains the UTC reset on the home 
 
 	// Offer the same self-funded path in the API response and the server-rendered page.
 	const home = await (await app.request(origin)).text()
-	assert.ok(home.includes(problem.ciSetupUrl))
+	assert.ok(home.includes(problem.continuousIntegrationSetupUrl))
 	assert.ok(home.includes("Cached reports remain available"))
 	assert.equal(JSON.parse(store.admission.daily()[0]!.counts).budgetHits, 1)
 	worker.stop()

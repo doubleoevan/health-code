@@ -38,7 +38,7 @@ export async function verifyChallenge(
 	}).catch(() => null)
 	if (!response?.ok) {
 		await response?.body?.cancel()
-		throw new AdmissionError(503, "Verification is temporarily unavailable. Retry or run the library in CI.")
+		throw new AdmissionError(503, "Verification is temporarily unavailable. Retry or run Health Code in CI.")
 	}
 
 	// Bind the single-use response to this hostname and form action.
