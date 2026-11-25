@@ -20,9 +20,9 @@ The health inspector runs your checks in a Runta sandbox and tries to repair wha
 
 [Try the demo](https://runhealthcode.dev) · [Quick start](#quick-start) · [Packages](#packages) · [Architecture](#architecture)
 
-</div>
+<a href="https://runhealthcode.dev"><img src=".github/health-code-demo.gif" width="960" alt="Health Code demo: choose an upgrade, watch it run in a Runta sandbox and get a tested patch"></a>
 
-<!-- DEMO SITE VIDEO: replace this line with the video -->
+</div>
 
 <!-- MCP VIDEO: replace this line with the video -->
 
