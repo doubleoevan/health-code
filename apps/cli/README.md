@@ -43,7 +43,9 @@ Omit the target to test the first eligible upgrade. The command writes `inspecti
 
 Tests receive placeholder environment values. Supply a non-secret value with `--env NAME=value`, repeated as needed. The sandbox and its saved output can expose these values.
 
-Add `--pull-request` to open a pull request with the tested patches. Run it from a full checkout of the repository with `git` and `gh` available and `GH_TOKEN` set. The command applies the patches on a `health-code/<dependency>-<version>` branch at the inspected commit, pushes it and opens the pull request with the verdict and check results. Running the same upgrade again replaces that branch. The repository must allow GitHub Actions to create pull requests.
+Add `--pull-request` to open a pull request with the tested patches. Run it from a full checkout of the repository with `git` and `gh` available and `GH_TOKEN` set. The command applies the patches on a `health-code/<dependency>-<version>` branch at the inspected commit, pushes it and opens the pull request with the verdict and check results. Running the same upgrade again replaces that branch and updates its open pull request.
+
+GitHub blocks this by default. Turn on **Allow GitHub Actions to create and approve pull requests** in the repository under Settings > Actions > General.
 
 This GitHub Actions job tries the first eligible upgrade every Monday, opens a pull request and keeps the report:
 

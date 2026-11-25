@@ -86,7 +86,7 @@ export async function checkRepository(
 	for (const upgrade of request.shouldOpenPullRequest ? report.upgrades : []) {
 		if (upgrade.patches.length) {
 			const branch = await openPullRequest({ upgrade, output: request.output, run })
-			log(`Pull request opened from ${branch}`)
+			log(`Pull request ready from ${branch}`)
 		}
 	}
 	return { isComplete: !report.stoppedReason }

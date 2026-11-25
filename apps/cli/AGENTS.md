@@ -8,7 +8,7 @@ Sources, their tests and `src/fixtures/` sit in `src/`.
 | --- | --- |
 | `cli.ts` | Dispatch `check` or `setup` and print the usage for anything else. |
 | `checkRepository.ts` | Run `health-code check` for CI and write the report and patches. |
-| `openPullRequest.ts` | Apply an upgrade’s tested patches on a branch of the current checkout and open a pull request through `git` and `gh`. |
+| `openPullRequest.ts` | Apply an upgrade’s tested patches on a branch of the current checkout and open or update its pull request through `git` and `gh`. |
 | `readEnvironmentSettings.ts`, `userError.ts`, `configureModels.ts`, `inspectWithAccount.ts` | Read the required model settings through the library, name every missing one and run inspections with the account’s origin-bound credential. No model is chosen by default. |
 | `setupAccount.ts`, `probeModelRequestSandbox.ts` | Register or reuse the model key. Verify it with a request limited to one output token and confirm model request sandbox deletion before naming the CI settings. |
 | `personalModelRequestSandboxes.ts` | Record each intended model request sandbox allocation by account and host. Use the verified organization ID across token rotations. Recover allocations whose local owner process has exited. |

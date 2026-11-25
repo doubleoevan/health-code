@@ -47,7 +47,7 @@ export HEALTH_CODE_MODEL=claude-opus-5-5
 npx health-code setup
 ```
 
-Then add a job that tries an upgrade and opens a pull request with the tested patch:
+Add `RUNTA_TOKEN` to the repository's Actions secrets. Turn on **Allow GitHub Actions to create and approve pull requests** under Settings > Actions > General. Then add a job that tries an upgrade and opens a pull request with the tested patch:
 
 ```yaml
 name: Try dependency upgrades

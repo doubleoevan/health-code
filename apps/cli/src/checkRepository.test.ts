@@ -7,6 +7,7 @@ import { createFakeSandboxProvider } from "health-code"
 import { checkRepository, readCheckArguments } from "./checkRepository.ts"
 import { modelSettings } from "./fixtures/inspectionSettings.ts"
 import { modelRequestSandboxFixture } from "./fixtures/modelRequestSandboxInspection.ts"
+import { openPullRequest } from "./openPullRequest.ts"
 
 const repositoryUrl = "https://github.com/example/project"
 test("check arguments require a complete target and keep equals signs in test values", () => {
@@ -40,6 +41,7 @@ test("check writes the report and its verified patch", async () => {
 			log: (line) => lines.push(line),
 			run: async (file, args) => {
 				commands.push([file, ...args.filter((argument) => !argument.includes("user."))].join(" "))
+				return ""
 			},
 		})
 		assert.equal(result.isComplete, true)
@@ -59,10 +61,25 @@ test("check writes the report and its verified patch", async () => {
 		assert.match(branch ?? "", /^health-code\/[a-z0-9.-]+$/)
 		assert.deepEqual(
 			commands.map((command) => command.split(" ").slice(0, 2).join(" ")),
-			["git switch", "git -c", "git push", "gh pr"],
+			["git switch", "git -c", "git push", "gh api", "gh pr"],
 		)
 		assert.ok(commands[1]?.endsWith(join(output, patch)))
-		assert.ok(commands[3]?.includes(`--head ${branch}`) && commands[3].includes("Verdict: "))
+		assert.ok(commands[3]?.includes(`state=open&head={owner}:${branch}`))
+		assert.ok(commands[4]?.includes(`--head ${branch}`) && commands[4].includes("Verdict: "))
+
+		// update the pull request a second run finds open
+		const { upgrades } = JSON.parse(await readFile(join(output, "inspection-report.json"), "utf8"))
+		const reruns: string[] = []
+		await openPullRequest({
+			upgrade: upgrades[0],
+			output,
+			run: async (file, args) => {
+				reruns.push([file, ...args].join(" "))
+				return args.includes("--jq") ? "7\n" : ""
+			},
+		})
+		assert.ok(reruns.at(-1)?.startsWith("gh api --method PATCH repos/{owner}/{repo}/pulls/7 "))
+		assert.ok(reruns.at(-1)?.includes("Verdict: ") && !reruns.some((command) => command.startsWith("gh pr create")))
 	} finally {
 		restore()
 		await rm(output, { recursive: true, force: true })

@@ -74,6 +74,6 @@ console.log(report.upgrades[0].verdict, report.upgrades[0].patches)
 npx health-code check https://github.com/owner/repository --pull-request
 ```
 
-The command tries the first eligible upgrade, writes the Inspection Report and opens a pull request with the tested patch. The [CI guide](https://github.com/doubleoevan/health-code/blob/main/apps/cli/README.md#setup) lists the settings it needs and a GitHub Actions job.
+The command tries the first eligible upgrade, writes the Inspection Report and opens or updates a pull request with the tested patch. The [CI guide](https://github.com/doubleoevan/health-code/blob/main/apps/cli/README.md#setup) lists the settings it needs and a GitHub Actions job.
 
 [MIT License](https://github.com/doubleoevan/health-code/blob/main/LICENSE)
