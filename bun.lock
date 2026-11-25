@@ -21,10 +21,10 @@
     },
     "apps/cli": {
       "name": "@health-code/cli",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@runta/runta-sdk": "0.2.0",
-        "health-code": "0.2.1",
+        "health-code": "0.2.2",
         "zod": "4.6.7",
       },
     },
@@ -47,7 +47,7 @@
     },
     "packages/health-code": {
       "name": "health-code",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "bin": {
         "health-code": "dist/cli/cli.js",
       },
