@@ -1,12 +1,15 @@
-import { type FormEvent, type ReactElement, useEffect, useRef, useState } from "react"
+import { type ChangeEvent, type FormEvent, type ReactElement, useEffect, useRef, useState } from "react"
 import type { z } from "zod"
-import type { featureOutput, upgradeMenuOutput, upgradeMenuQuery } from "../browseUpgrades.ts"
-import { type Host, toFailureText } from "./connectHost.ts"
+import type { upgradeMenuOutput, upgradeMenuQuery } from "../browseUpgrades.ts"
+import { CurrentStep } from "./CurrentStep.tsx"
+import { callQuickTool, type Host, toFailureText, UndeliveredError } from "./connectHost.ts"
 import { toRepositoryName, toVersionChange } from "./labels.ts"
+import { ReleaseFeatures } from "./ReleaseFeatures.tsx"
 
 export type Menu = z.infer<typeof upgradeMenuOutput>
 type Target = Menu["dependencies"][number]["targets"][number]
 type Query = Pick<z.infer<typeof upgradeMenuQuery>, "order" | "search" | "readyOnly">
+type StartProgress = { key: string } & ({ kind: "starting" | "sent" } | { kind: "failed"; text: string })
 type MenuActions = { host: Host; onInspect: (inspectionId: string) => void }
 
 export function UpgradeMenu({
@@ -61,19 +64,49 @@ export function UpgradeMenu({
 
 	// reopen an inspection started from this menu
 	const [startedIds, setStartedIds] = useState<Record<string, string>>({})
-	async function handleTest({ dependency, to }: Target): Promise<void> {
+	const [startProgress, setStartProgress] = useState<StartProgress>()
+	async function handleTest(target: Target): Promise<void> {
+		const { dependency, to } = target
+		const key = toTargetKey(target)
 		setIsPending(true)
-		setFailure(undefined)
+		setStartProgress({ key, kind: "starting" })
 		try {
 			const selection = { upgradeMenuId: menu.upgradeMenuId, dependency, to }
 			const input = { repositoryUrl: menu.repository.url, selection }
-			const { inspectionId } = await host.callTool<{ inspectionId: string }>("start_inspection", input)
-			setStartedIds((earlier) => ({ ...earlier, [`${dependency} ${to}`]: inspectionId }))
+			const { inspectionId } = await callQuickTool<{ inspectionId: string }>(host, "start_inspection", input)
+			setStartedIds((earlier) => ({ ...earlier, [key]: inspectionId }))
+			setStartProgress(undefined)
 			onInspect(inspectionId)
 		} catch (error) {
-			setFailure(toFailureText(error))
+			setStartProgress(await askAgent(target, error))
 		}
 		setIsPending(false)
+	}
+
+	// hand the upgrade to the coding agent when the client drops the call
+	async function askAgent(target: Target, error: unknown): Promise<StartProgress> {
+		const key = toTargetKey(target)
+		const request = toTryRequest(menu.upgradeMenuId, target)
+		if (!(error instanceof UndeliveredError) || !request) {
+			return { key, kind: "failed", text: toFailureText(error) }
+		}
+		const unsent: StartProgress = { key, kind: "failed", text: `Tell your coding agent · ${request}` }
+		if (!host.canMessage()) {
+			return unsent
+		}
+		try {
+			await host.sendMessage(request)
+			return { key, kind: "sent" }
+		} catch {
+			return unsent
+		}
+	}
+
+	// show every upgrade again as soon as the search is cleared
+	function handleSearchChange(event: ChangeEvent<HTMLInputElement>): void {
+		if (event.currentTarget.value === "") {
+			event.currentTarget.form?.requestSubmit()
+		}
 	}
 
 	function handleSubmit(event: FormEvent<HTMLFormElement>): void {
@@ -88,38 +121,57 @@ export function UpgradeMenu({
 	const lastDependencyNumber = firstDependencyNumber + menu.dependencies.length - 1
 	return (
 		<section>
-			<h1>{toRepositoryName(menu.repository.url)}</h1>
-			<p className="muted">{"The health inspector tests each upgrade with your Runta account and model key."}</p>
+			{/* repository and inspected commit */}
+			<header>
+				<h1>Try an upgrade</h1>
+				<p className="digest">
+					<button type="button" className="link" onClick={() => host.openLink(menu.repository.url)}>
+						{toRepositoryName(menu.repository.url)}
+					</button>{" "}
+					· {menu.repository.commit.slice(0, 8)}
+				</p>
+			</header>
 
 			{/* dependency filters */}
 			<form className="filters" onSubmit={handleSubmit}>
 				<label>
-					Search dependencies <input type="search" name="search" defaultValue={query.search} maxLength={256} />
+					Search dependencies{" "}
+					<input
+						type="search"
+						name="search"
+						defaultValue={query.search}
+						maxLength={256}
+						onChange={handleSearchChange}
+					/>
 				</label>
 				<label>
 					Sort by{" "}
-					<select
-						name="order"
-						defaultValue={query.order}
-						onChange={(event) => event.currentTarget.form?.requestSubmit()}
-					>
-						<option value="minor">Minor upgrades first</option>
-						<option value="workspaces">Most workspaces first</option>
-						<option value="alphabetical">Alphabetical</option>
-					</select>
-				</label>
-				<label>
-					<input
-						type="checkbox"
-						name="ready"
-						defaultChecked={query.readyOnly}
-						onChange={(event) => event.currentTarget.form?.requestSubmit()}
-					/>{" "}
-					Patch available
+					<span className="sort-select">
+						<select
+							name="order"
+							defaultValue={query.order}
+							onChange={(event) => event.currentTarget.form?.requestSubmit()}
+						>
+							<option value="workspaces">Most workspaces first</option>
+							<option value="minor">Minor upgrades first</option>
+							<option value="alphabetical">Alphabetical</option>
+						</select>
+					</span>
 				</label>
 				<button type="submit" className="secondary" disabled={isPending}>
 					Search
 				</button>
+				{menu.hasTestedPatch && (
+					<label>
+						<input
+							type="checkbox"
+							name="ready"
+							defaultChecked={query.readyOnly}
+							onChange={(event) => event.currentTarget.form?.requestSubmit()}
+						/>{" "}
+						Patch available
+					</label>
+				)}
 			</form>
 			{menu.issue && <p role="status">{menu.issue}</p>}
 			{failure && <p role="alert">{failure}</p>}
@@ -130,19 +182,25 @@ export function UpgradeMenu({
 					<div className="dependency-heading">
 						<span>{`${firstDependencyNumber + index}.`}</span>
 						<h2>{group.dependency}</h2>
+						<p>
+							{group.workspaces} {group.workspaces === 1 ? "workspace" : "workspaces"}
+						</p>
 					</div>
-					{group.targets.map((target) => (
-						<TargetVersion
-							key={target.to}
-							host={host}
-							upgradeMenuId={menu.upgradeMenuId}
-							target={target}
-							startedId={startedIds[`${target.dependency} ${target.to}`]}
-							isPending={isPending}
-							onInspect={onInspect}
-							onTest={handleTest}
-						/>
-					))}
+					<ul>
+						{group.targets.map((target) => (
+							<TargetVersion
+								key={target.to}
+								host={host}
+								upgradeMenuId={menu.upgradeMenuId}
+								target={target}
+								startedId={startedIds[toTargetKey(target)]}
+								isPending={isPending}
+								progress={startProgress?.key === toTargetKey(target) ? startProgress : undefined}
+								onInspect={onInspect}
+								onTest={handleTest}
+							/>
+						))}
+					</ul>
 				</article>
 			))}
 			{menu.dependencies.length === 0 && <p role="status">No upgrades match these filters.</p>}
@@ -177,10 +235,14 @@ export function UpgradeMenu({
 
 function toQuery({ order, search, readyOnly }: Record<string, unknown>): Query {
 	return {
-		order: order === "workspaces" || order === "alphabetical" ? order : "minor",
+		order: order === "minor" || order === "alphabetical" ? order : "workspaces",
 		search: typeof search === "string" ? search : "",
 		readyOnly: readyOnly === true,
 	}
+}
+
+function toTargetKey({ dependency, to }: Target): string {
+	return `${dependency} ${to}`
 }
 
 function TargetVersion({
@@ -189,6 +251,7 @@ function TargetVersion({
 	target,
 	startedId,
 	isPending,
+	progress,
 	onInspect,
 	onTest,
 }: MenuActions & {
@@ -196,28 +259,12 @@ function TargetVersion({
 	target: Target
 	startedId?: string
 	isPending: boolean
+	progress?: StartProgress
 	onTest: (target: Target) => void
 }): ReactElement {
-	const [releaseFeaturePage, setReleaseFeaturePage] = useState(target.releaseFeatures)
-	const [isLoadingMore, setIsLoadingMore] = useState(false)
-	const [failure, setFailure] = useState<string>()
 	const { patch } = target
-
-	// add the next features below the ones already shown
-	async function handleMore(): Promise<void> {
-		const input = { upgradeMenuId, dependency: target.dependency, to: target.to, offset: releaseFeaturePage.nextOffset }
-		setIsLoadingMore(true)
-		setFailure(undefined)
-		try {
-			const next = await host.callTool<z.infer<typeof featureOutput>>("get_upgrade_features", input)
-			setReleaseFeaturePage({ ...next, features: [...releaseFeaturePage.features, ...next.features] })
-		} catch {
-			setFailure("Release notes could not be loaded.")
-		}
-		setIsLoadingMore(false)
-	}
 	return (
-		<div className="target">
+		<li>
 			{/* version change and its action */}
 			<div className="button-row">
 				<span>
@@ -239,31 +286,22 @@ function TargetVersion({
 				)}
 			</div>
 
-			{/* documented release features */}
-			{releaseFeaturePage.features.length > 0 && <strong>What’s new</strong>}
-			<ul>
-				{releaseFeaturePage.features.map((feature) => (
-					<li key={JSON.stringify([feature.source, feature.text])}>
-						{feature.text}{" "}
-						<button type="button" className="link" onClick={() => host.openLink(feature.source)}>
-							Release notes
-						</button>
-					</li>
-				))}
-			</ul>
-			{releaseFeaturePage.features.length === 0 && (
-				<p className="muted">
-					{releaseFeaturePage.sources.length
-						? "No feature entries identified in the available release notes."
-						: "Release notes unavailable for this upgrade."}
-				</p>
-			)}
-			{releaseFeaturePage.nextOffset !== null && (
-				<button type="button" className="secondary" disabled={isLoadingMore} onClick={handleMore}>
-					Show more
-				</button>
-			)}
-			{failure && <p role="alert">{failure}</p>}
-		</div>
+			{/* answer to the last click on this version */}
+			{progress?.kind === "starting" && <CurrentStep text="Starting inspection…" />}
+			{progress?.kind === "sent" && <p role="status">Sent to your coding agent.</p>}
+			{progress?.kind === "failed" && <p role="alert">{progress.text}</p>}
+
+			{/* release features for this version */}
+			<ReleaseFeatures host={host} upgradeMenuId={upgradeMenuId} target={target} />
+		</li>
 	)
+}
+
+// name the upgrade only by values with a checked format
+function toTryRequest(upgradeMenuId: string, { dependency, to }: Target): string | undefined {
+	const isPackageName = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/i.test(dependency)
+	const isVersion = /^\d+\.\d+\.\d+(?:[-+][0-9a-z.+-]+)?$/i.test(to)
+	return isPackageName && isVersion
+		? `Try the ${dependency} upgrade to ${to}. Call the Health Code get_upgrade tool with upgradeMenuId ${upgradeMenuId}, dependency ${dependency} and to ${to}.`
+		: undefined
 }

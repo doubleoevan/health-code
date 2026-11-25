@@ -30,12 +30,13 @@ export const selection = z.object({
 })
 export const upgradeMenuQuery = z.object({
 	upgradeMenuId: inspectionId,
-	order: z.enum(["minor", "alphabetical", "workspaces"]).default("minor"),
+	order: z.enum(["minor", "alphabetical", "workspaces"]).default("workspaces"),
 	search: z.string().max(256).default(""),
 	readyOnly: z.boolean().default(false),
 	offset: z.number().int().nonnegative().default(0),
 })
 const releaseFeatures = z.object({
+	pageSize: z.number(),
 	total: z.number(),
 	nextOffset: z.number().nullable(),
 	features: z.array(z.object({ text: z.string(), source: z.string(), workspaces: z.array(z.string()) })),
@@ -61,6 +62,7 @@ export const upgradeMenuOutput = z.object({
 	),
 	totalDependencies: z.number().describe("Dependencies that match the search and filters, across every page."),
 	nextOffset: z.number().nullable(),
+	hasTestedPatch: z.boolean(),
 	issue: z.string().optional(),
 })
 
@@ -124,6 +126,7 @@ export class UpgradeMenus {
 			})),
 			totalDependencies: groups.length,
 			nextOffset: end < groups.length ? end : null,
+			hasTestedPatch: targets.some((target) => target.patch),
 			issue,
 		}
 	}

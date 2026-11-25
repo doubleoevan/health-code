@@ -148,7 +148,7 @@ The MCP SHALL accept a repository URL in `list_upgrades` and return release feat
 #### Scenario: Browse a saved upgrade menu
 
 - **WHEN** the client uses `discover_upgrades` to inspect the lockfile and registry before installation or model calls, then reopens the upgrade menu with `list_upgrades`
-- **THEN** the upgrade menu groups eligible targets by dependency, supports name search, sorts by minor availability, name or declaring workspace count, and can filter to targets with a verified local upgrade patch.
+- **THEN** the upgrade menu groups eligible targets by dependency, supports name search, sorts by declaring workspace count by default, minor availability or name, and can filter to targets with a verified local upgrade patch.
 
 #### Scenario: Select one version
 
@@ -184,6 +184,11 @@ The server SHALL attach one app view to `list_upgrades`, `start_inspection` and 
 
 - **WHEN** a developer selects an upgrade in the view
 - **THEN** the view starts one inspection, follows its events and shows the Verdict, checks and patches when it finishes
+
+#### Scenario: The client drops the view's tool call
+
+- **WHEN** a developer selects an upgrade and the client refuses or never answers the call
+- **THEN** the view sends one message that names the upgrade menu, dependency and version, and the coding agent calls `get_upgrade`. The result shows the Verdict, checks and patch without another call.
 
 #### Scenario: Test an upgrade that is already running
 

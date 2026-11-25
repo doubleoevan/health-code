@@ -4,15 +4,17 @@ import { toEventLine, toSandboxEventLabel } from "../toEventLine.ts"
 import { CurrentStep } from "./CurrentStep.tsx"
 import { type Host, toFailureText } from "./connectHost.ts"
 import { type Progress, readEvents } from "./readEvents.ts"
-import { UpgradeResults } from "./UpgradeResults.tsx"
+import { type SelectedUpgrade, SelectedUpgradeResult, UpgradeResults } from "./UpgradeResults.tsx"
 
 export function InspectionView({
 	host,
 	inspectionId,
+	selected,
 	onBack,
 }: {
 	host: Host
 	inspectionId: string
+	selected?: SelectedUpgrade
 	onBack?: () => void
 }): ReactElement {
 	const [progress, setProgress] = useState<Progress>()
@@ -71,9 +73,11 @@ export function InspectionView({
 			</div>
 
 			{/* current step or failure */}
-			{(isRunning || !progress) && !failure && <CurrentStep text={progress?.currentStep ?? "Reading inspection…"} />}
+			{(isRunning || !progress) && !failure && !selected && (
+				<CurrentStep text={progress?.currentStep ?? "Reading inspection…"} />
+			)}
 			{progress?.failure && <p role="alert">{progress.failure}</p>}
-			{failure && (
+			{failure && !selected && (
 				<p className="button-row" role="alert">
 					{failure}
 					<button type="button" className="secondary" onClick={() => setAttempt(attempt + 1)}>
@@ -95,7 +99,11 @@ export function InspectionView({
 			)}
 
 			{/* verdicts and patches */}
-			{progress?.status === "complete" && <UpgradeResults host={host} inspectionId={inspectionId} />}
+			{selected ? (
+				<SelectedUpgradeResult host={host} inspectionId={inspectionId} selected={selected} />
+			) : (
+				progress?.status === "complete" && <UpgradeResults host={host} inspectionId={inspectionId} />
+			)}
 
 			{/* inspection log */}
 			{isSavedLogHidden ? (

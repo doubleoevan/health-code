@@ -1,5 +1,9 @@
 const requestFailed = "The request failed."
 
+// the waits for a client that never answers
+const answerTimeoutMs = 60_000
+const quickAnswerTimeoutMs = 8000
+
 // the JSON-RPC messages exchanged with the client
 type Message = {
 	jsonrpc: "2.0"
@@ -21,10 +25,15 @@ export type ToolResult = {
 	content?: { type: string; text?: string }[]
 }
 
+/**
+ * Reports a request that the client refused or never answered.
+ */
+export class UndeliveredError extends Error {}
+
 // the client actions available to the page
 export type Host = {
 	canMessage: () => boolean
-	callTool: <Output>(name: string, input: Record<string, unknown>) => Promise<Output>
+	callTool: <Output>(name: string, input: Record<string, unknown>, timeoutMs?: number) => Promise<Output>
 	sendMessage: (text: string) => Promise<void>
 	openLink: (url: string) => void
 }
@@ -56,11 +65,23 @@ export function connectHost(events: HostEvents): Host {
 	}
 
 	// resolve when the client answers the numbered request
-	function request(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+	function request(
+		method: string,
+		params: Record<string, unknown>,
+		timeoutMs?: number,
+	): Promise<Record<string, unknown>> {
 		const id = ++lastId
 		return new Promise((resolve, reject) => {
 			pending.set(id, { resolve, reject })
 			post({ id, method, params })
+
+			// stop waiting for a client that drops the request
+			if (timeoutMs !== undefined) {
+				setTimeout(() => {
+					pending.delete(id)
+					reject(new UndeliveredError("The client did not answer."))
+				}, timeoutMs)
+			}
 		})
 	}
 
@@ -78,7 +99,7 @@ export function connectHost(events: HostEvents): Host {
 		const call = pending.get(Number(data.id))
 		pending.delete(Number(data.id))
 		if (data.error) {
-			call?.reject(new Error(data.error.message ?? "The client refused the request."))
+			call?.reject(new UndeliveredError(data.error.message ?? "The client refused the request."))
 		} else {
 			call?.resolve(data.result ?? {})
 		}
@@ -137,8 +158,8 @@ export function connectHost(events: HostEvents): Host {
 	// expose the client to the screens
 	return {
 		canMessage: () => Boolean(capabilities.message),
-		async callTool<Output>(name: string, input: Record<string, unknown>): Promise<Output> {
-			const result: ToolResult = await request("tools/call", { name, arguments: input })
+		async callTool<Output>(name: string, input: Record<string, unknown>, timeoutMs = answerTimeoutMs): Promise<Output> {
+			const result: ToolResult = await request("tools/call", { name, arguments: input }, timeoutMs)
 			if (result.isError || !result.structuredContent) {
 				throw new Error(toErrorText(result))
 			}
@@ -147,7 +168,7 @@ export function connectHost(events: HostEvents): Host {
 
 		// report a message that the client declines
 		async sendMessage(text): Promise<void> {
-			const result = await request("ui/message", { role: "user", content: [{ type: "text", text }] })
+			const result = await request("ui/message", { role: "user", content: [{ type: "text", text }] }, answerTimeoutMs)
 			if (result.isError) {
 				throw new Error("The client did not accept the message.")
 			}
@@ -158,6 +179,13 @@ export function connectHost(events: HostEvents): Host {
 			}
 		},
 	}
+}
+
+/**
+ * Waits only briefly for a tool that answers at once.
+ */
+export function callQuickTool<Output>(host: Host, name: string, input: Record<string, unknown>): Promise<Output> {
+	return host.callTool<Output>(name, input, quickAnswerTimeoutMs)
 }
 
 /**

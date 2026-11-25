@@ -5,12 +5,13 @@ import { connectHost, type ToolResult, toErrorText } from "./connectHost.ts"
 import { InspectionView } from "./InspectionView.tsx"
 import { toRepositoryName } from "./labels.ts"
 import { type Menu, UpgradeMenu } from "./UpgradeMenu.tsx"
+import { type SelectedUpgrade, toSelectedUpgrade } from "./UpgradeResults.tsx"
 
 type Screen =
 	| { kind: "waiting"; text: string }
 	| { kind: "failed"; text: string }
 	| { kind: "menu"; menu: Menu; input: Record<string, unknown> }
-	| { kind: "inspection"; inspectionId: string }
+	| { kind: "inspection"; inspectionId: string; selected?: SelectedUpgrade }
 
 // remember the filters behind the page that the tool result shows
 let toolInput: Record<string, unknown> = {}
@@ -33,9 +34,10 @@ function subscribeToScreen(onChange: () => void): () => void {
 const host = connectHost({
 	onToolInput(input) {
 		toolInput = input
-		const { repositoryUrl } = input
+		const { repositoryUrl, dependency, to } = input
 		const name = typeof repositoryUrl === "string" ? toRepositoryName(repositoryUrl) : undefined
-		handleScreen({ kind: "waiting", text: name ? `Reading ${name}…` : "Working…" })
+		const upgrade = dependency && to ? `Trying ${dependency} ${to} in a Runta sandbox…` : undefined
+		handleScreen({ kind: "waiting", text: upgrade ?? (name ? `Reading ${name}…` : "Working…") })
 	},
 	onToolResult: (result) => handleScreen(toScreen(result)),
 	onToolCancelled: () => handleScreen({ kind: "failed", text: "The request was cancelled." }),
@@ -50,7 +52,11 @@ function toScreen(result: ToolResult): Screen {
 	// tell the upgrade menu apart from one inspection
 	return Array.isArray(details.dependencies)
 		? { kind: "menu", menu: details as Menu, input: toolInput }
-		: { kind: "inspection", inspectionId: String(details.inspectionId) }
+		: {
+				kind: "inspection",
+				inspectionId: String(details.inspectionId),
+				selected: toSelectedUpgrade(details, toolInput),
+			}
 }
 
 function App(): ReactElement {
@@ -86,6 +92,7 @@ function App(): ReactElement {
 					key={inspectionId}
 					host={host}
 					inspectionId={inspectionId}
+					selected={screen.kind === "inspection" ? screen.selected : undefined}
 					onBack={selectedInspectionId ? () => setSelected(undefined) : undefined}
 				/>
 			)}

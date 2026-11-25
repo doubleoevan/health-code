@@ -129,6 +129,9 @@ test("replay delivers exact Patch pages and durable application results", async 
 		})
 		assert.deepEqual([pastLastPage.totalDependencies, pastLastPage.dependencies], [2, []])
 
+		// Report a patch that is on another page.
+		assert.equal(pastLastPage.hasTestedPatch, true)
+
 		// Reopen the upgrade menu with the same GitHub repository under another capitalization.
 		const upgradeMenuId = randomUUID()
 		await store.save({

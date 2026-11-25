@@ -1,13 +1,17 @@
-import { type ReactElement, useEffect, useState } from "react"
+import { type ReactElement, type ReactNode, useEffect, useState } from "react"
 import type { z } from "zod"
-import type { upgradeResultsOutput } from "../browseUpgrades.ts"
+import type { selectedOutput, upgradeResultsOutput } from "../browseUpgrades.ts"
 import type { patchOutput } from "../fetchPatch.ts"
 import { type Host, toFailureText } from "./connectHost.ts"
 import { toVersionChange } from "./labels.ts"
 
 type Results = z.infer<typeof upgradeResultsOutput>
 type Upgrade = Results["upgrades"][number]
-type Patch = Upgrade["patches"][number]
+type Patch = Pick<Upgrade["patches"][number], "sha256" | "role">
+type UpgradeSummary = Omit<Upgrade, "patches">
+
+// the upgrade returned with the tool result that opened the page
+export type SelectedUpgrade = z.infer<typeof selectedOutput> & { dependency: string; to: string }
 type InspectionSource = { host: Host; inspectionId: string }
 
 export function UpgradeResults({ host, inspectionId }: InspectionSource): ReactElement {
@@ -30,18 +34,49 @@ export function UpgradeResults({ host, inspectionId }: InspectionSource): ReactE
 			{results.stoppedReason && <p role="status">{results.stoppedReason}</p>}
 			{results.upgrades.length === 0 && <p role="status">No upgrades were tested.</p>}
 			{results.upgrades.map((upgrade) => (
-				<UpgradeResult
-					key={`${upgrade.dependency} ${upgrade.to}`}
-					host={host}
-					inspectionId={inspectionId}
-					upgrade={upgrade}
-				/>
+				<UpgradeResult key={`${upgrade.dependency} ${upgrade.to}`} upgrade={upgrade}>
+					{upgrade.patches.map((patch) => (
+						<PatchView key={patch.sha256} host={host} inspectionId={inspectionId} patch={patch} />
+					))}
+				</UpgradeResult>
 			))}
 		</>
 	)
 }
 
-function UpgradeResult({ host, inspectionId, upgrade }: InspectionSource & { upgrade: Upgrade }): ReactElement {
+/**
+ * Reads the selected upgrade from a tool result and its input.
+ */
+export function toSelectedUpgrade(
+	details: Record<string, unknown>,
+	{ dependency, to }: Record<string, unknown>,
+): SelectedUpgrade | undefined {
+	const isSelected = typeof dependency === "string" && typeof to === "string" && "checks" in details
+	return isSelected ? ({ ...details, dependency, to } as SelectedUpgrade) : undefined
+}
+
+export function SelectedUpgradeResult({
+	host,
+	inspectionId,
+	selected,
+}: InspectionSource & { selected: SelectedUpgrade }): ReactElement {
+	const { patch, ...upgrade } = selected
+	const text = patch?.nextOffset === null ? patch.text : undefined
+	return (
+		<UpgradeResult upgrade={upgrade}>
+			{patch && (
+				<PatchView
+					host={host}
+					inspectionId={inspectionId}
+					patch={{ sha256: patch.sha256, role: "upgrade" }}
+					savedText={text}
+				/>
+			)}
+		</UpgradeResult>
+	)
+}
+
+function UpgradeResult({ upgrade, children }: { upgrade: UpgradeSummary; children: ReactNode }): ReactElement {
 	const { dependency, verdict, reason, checks } = upgrade
 	const isPositive = verdict?.startsWith("Fixed") || verdict === "Passes as is"
 	return (
@@ -52,7 +87,7 @@ function UpgradeResult({ host, inspectionId, upgrade }: InspectionSource & { upg
 				<strong className={isPositive ? "verdict positive" : "verdict"}>{verdict ?? "Verdict unavailable"}</strong>
 			</header>
 			<p>
-				<code>{toVersionChange(upgrade.from ?? {}, upgrade.to ?? "unknown")}</code>
+				<code>{upgrade.from ? toVersionChange(upgrade.from, upgrade.to ?? "unknown") : upgrade.to}</code>
 			</p>
 			{reason && <p>{`Why no tested patch is available · ${reason}`}</p>}
 
@@ -73,9 +108,7 @@ function UpgradeResult({ host, inspectionId, upgrade }: InspectionSource & { upg
 			</dl>
 
 			{/* tested patches */}
-			{upgrade.patches.map((patch) => (
-				<PatchView key={patch.sha256} host={host} inspectionId={inspectionId} patch={patch} />
-			))}
+			{children}
 		</article>
 	)
 }
@@ -83,7 +116,12 @@ function UpgradeResult({ host, inspectionId, upgrade }: InspectionSource & { upg
 // keep the page responsive on a large patch
 const maximumShownCharacters = 100_000
 
-function PatchView({ host, inspectionId, patch }: InspectionSource & { patch: Patch }): ReactElement {
+function PatchView({
+	host,
+	inspectionId,
+	patch,
+	savedText,
+}: InspectionSource & { patch: Patch; savedText?: string }): ReactElement {
 	const [text, setText] = useState<string>()
 	const [status, setStatus] = useState<string>()
 	const [isPending, setIsPending] = useState(false)
@@ -105,7 +143,7 @@ function PatchView({ host, inspectionId, patch }: InspectionSource & { patch: Pa
 	async function handleShow(): Promise<void> {
 		setIsPending(true)
 		try {
-			setText(await readPatch({ host, inspectionId, sha256: patch.sha256 }))
+			setText(savedText ?? (await readPatch({ host, inspectionId, sha256: patch.sha256 })))
 		} catch (error) {
 			setStatus(toFailureText(error))
 		}
