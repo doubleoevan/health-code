@@ -54,24 +54,46 @@ export function TestFileErrorList({ errors }: { errors: NonNullable<UpgradeCard[
 }
 
 export function CheckOutcome({ text }: { text: string }): ReactElement {
-	if (text.length <= 160) {
-		return <>{text}</>
+	const outcome = text.replace(/&(?:lt|gt|quot|apos|amp);/g, (entity) => xmlEntities[entity] ?? entity)
+	if (outcome.length <= 160 && !outcome.includes("\n")) {
+		return <>{outcome}</>
 	}
 
 	// show test counts before the long list of names
-	const counts = /(\d+) passed, (\d+) failed, (\d+) skipped, (\d+) todo/.exec(text)?.slice(1).map(Number)
-	const total = counts?.reduce((sum, count) => sum + count, 0)
+	const countsMatch = /(\d+) passed, (\d+) failed, (\d+) skipped, (\d+) todo/.exec(outcome)
+	if (!countsMatch) {
+		return (
+			<details>
+				<summary>{`${outcome.slice(0, 100)}…`}</summary>
+				<p>{outcome}</p>
+			</details>
+		)
+	}
+	const counts = countsMatch.slice(1).map(Number)
+	const total = counts.reduce((sum, count) => sum + count, 0)
+
+	// separate the totals from the failing test names. a saved report joins the names with commas
+	const totalsEnd = countsMatch.index + countsMatch[0].length
+	const namesText = outcome.slice(totalsEnd).replace(/^ · /, "")
+	const testNames = namesText ? namesText.split(namesText.includes("\n") ? "\n" : ", ") : []
 	return (
 		<details>
 			<summary>
-				{counts
-					? `${text.startsWith("failed") ? "failed · " : ""}${total?.toLocaleString("en")} ${total === 1 ? "test" : "tests"} · ${counts[1]?.toLocaleString("en")} failed`
-					: `${text.slice(0, 100)}…`}
+				{`${outcome.startsWith("failed") ? "failed · " : ""}${total.toLocaleString("en")} ${total === 1 ? "test" : "tests"} · ${counts[1]?.toLocaleString("en")} failed`}
 			</summary>
-			<p>{text}</p>
+			<p>{outcome.slice(0, totalsEnd)}</p>
+			<ul className="test-names">
+				{testNames.map((testName, index) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: test names repeat and never reorder
+					<li key={index}>{testName}</li>
+				))}
+			</ul>
 		</details>
 	)
 }
+
+// the entities that older reports kept in test names
+const xmlEntities: Record<string, string> = { "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'", "&amp;": "&" }
 
 // Show a release summary with its section headings and list entries set apart.
 function ReleaseSummary({ text }: { text: string }): ReactElement {

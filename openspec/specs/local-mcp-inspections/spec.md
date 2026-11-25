@@ -190,6 +190,11 @@ The server SHALL attach one app view to `list_upgrades`, `start_inspection` and 
 - **WHEN** a developer selects an upgrade and the client refuses or never answers the call
 - **THEN** the view sends one message that names the upgrade menu, dependency and version, and the coding agent calls `get_upgrade`. The result shows the Verdict, checks and patch without another call.
 
+#### Scenario: Ask the coding agent from the view
+
+- **WHEN** a developer asks the coding agent to try an upgrade in a client that accepts messages
+- **THEN** the view sends the same message without calling a tool first
+
 #### Scenario: Test an upgrade that is already running
 
 - **WHEN** a caller requests the same upgrade at the same commit while a test from `start_inspection` is running

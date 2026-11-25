@@ -78,17 +78,24 @@ export function UpgradeMenu({
 			setStartProgress(undefined)
 			onInspect(inspectionId)
 		} catch (error) {
-			setStartProgress(await askAgent(target, error))
+			const isDropped = error instanceof UndeliveredError
+			setStartProgress(isDropped ? await askAgent(target) : { key, kind: "failed", text: toFailureText(error) })
 		}
 		setIsPending(false)
 	}
 
-	// hand the upgrade to the coding agent when the client drops the call
-	async function askAgent(target: Target, error: unknown): Promise<StartProgress> {
+	async function handleAsk(target: Target): Promise<void> {
+		setIsPending(true)
+		setStartProgress(await askAgent(target))
+		setIsPending(false)
+	}
+
+	// hand the upgrade to the coding agent in one chat message
+	async function askAgent(target: Target): Promise<StartProgress> {
 		const key = toTargetKey(target)
 		const request = toTryRequest(menu.upgradeMenuId, target)
-		if (!(error instanceof UndeliveredError) || !request) {
-			return { key, kind: "failed", text: toFailureText(error) }
+		if (!request) {
+			return { key, kind: "failed", text: "Ask your coding agent to try this upgrade." }
 		}
 		const unsent: StartProgress = { key, kind: "failed", text: `Tell your coding agent · ${request}` }
 		if (!host.canMessage()) {
@@ -198,6 +205,7 @@ export function UpgradeMenu({
 								progress={startProgress?.key === toTargetKey(target) ? startProgress : undefined}
 								onInspect={onInspect}
 								onTest={handleTest}
+								onAsk={handleAsk}
 							/>
 						))}
 					</ul>
@@ -254,6 +262,7 @@ function TargetVersion({
 	progress,
 	onInspect,
 	onTest,
+	onAsk,
 }: MenuActions & {
 	upgradeMenuId: string
 	target: Target
@@ -261,6 +270,7 @@ function TargetVersion({
 	isPending: boolean
 	progress?: StartProgress
 	onTest: (target: Target) => void
+	onAsk: (target: Target) => void
 }): ReactElement {
 	const { patch } = target
 	return (
@@ -277,6 +287,11 @@ function TargetVersion({
 				) : (
 					<button type="button" disabled={isPending} onClick={() => onTest(target)}>
 						Try upgrade
+					</button>
+				)}
+				{!patch && host.canMessage() && (
+					<button type="button" className="secondary" disabled={isPending} onClick={() => onAsk(target)}>
+						Ask coding agent
 					</button>
 				)}
 				{startedId && !patch && (

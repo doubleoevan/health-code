@@ -492,6 +492,14 @@ dd {
 details > :not(summary) {
 	margin-inline-start: 1.25rem;
 }
+.test-names {
+	max-height: 18rem;
+	overflow-y: auto;
+	padding-block: var(--inline-gap);
+	border: 1px solid var(--rule);
+	border-radius: 0.5rem;
+	background: var(--panel);
+}
 summary {
 	cursor: pointer;
 	padding: 0.3rem 0;

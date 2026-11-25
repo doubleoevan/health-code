@@ -136,7 +136,7 @@ export function toCheckText(check: CheckResult): string {
 
 	// Include failing test names alongside measured totals.
 	if (check.status === "failed" && check.failingTests.length) {
-		text += ` · ${check.failingTests.map((test) => test.name ?? test.file).join(", ")}`
+		text += ` · ${check.failingTests.map((test) => test.name ?? test.file).join("\n")}`
 	}
 	return text
 }
