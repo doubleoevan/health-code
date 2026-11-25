@@ -4,6 +4,7 @@ import { parseArgs } from "node:util"
 import type { ModelRequestSandboxInspectionReport } from "health-code"
 import { z } from "zod"
 import { type Inspect, inspectWithAccount } from "./inspectWithAccount.ts"
+import { openPullRequest, type RunCommand } from "./openPullRequest.ts"
 import { type PersonalProvider, personalProvider } from "./personalModelRequestSandboxes.ts"
 import { accountToken, requireSettings } from "./readEnvironmentSettings.ts"
 import { toEventLine } from "./toEventLine.ts"
@@ -14,13 +15,16 @@ type CheckArguments = {
 	revision?: string
 	dependency?: string
 	to?: string
+
+	// where the results go
 	output: string
 	applicationEnvironment?: Record<string, string>
+	shouldOpenPullRequest: boolean
 }
 
 // the arguments shown for an invalid command
 export const checkUsage =
-	"Usage: health-code check <repo-url> [--dependency <name> --to <version>] [--revision <sha>] [--env NAME=value] [--output <folder>]"
+	"Usage: health-code check <repo-url> [--dependency <name> --to <version>] [--revision <sha>] [--env NAME=value] [--output <folder>] [--pull-request]"
 
 /**
  * Tests one upgrade and writes its Inspection Report and patches for a CI job.
@@ -32,11 +36,13 @@ export async function checkRepository(
 		signal,
 		sandboxProvider,
 		log = console.log,
+		run,
 	}: {
 		environment: NodeJS.ProcessEnv
 		signal: AbortSignal
 		sandboxProvider?: PersonalProvider
 		log?: (line: string) => void
+		run?: RunCommand
 	},
 ): Promise<{ isComplete: boolean }> {
 	const request = readCheckArguments(args)
@@ -75,6 +81,14 @@ export async function checkRepository(
 		)
 	}
 	log(`Report written to ${request.output}`)
+
+	// hand each tested patch to the repository as a pull request
+	for (const upgrade of request.shouldOpenPullRequest ? report.upgrades : []) {
+		if (upgrade.patches.length) {
+			const branch = await openPullRequest({ upgrade, output: request.output, run })
+			log(`Pull request opened from ${branch}`)
+		}
+	}
 	return { isComplete: !report.stoppedReason }
 }
 
@@ -141,12 +155,22 @@ export function readCheckArguments(args: string[]): CheckArguments {
 		to: values.to,
 		output: values.output,
 		applicationEnvironment: pairs.length ? Object.fromEntries(pairs) : undefined,
+		shouldOpenPullRequest: values["pull-request"],
 	}
 }
 
 // the options before target validation
 type ParsedArguments = {
-	values: { dependency?: string; to?: string; revision?: string; output: string; env: string[] }
+	values: {
+		dependency?: string
+		to?: string
+		revision?: string
+
+		// where the results go
+		output: string
+		env: string[]
+		"pull-request": boolean
+	}
 	positionals: string[]
 }
 
@@ -162,6 +186,7 @@ function parseCheckArguments(args: string[]): ParsedArguments {
 				revision: { type: "string" },
 				output: { type: "string", default: "health-code-report" },
 				env: { type: "string", multiple: true, default: [] },
+				"pull-request": { type: "boolean", default: false },
 			},
 		})
 	} catch {

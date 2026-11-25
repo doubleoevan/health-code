@@ -32,11 +32,15 @@ test("check writes the report and its verified patch", async () => {
 		await writeFile(join(output, "kept.txt"), "kept")
 
 		// run the same paid entry point a CI job uses
-		const result = await checkRepository([repositoryUrl, "--output", output], {
+		const commands: string[] = []
+		const result = await checkRepository([repositoryUrl, "--output", output, "--pull-request"], {
 			environment: { ...modelSettings, RUNTA_TOKEN: "runta-token", GITHUB_TOKEN: "github-token" },
 			signal: new AbortController().signal,
 			sandboxProvider: provider,
 			log: (line) => lines.push(line),
+			run: async (file, args) => {
+				commands.push([file, ...args.filter((argument) => !argument.includes("user."))].join(" "))
+			},
 		})
 		assert.equal(result.isComplete, true)
 
@@ -49,6 +53,16 @@ test("check writes the report and its verified patch", async () => {
 
 		// report the number of saved patches
 		assert.ok(lines.some((line) => line.endsWith("1 patch")))
+
+		// apply the saved patch on its own branch and open one pull request
+		const branch = commands[0]?.split(" ")[3]
+		assert.match(branch ?? "", /^health-code\/[a-z0-9.-]+$/)
+		assert.deepEqual(
+			commands.map((command) => command.split(" ").slice(0, 2).join(" ")),
+			["git switch", "git -c", "git push", "gh pr"],
+		)
+		assert.ok(commands[1]?.endsWith(join(output, patch)))
+		assert.ok(commands[3]?.includes(`--head ${branch}`) && commands[3].includes("Verdict: "))
 	} finally {
 		restore()
 		await rm(output, { recursive: true, force: true })

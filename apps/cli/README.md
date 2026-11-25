@@ -2,7 +2,7 @@
 
 [npm](https://www.npmjs.com/package/health-code) · [GitHub](https://github.com/doubleoevan/health-code) · [Demo](https://runhealthcode.dev)
 
-Try a dependency upgrade on a public GitHub repository from a CI job. The upgraded code runs in a Runta sandbox on your own Runta account. Your pipeline receives an Inspection Report and a tested patch.
+Try a dependency upgrade on a public GitHub repository from a CI job. The upgraded code runs in a Runta sandbox on your own Runta account. Your pipeline receives an Inspection Report and a pull request with the tested patch.
 
 ## Setup
 
@@ -43,9 +43,9 @@ Omit the target to test the first eligible upgrade. The command writes `inspecti
 
 Tests receive placeholder environment values. Supply a non-secret value with `--env NAME=value`, repeated as needed. The sandbox and its saved output can expose these values.
 
-Your pipeline can apply a patch with `git am` and open a pull request with its own token.
+Add `--pull-request` to open a pull request with the tested patches. Run it from a full checkout of the repository with `git` and `gh` available and `GH_TOKEN` set. The command applies the patches on a `health-code/<dependency>-<version>` branch at the inspected commit, pushes it and opens the pull request with the verdict and check results. Running the same upgrade again replaces that branch. The repository must allow GitHub Actions to create pull requests.
 
-This GitHub Actions job tries the first eligible upgrade every Monday and keeps the report and patches:
+This GitHub Actions job tries the first eligible upgrade every Monday, opens a pull request and keeps the report:
 
 ```yaml
 name: Try dependency upgrades
@@ -53,18 +53,25 @@ on:
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
 jobs:
   health-code:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - run: npx health-code check https://github.com/${{ github.repository }}
+      - run: npx health-code check https://github.com/${{ github.repository }} --pull-request
         env:
           RUNTA_TOKEN: ${{ secrets.RUNTA_TOKEN }}
           HEALTH_CODE_MODEL_HOST: https://api.anthropic.com
           HEALTH_CODE_MODEL: claude-opus-5-5
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v4
         with:
           name: health-code-report

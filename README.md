@@ -26,7 +26,7 @@ The health inspector runs your checks in a Runta sandbox and tries to repair wha
 
 ## What it does
 
-Pick an upgrade. The health inspector tries it on your code. It attempts to repair what breaks and retests the patch. You get a report with a tested patch when it works.
+Pick an upgrade. The health inspector tries it on your code. It attempts to repair what breaks and retests the patch. In CI it opens a pull request with the tested patch.
 
 The upgraded code runs in a Runta sandbox with the network locked to package registries. Your model key and your CI secrets stay outside it.
 
@@ -47,7 +47,7 @@ export HEALTH_CODE_MODEL=claude-opus-5-5
 npx health-code setup
 ```
 
-Then add a job that tries an upgrade and keeps the report and patch:
+Then add a job that tries an upgrade and opens a pull request with the tested patch:
 
 ```yaml
 name: Try dependency upgrades
@@ -55,18 +55,25 @@ on:
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
 jobs:
   health-code:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - run: npx health-code check https://github.com/${{ github.repository }}
+      - run: npx health-code check https://github.com/${{ github.repository }} --pull-request
         env:
           RUNTA_TOKEN: ${{ secrets.RUNTA_TOKEN }}
           HEALTH_CODE_MODEL_HOST: https://api.anthropic.com
           HEALTH_CODE_MODEL: claude-opus-5-5
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v4
         with:
           name: health-code-report

@@ -45,7 +45,7 @@ The caller SHALL fund sandbox, model request sandbox and model use. The caller S
 
 ### Requirement: Check one upgrade in CI
 
-The `health-code check` command SHALL test one eligible upgrade with the caller's account, write the Inspection Report and each verified mailbox to the output folder and print step progress. A partial report or a failed inspection SHALL exit nonzero. Delivery of a pull request belongs to the caller's pipeline.
+The `health-code check` command SHALL test one eligible upgrade with the caller's account, write the Inspection Report and each verified mailbox to the output folder and print step progress. A partial report or a failed inspection SHALL exit nonzero.
 
 #### Scenario: A pipeline tests a chosen version
 
@@ -56,6 +56,30 @@ The `health-code check` command SHALL test one eligible upgrade with the caller'
 
 - **WHEN** the process receives SIGTERM or SIGINT
 - **THEN** the inspection stops and deletes its sandboxes before the process exits.
+
+### Requirement: Open a pull request
+
+With `--pull-request` the command SHALL apply each upgrade’s tested patches on its own branch of the current checkout at the inspected commit, push the branch and open one pull request through the caller’s `git` and `gh`. The pull request SHALL state the Verdict and check results and include no repository, release or command text. The command SHALL hold no GitHub credential of its own.
+
+#### Scenario: A tested patch exists
+
+- **WHEN** the inspection returns a patch and the caller passed `--pull-request`
+- **THEN** the command applies the upgrade patch before any feature patch, pushes the branch named for the dependency and version and opens the pull request
+
+#### Scenario: The same upgrade runs again
+
+- **WHEN** a branch for that dependency and version already exists
+- **THEN** the command replaces it with the newly tested patches
+
+#### Scenario: No patch
+
+- **WHEN** the upgrade has no tested patch
+- **THEN** the command opens no pull request and still writes the report
+
+#### Scenario: Git or the GitHub CLI fails
+
+- **WHEN** a `git` or `gh` step fails
+- **THEN** the command exits unsuccessfully and names the failed step and what the checkout needs
 
 ### Requirement: Explain failures
 
