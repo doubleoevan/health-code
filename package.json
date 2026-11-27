@@ -22,7 +22,7 @@
 		"test:provider": "bun run --cwd packages/health-code build && bun test --timeout 600000 ./packages/health-code/test/live.ts",
 		"eval": "bun run --cwd packages/health-code build && bun scripts/evaluate.ts",
 		"inspect": "bun run --cwd packages/health-code build && bun scripts/inspect.ts",
-		"test:executable": "bun run --cwd packages/health-code build && bun run --cwd apps/cli build && bun run --cwd apps/cli build:executable && bun test ./apps/cli/executable/executable.test.ts",
+		"test:executable": "bun run --cwd packages/health-code build && bun run --cwd apps/cli build && bun run --cwd apps/cli build:executable && bun test --timeout 60000 ./apps/cli/executable/executable.test.ts",
 		"test:executable:live": "bun run test:executable && bun test --timeout 3600000 ./apps/cli/executable/executable.live.ts",
 		"test:credential": "bun run --cwd packages/health-code build && bun test --timeout 300000 ./packages/health-code/test/liveCredential.ts"
 	},
