@@ -1,0 +1,30 @@
+name: Wait for Health Code
+description: Waits before an install until the health inspector has tried a pull request's major upgrade
+inputs:
+  timeout-minutes:
+    description: How long to wait for the inspection's status
+    required: false
+    default: "75"
+  require-inspection:
+    description: Fail the step when no inspection result arrives
+    required: false
+    default: "false"
+  token:
+    description: A GitHub token that can read this repository's pull requests, commit statuses and attestations
+    required: false
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - run: bash "$HEALTH_CODE_SOURCE_PATH/action/install-executable.sh"
+      shell: bash
+      env:
+        HEALTH_CODE_SOURCE_PATH: ${{ github.action_path }}/../..
+        HEALTH_CODE_ACTION_REF: ${{ github.action_ref }}
+        GH_TOKEN: ${{ inputs.token }}
+    - run: health-code wait
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        HEALTH_CODE_WAIT_MINUTES: ${{ inputs.timeout-minutes }}
+        HEALTH_CODE_REQUIRE_INSPECTION: ${{ inputs.require-inspection }}

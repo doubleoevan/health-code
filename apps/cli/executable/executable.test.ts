@@ -24,6 +24,12 @@ const parityCases = [
 	["check", "https://github.com/example/project", "--dependency", "zod"],
 	["check", "https://github.com/example/project"],
 	["setup"],
+	["target"],
+	["target", "https://github.com/example/project"],
+	["target", "https://github.com/example/project/pull/7", "--unknown"],
+	["wait", "--extra"],
+	["dependency-pull-request"],
+	["dependency-pull-request", "merge"],
 ]
 
 test("the executable prints the same output and exit codes as the npm command", { skip }, () => {

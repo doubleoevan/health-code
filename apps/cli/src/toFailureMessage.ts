@@ -37,6 +37,7 @@ const inputCodes = new Set([
 	"invalid-environment",
 	"invalid-limits",
 	"invalid-model-settings",
+	"invalid-pull-request",
 	"invalid-repository",
 	"invalid-revision",
 ])

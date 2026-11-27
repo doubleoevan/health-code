@@ -53,6 +53,12 @@ Run `bun run test:executable` to build the library, the npm CLI and the standalo
 
 Run `doppler run --project health-code --config dev -- env -u MODEL_API_KEY bun run test:executable:live` before a release that changes the command or the runtime. It runs real inspections through the executable: the Verdict against the npm CLI, a pull request with hooks off, and sandbox deletion after SIGTERM and SIGINT. It needs `RUNTA_TOKEN`, `HEALTH_CODE_MODEL_HOST` and `HEALTH_CODE_MODEL`, skips without them, and takes about 25 minutes. Run it while no other inspection uses the Runta account, because the signal checks count every sandbox created during the run.
 
+## Dependency pull request workflow
+
+`bun test ./scripts/dependencyPullRequestsWorkflow.test.ts` checks the reusable workflow, this repository's caller and the wait step against their rules. The unit tests in `apps/cli/src/dependencyPullRequest/` cover the decision, the mark, the cap, the comment and the wait with a fake repository API.
+
+After the first release that ships the workflow, check it once on this repository's next Dependabot major: the pull request ends with one `health-code` status, one comment and one Health Code pull request, and `git ls-remote origin 'refs/health-code/*'` lists one mark and the week's spend. Re-run the failed CI and check that nothing new appears.
+
 ## Release and hosted verification
 
 Run `bash scripts/release-packages.sh --dry-run` to build and inspect the npm tarball locally. The package trusts `doubleoevan/health-code` and `release.yml` with staged publishing permission and no GitHub environment. While npm rejects the repository’s immutable sign-in subject ([npm/cli#9969](https://github.com/npm/cli/issues/9969)), keep the `NPM_TOKEN` repository secret in place to stage each release. A matching tag builds and tests the standalone executable on each platform, publishes the executables with a checksum file and build provenance on the GitHub release, then stages the tarball with provenance. The tarball stages only after every executable reports the same package files it includes. Approve the version on npmjs.com. Run the release workflow manually against the same tag to verify the public digests and signed provenance, and the published Linux x64 executable. Keep immutable releases turned on in the repository settings. `.github/AGENTS.md` lists each release job and its permissions. If a stage is already pending, review it on npmjs.com before retrying the workflow.

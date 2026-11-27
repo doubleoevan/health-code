@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Default to the release version of the action's own commit.
+# Default to the release version of the source's own commit. A workflow or another action names its checkout.
 repository=doubleoevan/health-code
-action_path="${GITHUB_ACTION_PATH:?}"
+source_path="${HEALTH_CODE_SOURCE_PATH:-${GITHUB_ACTION_PATH:?}}"
 version="${HEALTH_CODE_VERSION:-}"
 if [[ -z "$version" ]]; then
-  version=$(jq -r .version "$action_path/packages/health-code/package.json")
+  version=$(jq -r .version "$source_path/packages/health-code/package.json")
 fi
 
 # Reject a version that is not a release number.
@@ -51,6 +51,12 @@ source_digest=()
 action_ref="${HEALTH_CODE_ACTION_REF:-}"
 if [[ -z "${HEALTH_CODE_VERSION:-}" && "$action_ref" =~ ^[0-9a-f]{40}$ ]]; then
   source_digest=(--source-digest "$action_ref")
+fi
+
+# Stop when a caller requires the commit check and names no commit.
+if [[ "${HEALTH_CODE_SOURCE_DIGEST_REQUIRED:-}" == true && ${#source_digest[@]} -eq 0 ]]; then
+  echo "::error::The workflow's own commit is unknown, so the executable's build cannot be checked against it." >&2
+  exit 1
 fi
 
 # Require build provenance from the release workflow at this version's tag.

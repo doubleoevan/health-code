@@ -1,0 +1,205 @@
+name: Dependency pull requests
+
+# Called by a repository's own workflow on pull_request_target and workflow_run. Both events start from the
+# default branch with secrets, so no step checks out a pull request and no run step holds an expression.
+on:
+  workflow_call:
+    inputs:
+      model-host:
+        description: Model provider address, such as https://api.anthropic.com
+        required: true
+        type: string
+      model:
+        description: Model ID, such as claude-opus-5-5
+        required: true
+        type: string
+      major:
+        description: Start when a pull request opens with a major upgrade, or a minor upgrade of a package below 1.0
+        type: boolean
+        default: true
+      red:
+        description: Start when CI fails on a pull request with a single upgrade
+        type: boolean
+        default: true
+      red-checks:
+        description: Check names that count as red, separated by commas. Empty counts every check.
+        type: string
+        default: ""
+      label:
+        description: Label a person with write access adds to start an inspection
+        type: string
+        default: health-code
+      feature-patches:
+        description: Include feature patches on the Major and Red paths
+        type: boolean
+        default: false
+      weekly-cap-usd:
+        description: Model and sandbox cost at which the week's inspections stop
+        type: number
+        default: 25
+      at-cap:
+        description: What a pull request gets at the cap. comment adds one comment, status sets the status only.
+        type: string
+        default: comment
+      timeout-minutes:
+        description: Time limit of the inspection job
+        type: number
+        default: 75
+      one-at-a-time:
+        description: Run one inspection at a time in the repository
+        type: boolean
+        default: true
+      model-protocol:
+        description: anthropic or openai-compatible. Empty picks by host.
+        type: string
+        default: ""
+      summary-model:
+        description: Model that summarizes release notes. Empty uses model.
+        type: string
+        default: ""
+      match-model:
+        description: Model that matches new features to code. Empty uses model.
+        type: string
+        default: ""
+      repair-model:
+        description: Model that repairs broken checks. Empty uses model.
+        type: string
+        default: ""
+      adoption-model:
+        description: Model that applies a new feature. Empty uses model.
+        type: string
+        default: ""
+      input-usd-per-million:
+        description: Highest price per million input tokens. Empty uses the default.
+        type: string
+        default: ""
+      output-usd-per-million:
+        description: Highest price per million output tokens. Empty uses the default.
+        type: string
+        default: ""
+    secrets:
+      RUNTA_TOKEN:
+        description: Runta account token. Store it as a Dependabot secret too when Dependabot opens pull requests.
+        required: true
+
+permissions: {}
+
+jobs:
+  # Decide from the event and the pull request's files. This job holds no secret and cannot write.
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      statuses: read
+      attestations: read
+    outputs:
+      outcome: ${{ steps.select.outputs.outcome }}
+      decision: ${{ steps.select.outputs.decision }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEALTH_CODE_MAJOR: ${{ inputs.major }}
+      HEALTH_CODE_RED: ${{ inputs.red }}
+      HEALTH_CODE_RED_CHECKS: ${{ inputs.red-checks }}
+      HEALTH_CODE_LABEL: ${{ inputs.label }}
+      HEALTH_CODE_WEEKLY_CAP_USD: ${{ inputs.weekly-cap-usd }}
+    steps:
+      - name: Check out this workflow's own source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: health-code-source
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            action/install-executable.sh
+            packages/health-code/package.json
+      - name: Install the executable of this workflow's commit
+        run: bash health-code-source/action/install-executable.sh
+        env:
+          HEALTH_CODE_SOURCE_PATH: health-code-source
+          HEALTH_CODE_ACTION_REF: ${{ job.workflow_repository != github.repository && job.workflow_sha || '' }}
+          HEALTH_CODE_SOURCE_DIGEST_REQUIRED: ${{ job.workflow_repository != github.repository }}
+      - name: Decide whether the event starts an inspection
+        id: select
+        run: health-code dependency-pull-request select
+
+  # Inspect, comment and record. This is the only job that holds RUNTA_TOKEN and a token that can write.
+  inspect:
+    needs: select
+    if: needs.select.outputs.outcome != 'none'
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    concurrency:
+      group: ${{ inputs.one-at-a-time && needs.select.outputs.outcome == 'inspect' && 'health-code-inspection' || format('health-code-{0}-{1}', github.run_id, github.run_attempt) }}
+      queue: max
+    permissions:
+      contents: write
+      pull-requests: write
+      statuses: write
+      checks: read
+      attestations: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEALTH_CODE_DECISION: ${{ needs.select.outputs.decision }}
+      HEALTH_CODE_OUTPUT: ${{ github.workspace }}/health-code-report
+      HEALTH_CODE_LABEL: ${{ inputs.label }}
+      HEALTH_CODE_FEATURE_PATCHES: ${{ inputs.feature-patches }}
+      HEALTH_CODE_WEEKLY_CAP_USD: ${{ inputs.weekly-cap-usd }}
+      HEALTH_CODE_AT_CAP: ${{ inputs.at-cap }}
+      HEALTH_CODE_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+    steps:
+      - name: Check out the default branch with the base commit in its history
+        if: needs.select.outputs.outcome == 'inspect'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: repository
+          fetch-depth: 0
+      - name: Check out this workflow's own source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: health-code-source
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            action/install-executable.sh
+            packages/health-code/package.json
+      - name: Install the executable of this workflow's commit
+        run: bash health-code-source/action/install-executable.sh
+        env:
+          HEALTH_CODE_SOURCE_PATH: health-code-source
+          HEALTH_CODE_ACTION_REF: ${{ job.workflow_repository != github.repository && job.workflow_sha || '' }}
+          HEALTH_CODE_SOURCE_DIGEST_REQUIRED: ${{ job.workflow_repository != github.repository }}
+      - name: Inspect the upgrade in a sandbox
+        if: needs.select.outputs.outcome == 'inspect'
+        working-directory: repository
+        run: exec health-code dependency-pull-request inspect
+        env:
+          RUNTA_TOKEN: ${{ secrets.RUNTA_TOKEN }}
+          HEALTH_CODE_MODEL_HOST: ${{ inputs.model-host }}
+          HEALTH_CODE_MODEL: ${{ inputs.model }}
+          HEALTH_CODE_MODEL_PROTOCOL: ${{ inputs.model-protocol }}
+          HEALTH_CODE_SUMMARY_MODEL: ${{ inputs.summary-model }}
+          HEALTH_CODE_MATCH_MODEL: ${{ inputs.match-model }}
+          HEALTH_CODE_REPAIR_MODEL: ${{ inputs.repair-model }}
+          HEALTH_CODE_ADOPTION_MODEL: ${{ inputs.adoption-model }}
+          HEALTH_CODE_INPUT_USD_PER_MILLION: ${{ inputs.input-usd-per-million }}
+          HEALTH_CODE_OUTPUT_USD_PER_MILLION: ${{ inputs.output-usd-per-million }}
+      - name: Save the Inspection Report
+        id: artifact
+        if: always() && needs.select.outputs.outcome == 'inspect'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: health-code-report
+          path: health-code-report
+          if-no-files-found: ignore
+      - name: Set the status and comment on the pull request
+        if: always()
+        run: health-code dependency-pull-request report
+        env:
+          HEALTH_CODE_ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}

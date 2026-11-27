@@ -79,7 +79,9 @@ jobs:
           path: health-code-report
 ```
 
-See the [CI guide](apps/cli/README.md) for settings, options, the commit to use for each release and how to verify a download on other CI systems.
+To answer Renovate and Dependabot pull requests on their own, add the [dependency pull request workflow](apps/cli/README.md#dependency-pull-requests). The health inspector then tries the upgrade behind each major, and behind any single upgrade whose CI goes red. Health Code runs it on its own Dependabot pull requests through [`.github/workflows/health-code.yml`](.github/workflows/health-code.yml).
+
+See the [CI guide](apps/cli/README.md) for dependency pull requests, the weekly schedule, the form, settings, the commit to use for each release and how to verify a download on other CI systems.
 
 ## Packages
 

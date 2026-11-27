@@ -13,6 +13,23 @@ export type FakeRepository = {
 	isPrivate?: boolean
 	isTruncated?: boolean
 	redirectsTo?: string
+
+	// the files at other commits, and the pull requests by number
+	revisions?: Readonly<Record<string, ReadonlyMap<string, FileContent>>>
+	pullRequests?: Readonly<Record<number, FakePullRequest>>
+}
+
+// one pull request as github's api would serve it, with the merge base its compare returns
+export type FakePullRequest = {
+	author: string
+	headCommit: string
+	baseCommit: string
+
+	// the branches, the repository of the head and the paths the compare lists
+	headRef?: string
+	baseRef?: string
+	headRepository?: string
+	changedFiles?: readonly string[]
 }
 
 type Intercept = (url: URL, init: RequestInit) => Response | Promise<Response> | undefined
@@ -152,7 +169,47 @@ function answerRepository({
 		return new Response(null, { status: 301, headers: { ...rateLimitHeaders, location } })
 	}
 
-	return answerRoute({ repository, route, accept, search: url.searchParams, rateLimitHeaders })
+	return (
+		answerPullRequest({ repository, name: key ?? "", route, headers: rateLimitHeaders }) ??
+		answerRoute({ repository, route, accept, search: url.searchParams, rateLimitHeaders })
+	)
+}
+
+// serve a pull request and the comparison of its head with its base branch
+function answerPullRequest({
+	repository,
+	name,
+	route,
+	headers,
+}: {
+	repository: FakeRepository
+	name: string
+	route: string
+	headers: RateLimitHeaders
+}): Response | undefined {
+	// shape the pull request with the fields a reader checks
+	const pullRequests = Object.entries(repository.pullRequests ?? {})
+	for (const [number, pullRequest] of pullRequests) {
+		const baseRef = pullRequest.baseRef ?? "main"
+		if (route === `pulls/${number}`) {
+			const isPrivate = repository.isPrivate ?? false
+			const baseRepository = { full_name: name, private: isPrivate, visibility: isPrivate ? "private" : "public" }
+			const head = {
+				ref: pullRequest.headRef ?? "update",
+				sha: pullRequest.headCommit,
+				repo: { full_name: pullRequest.headRepository ?? name },
+			}
+			const base = { ref: baseRef, sha: pullRequest.baseCommit, repo: baseRepository }
+			return Response.json({ number: Number(number), user: { login: pullRequest.author }, head, base }, { headers })
+		}
+
+		// answer the comparison with the merge base and the changed paths
+		if (route === `compare/${baseRef}...${pullRequest.headCommit}`) {
+			const files = (pullRequest.changedFiles ?? ["package.json"]).map((filename) => ({ filename }))
+			return Response.json({ merge_base_commit: { sha: pullRequest.baseCommit }, files }, { headers })
+		}
+	}
+	return undefined
 }
 
 // serve the repository record, the head commit, the tree and each blob
@@ -179,9 +236,12 @@ function answerRoute({
 		return new Response(commit, { headers })
 	}
 
-	// list the tree only for the commit this repository holds
-	if (route === `git/trees/${commit}` && search.get("recursive") === "1") {
-		const tree = { sha: commit, truncated: repository.isTruncated ?? false, tree: toTree(repository) }
+	// list the tree only for a commit this repository holds
+	const revisions = { [commit]: repository.files, ...repository.revisions }
+	const treeCommit = route.startsWith("git/trees/") ? route.slice("git/trees/".length) : ""
+	const treeFiles = Object.hasOwn(revisions, treeCommit) ? revisions[treeCommit] : undefined
+	if (treeFiles && search.get("recursive") === "1") {
+		const tree = { sha: treeCommit, truncated: repository.isTruncated ?? false, tree: toTree(repository, treeFiles) }
 		return Response.json(tree, { headers })
 	}
 
@@ -193,16 +253,18 @@ function answerRoute({
 }
 
 function answerBlob({ repository, route, headers }: BlobRequest): Response {
-	const content = [...repository.files.values()].find((file) => route === `git/blobs/${toBlobId(file)}`)
+	const revisionFiles = [repository.files, ...Object.values(repository.revisions ?? {})]
+	const contents = revisionFiles.flatMap((files) => [...files.values()])
+	const content = contents.find((file) => route === `git/blobs/${toBlobId(file)}`)
 	return content === undefined
 		? Response.json({ message: "Not Found" }, { status: 404, headers })
 		: new Response(content as ConstructorParameters<typeof Response>[0], { headers })
 }
 
 // list files, symbolic links and submodules with the modes git records for them
-function toTree(repository: FakeRepository): object[] {
+function toTree(repository: FakeRepository, files: ReadonlyMap<string, FileContent>): object[] {
 	const entries: object[] = []
-	for (const [path, content] of repository.files) {
+	for (const [path, content] of files) {
 		const isSymbolicLink = repository.links?.includes(path) ?? false
 		const size = typeof content === "string" ? Buffer.byteLength(content) : content.byteLength
 		entries.push({ path, mode: isSymbolicLink ? "120000" : "100644", type: "blob", sha: toBlobId(content), size })

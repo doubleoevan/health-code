@@ -23,6 +23,10 @@ type InstallOptions = {
 	hasRelease?: boolean
 	actionRef?: string
 	versionInput?: string
+
+	// whether a workflow names the checkout in place of an action's own path
+	hasSourcePath?: boolean
+	isSourceDigestRequired?: boolean
 }
 
 // what one install run left behind
@@ -66,6 +70,25 @@ test("requires the build from the action's commit when the action is referenced 
 	expect(runInstall({ actionRef: actionCommit, versionInput: version }).calls).not.toContain("--source-digest")
 })
 
+test("a workflow names its own checkout and requires its commit only when another repository calls it", () => {
+	const workflowCommit = "b".repeat(40)
+	const calledByCommit = runInstall({ hasSourcePath: true, actionRef: workflowCommit })
+	expect(calledByCommit.status).toBe(0)
+	expect(calledByCommit.calls).toContain(`--source-digest ${workflowCommit}`)
+
+	// a call by local path installs the release the checkout's package version names, with the tag's provenance
+	const calledByLocalPath = runInstall({ hasSourcePath: true })
+	expect(calledByLocalPath.status).toBe(0)
+	expect(calledByLocalPath.calls).toContain(`--source-ref refs/tags/v${version} --deny-self-hosted-runners`)
+	expect(calledByLocalPath.calls).not.toContain("--source-digest")
+})
+
+test("stops when a caller requires the commit check and names no commit", () => {
+	const installRun = runInstall({ hasSourcePath: true, isSourceDigestRequired: true })
+	expectNothingInstalled(installRun, "The workflow's own commit is unknown")
+	expect(runInstall({ hasSourcePath: true, isSourceDigestRequired: true, actionRef: "c".repeat(40) }).status).toBe(0)
+})
+
 test("refuses a download that does not match the release checksum", () => {
 	expectNothingInstalled(runInstall({ checksum: "0".repeat(64) }), "does not match the checksum")
 })
@@ -92,6 +115,8 @@ function runInstall({
 	hasRelease = true,
 	actionRef = "",
 	versionInput = "",
+	hasSourcePath = false,
+	isSourceDigestRequired = false,
 }: InstallOptions = {}): InstallRun {
 	const workspace = mkdtempSync(join(tmpdir(), "health-code-action-"))
 	workspaces.push(workspace)
@@ -119,7 +144,9 @@ function runInstall({
 	writeFileSync(calls, "")
 	const environment = {
 		PATH: `${join(workspace, "bin")}:${process.env.PATH}`,
-		GITHUB_ACTION_PATH: join(workspace, "action"),
+		...(hasSourcePath
+			? { HEALTH_CODE_SOURCE_PATH: join(workspace, "action") }
+			: { GITHUB_ACTION_PATH: join(workspace, "action") }),
 		GITHUB_PATH: githubPath,
 		RUNNER_OS: runnerOs,
 		RUNNER_ARCH: "X64",
@@ -129,6 +156,7 @@ function runInstall({
 		STUB_CALLS: calls,
 		HEALTH_CODE_ACTION_REF: actionRef,
 		HEALTH_CODE_VERSION: versionInput,
+		HEALTH_CODE_SOURCE_DIGEST_REQUIRED: String(isSourceDigestRequired),
 	}
 	const scriptRun = spawnSync("bash", [scriptPath], { env: environment })
 	return {

@@ -122,11 +122,29 @@ export { isExactVersion, packageManagerDisplayNames } from "./sandbox/packageMan
 export { reconcileSandboxes } from "./sandbox/reconcileSandboxes.ts"
 export { type InspectionMode, toInspectionMode } from "./toInspectionMode.ts"
 export { toRepositoryUrl } from "./toRepositoryUrl.ts"
-
 // export the fake GitHub, the release age notice and the upgrade menu types
-export { createFakeGithub, type FakeGithub, type FakeRepository } from "./upgrades/createFakeGithub.ts"
+export {
+	createFakeGithub,
+	type FakeGithub,
+	type FakePullRequest,
+	type FakeRepository,
+} from "./upgrades/createFakeGithub.ts"
+export { isPackageName } from "./upgrades/fetchRegistryVersions.ts"
 export { type MinimumReleaseAge, toReleaseAgeNotice } from "./upgrades/readCommittedReleaseAge.ts"
+export {
+	isAccountLogin,
+	isMajorUpgrade,
+	type MovedDependency,
+	type PullRequestTarget,
+	type PullRequestTargetOptions,
+	type PullRequestTargetReason,
+	patchBranchPrefix,
+	pullRequestTargetMessages,
+	pullRequestTargetReasons,
+	readPullRequestTarget,
+} from "./upgrades/readPullRequestTarget.ts"
 export type { UnreadableRepository } from "./upgrades/readRepositoryFiles.ts"
+export { isGitObjectId } from "./upgrades/readRepositoryFiles.ts"
 
 // export the release feature reader and the upgrade menu grouping
 export {

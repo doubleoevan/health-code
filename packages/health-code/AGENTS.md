@@ -1,6 +1,6 @@
 # Inspection library
 
-The public ESM package `health-code` owns Repository inspections. Its single entry exports `listUpgrades`, `resolveUpgrade`, `getUpgrade`, `inspectRepository`, provider factories, errors, and the Inspection Report and Inspection Event types. It also exports the helpers the site and the CI command share: `toUpgradeMenuReport`, `toReleaseAgeNotice`, `explainedErrorCodes`, `packageManagerDisplayNames`, `isExactVersion`, `createFakeGithub` and `readPackageFileDigests`. The site, the CI command and scheduled consumers import by package name.
+The public ESM package `health-code` owns Repository inspections. Its single entry exports `listUpgrades`, `resolveUpgrade`, `readPullRequestTarget`, `getUpgrade`, `inspectRepository`, provider factories, errors, and the Inspection Report and Inspection Event types. It also exports the helpers the site and the CI command share: `toUpgradeMenuReport`, `toReleaseAgeNotice`, `explainedErrorCodes`, `packageManagerDisplayNames`, `isExactVersion`, `createFakeGithub` and `readPackageFileDigests`. The site, the CI command and scheduled consumers import by package name.
 
 | Module | Responsibility |
 | --- | --- |

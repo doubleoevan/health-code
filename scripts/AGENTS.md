@@ -11,7 +11,8 @@ Run these commands from the repository root. The root package manifest names the
 | `check-packed-library.sh` | Packs the release through its prepack hook and checks Node, Bun, and declaration consumers. |
 | `check-structure.sh` | Checks tracked and untracked package manifests with Git, and that library source reads package files only through `readPackageFile.ts`. |
 | `releaseWorkflow.test.ts` | Parses `../.github/workflows/release.yml` and checks which jobs can write to the repository and see `NPM_TOKEN`. |
-| `installExecutable.test.ts` | Runs `../action/install-executable.sh` against `fixtures/stub-gh.sh` and a stub release. |
+| `installExecutable.test.ts` | Runs `../action/install-executable.sh` against `fixtures/stub-gh.sh` and a stub release, from an action's path and from a workflow's own checkout. |
+| `dependencyPullRequestsWorkflow.test.ts` | Parses `../.github/workflows/dependency-pull-requests.yml`, `../.github/workflows/health-code.yml` and `../action/wait/action.yml`. Fails on a checkout of anything but the default branch or the workflow's own commit, an expression in a run step, a secret or write permission outside the `inspect` job, an action not referenced by commit SHA and a caller that differs from the CI guide's. Each rule also runs against a broken copy. |
 | `checkPackageBoundaries.ts` | Discovers app and package workspaces. Checks literal imports, declarations, and project references. |
 | `checkDeclaredVersions.ts` | Compares the package manager with the Bun version file. Verifies each patched dependency exists at the specified version in the lockfile. |
 | `checkDependencyAdvisories.ts` | Validates Bun's registry response and the reviewed advisory exceptions. Runs in its own CI job. |

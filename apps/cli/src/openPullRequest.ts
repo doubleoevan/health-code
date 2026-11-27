@@ -38,7 +38,7 @@ export async function openPullRequest({
 	}
 
 	// start the branch at the commit the patches were tested on
-	const branch = `health-code/${`${upgrade.dependency}-${upgrade.to}`.replace(/[^a-z0-9.]+/gi, "-").replace(/^-|-$/g, "")}`
+	const branch = toPatchBranch(upgrade)
 	await run("git", [...gitSettings, "switch", "--force-create", branch, baseCommit])
 	try {
 		for (const patch of patches) {
@@ -71,6 +71,13 @@ export async function openPullRequest({
 	const pullRequestFields = ["--raw-field", `title=${pullRequestTitle}`, "--raw-field", `body=${pullRequestBody}`]
 	await run("gh", ["api", "--method", "PATCH", pullRequestPath, ...pullRequestFields])
 	return branch
+}
+
+/**
+ * Names the branch that holds an upgrade's tested patches.
+ */
+export function toPatchBranch({ dependency, to }: Pick<Upgrade, "dependency" | "to">): string {
+	return `health-code/${`${dependency}-${to}`.replace(/[^a-z0-9.]+/gi, "-").replace(/^-|-$/g, "")}`
 }
 
 // describe the result only with values the library sets

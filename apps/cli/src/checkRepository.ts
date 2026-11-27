@@ -5,6 +5,7 @@ import type { ModelRequestSandboxInspectionReport } from "health-code"
 import { z } from "zod"
 import { type InspectOptions, inspectWithAccount } from "./inspectWithAccount.ts"
 import { openPullRequest, type RunCommand } from "./openPullRequest.ts"
+import { parseJson } from "./parseJson.ts"
 import { type PersonalProvider, personalProvider } from "./personalModelRequestSandboxes.ts"
 import { accountToken, readGithubToken, requireSettings } from "./readEnvironmentSettings.ts"
 import { selectCheckTarget } from "./selectCheckTarget.ts"
@@ -144,14 +145,6 @@ async function removePreviousPatches(output: string): Promise<void> {
 		if (basename(filename) === filename && filename.endsWith(".patch")) {
 			await rm(join(output, filename), { force: true })
 		}
-	}
-}
-
-function parseJson(text: string): unknown {
-	try {
-		return JSON.parse(text)
-	} catch {
-		return undefined
 	}
 }
 
