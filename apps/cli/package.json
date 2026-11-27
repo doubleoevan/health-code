@@ -4,14 +4,14 @@
 	"type": "module",
 	"dependencies": {
 		"@runta/runta-sdk": "0.2.0",
-		"health-code": "0.3.0",
+		"health-code": "0.4.0",
 		"zod": "4.6.7"
 	},
 	"scripts": {
 		"build": "rm -rf ../../packages/health-code/dist/cli && tsc -p tsconfig.build.json",
 		"build:executable": "bun executable/buildExecutable.ts"
 	},
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"license": "MIT",
 	"engines": {
 		"node": "^22.18.0 || >=24.11.0"
