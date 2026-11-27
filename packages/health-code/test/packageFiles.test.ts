@@ -4,6 +4,7 @@ import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync }
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
+import { fileURLToPath } from "node:url"
 import { InspectionError, readPackageFileDigests } from "../src/index.ts"
 import { type PackageFile, packageFiles, readPackageFile } from "../src/readPackageFile.ts"
 
@@ -45,6 +46,13 @@ test("package file digests match the files on disk", () => {
 			.update(readFileSync(new URL(path, packageRoot)))
 			.digest("hex")
 		assert.equal(sha256, expected, path)
+	}
+})
+
+test("no Guest bundle holds the build machine's path, so every platform builds the same bytes", () => {
+	const workspaceRoot = fileURLToPath(new URL("../../", packageRoot))
+	for (const path of packageFiles.filter((name) => name.startsWith("dist/"))) {
+		assert.equal(readPackageFile(path).includes(workspaceRoot), false, path)
 	}
 })
 
