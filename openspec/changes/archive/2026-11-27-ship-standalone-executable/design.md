@@ -250,7 +250,7 @@ Measured on macOS arm64 with Bun 1.4.3:
 | Start to usage text, Bun bundle | 40 to 50 ms |
 | Start to usage text, npm CLI on Node 26 | 180 to 190 ms |
 
-Linux sizes are measured in the first release build and recorded in this section. Start time is under a quarter of the npm CLI's, so the build gets no start-time limit. CI timing is too noisy for a useful gate.
+The v0.4.0 release executables measured 114,768,048 bytes (109.5 MiB) on Linux x64, 114,871,288 bytes (109.6 MiB) on Linux arm64 and 94,840,034 bytes (90.4 MiB) on macOS arm64. Start time is under a quarter of the npm CLI's, so the build gets no start-time limit. CI timing is too noisy for a useful gate.
 
 The build gets one size limit. It fails when the executable exceeds the Bun runtime binary's size by more than 15 MB. The embedded code and files are about 6 MB today. Twice that plus headroom catches an accidental embed, such as `node_modules` or the whole `dist/` folder, without tracking Bun's own growth.
 
@@ -297,9 +297,9 @@ To roll back, point CI back to `npx health-code`, or reference the action at an 
 - The release workflow is checked only by YAML parsing and `scripts/releaseWorkflow.test.ts` until a tag runs it. `actionlint` was not available.
 - Found on 2026-11-26: `gh` 2.103.1 accepts `--signer-workflow`, `--source-ref` and `--deny-self-hosted-runners` on `gh attestation verify`. Still to confirm: the `gh` version on GitHub-hosted runners and the exact `cosign verify-blob-attestation` flags for a bundle.
 - That Bun 1.4.4 behaves as the 1.4.3 probe found for `--asset`, `import.meta.url` and `Bun.isStandaloneExecutable`.
-- That a file from `gh release download` or `curl` carries no `com.apple.quarantine` flag on macOS.
+- Found on 2026-11-27 with v0.4.0: a file from `gh release download` or `curl` has no `com.apple.quarantine` flag on macOS and runs as is. Given the flag a browser sets, Gatekeeper rejects the executable. After `xattr -d com.apple.quarantine` it prints `health-code 0.4.0`.
 - Found on 2026-11-26 in the first live run: the executable created a Runta sandbox, streamed every sandbox command, started the Model Request Sandbox, summarized release notes through it and deleted both sandboxes. Bun's `ws` replacement therefore sends the `Authorization` header and delivers `message`, `error` and `close` as the Runta SDK expects. SIGTERM deleted the sandbox before exit. After SIGINT, Runta still listed the deleted sandbox for a few seconds, so the live test waits up to a minute for the listing to clear and also requires the command's own deletion log line.
 - Found on 2026-11-26: Nano ID at the fixture commit cannot produce a patch. Its test runner prints no test cases the inspector can count, so every upgrade there ends Untested with "Baseline has no comparable passing test cases". The executable and the npm command agreed on that Verdict and those check statuses: vite 8.4.0 is Untested, with install passed, typecheck untested for no `tsconfig` and tests passed. The pull request case therefore runs runta-dev/jot at `55c3082` with `@types/node` 24.13.5 to 24.19.4, which ends Passes as is with all three checks passed. A first try with errand's `typescript-eslint` bump ended Can't fix on an unrelated UI test after 21 minutes.
 - Found on 2026-11-26: the full live suite passed. The Verdict and signal cases took about 12 minutes, and the jot pull request case 12 more. `--pull-request` needs the commit's history: a depth-1 fetch made the push to the bare remote fail, as the guide's full checkout rule predicts.
-- That immutable releases allow the draft, upload and publish sequence from a workflow.
-- The Linux executable sizes, recorded in decision 9.
+- Found on 2026-11-27 with v0.4.0: immutable releases allow the draft, upload and publish sequence from a workflow. A rerun of `publish-executables` verified the three published executables and uploaded nothing.
+- Found on 2026-11-27: the Linux executable sizes, recorded in decision 9.
