@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import type { ModelRole } from "../agentContracts.ts"
-import { redactEvidence } from "../collectEvents.ts"
 import { InspectionPrompts, readInvestigationPromptTemplate } from "../readPrompt.ts"
+import { redactSecretsIn } from "../redactSecrets.ts"
 
 // the most serialized evidence one prompt can hold
 export const maxEvidenceBytes = 80_000
@@ -26,7 +26,7 @@ function toEvidencePrompt(content: string, evidence: unknown, indent = 0): strin
 	// remove embedded fence markers before serializing redacted evidence
 	const nonce = randomUUID()
 	const serialized = JSON.stringify(
-		redactEvidence(evidence),
+		redactSecretsIn(evidence),
 		(_key, value: unknown) =>
 			typeof value === "string" ? value.replace(/<\/?untrusted-data-[A-Za-z0-9_-]*>?/gi, "") : value,
 		indent,

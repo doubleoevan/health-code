@@ -1,0 +1,20 @@
+name: Install Health Code
+description: Installs the health-code standalone executable after checking its release checksum and build provenance
+inputs:
+  version:
+    description: The release version to install, such as 0.4.0. Defaults to the version of the action's commit.
+    required: false
+    default: ""
+  token:
+    description: A GitHub token that can read this repository's releases and attestations
+    required: false
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - run: bash "$GITHUB_ACTION_PATH/action/install-executable.sh"
+      shell: bash
+      env:
+        HEALTH_CODE_VERSION: ${{ inputs.version }}
+        HEALTH_CODE_ACTION_REF: ${{ github.action_ref }}
+        GH_TOKEN: ${{ inputs.token }}

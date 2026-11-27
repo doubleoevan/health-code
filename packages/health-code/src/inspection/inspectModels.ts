@@ -9,7 +9,7 @@ import {
 	type UsageEvidence,
 	usageEvidence,
 } from "../checks/readUpgradeEvidence.ts"
-import { cleanupAllowance, type InspectionContext, redactEvidence, rethrowInspectionFailure } from "../collectEvents.ts"
+import { cleanupAllowance, type InspectionContext, rethrowInspectionFailure } from "../collectEvents.ts"
 import {
 	InspectionError,
 	type InspectionEvent,
@@ -29,6 +29,7 @@ import {
 } from "../models/modelRequestSandbox.ts"
 import { evaluatePatch } from "../patches/evaluatePatch.ts"
 import { type PatchEvidence, workspace } from "../patches/verifyCandidate.ts"
+import { redactSecretsIn } from "../redactSecrets.ts"
 import { credentialTarget } from "../sandbox/setCredentialBinding.ts"
 import { readReleases } from "../upgrades/readReleases.ts"
 import { toUpgradeKey } from "../upgrades/selectUpgrades.ts"
@@ -345,7 +346,7 @@ export class ModelInspection {
 					featureAdoption: agentLimits("featureAdoption", this.options.limits),
 				},
 			},
-			upgrades: redactEvidence(
+			upgrades: redactSecretsIn(
 				inspectionReport.upgrades.map((upgrade) => {
 					const key = toUpgradeKey(upgrade)
 					const previous = this.reused.get(key)

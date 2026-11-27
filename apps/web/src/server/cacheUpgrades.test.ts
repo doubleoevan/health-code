@@ -51,6 +51,8 @@ test("incomplete reports allow retries and confirmed upgrade failures can be reu
 		"confirmed failure",
 		"no upgrades",
 		"test timeout",
+		"install timeout",
+		"inspection time limit",
 		"baseline only",
 	]) {
 		const store = new InspectionStore(":memory:")
@@ -91,6 +93,22 @@ test("incomplete reports allow retries and confirmed upgrade failures can be reu
 				output.report.baseline.tests = { status: "untested", reason: "command-timeout", evidence: [] }
 				output.report.upgrades = []
 				break
+
+			// Retry a Baseline install that reached its check limit or a report the inspection deadline stopped.
+			case "install timeout":
+				output.report.baseline.install = {
+					status: "untested",
+					reason: "command-timeout",
+					detail: "The install step reached its 10-minute limit.",
+					evidence: [],
+				}
+				output.report.upgrades = []
+				break
+			case "inspection time limit":
+				output.report.stoppedReason = "The inspection reached its time limit. Last step: install."
+				break
+
+			// Retry a report that ran the Baseline without upgrades.
 			case "baseline only":
 				output.report.selection.limit = 0
 				output.report.upgrades = []

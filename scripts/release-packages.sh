@@ -21,6 +21,28 @@ for name in health-code; do
   jq -e '.[0].files | any(.path=="README.md") and all(.path | test("(^|/)([.]env([.][^/]*)?|node_modules|fixtures|src|test)(/|$)")|not)' "$artifacts/$name.json" >/dev/null
 done
 
+# Require the package files each standalone executable reports in the tarball, byte for byte.
+if [[ -n "${EXECUTABLE_FILES:-}" ]]; then
+  if ! compgen -G "$EXECUTABLE_FILES/*.files.json" >/dev/null; then
+    echo "$EXECUTABLE_FILES holds no executable digests." >&2
+    exit 1
+  fi
+  mkdir -p "$artifacts/unpacked"
+  tar -xzf "$artifacts/$(jq -r '.[0].filename' "$artifacts/health-code.json")" -C "$artifacts/unpacked"
+
+  # check each executable's digests against the unpacked tarball
+  for digests in "$EXECUTABLE_FILES"/*.files.json; do
+    jq -er '.files | to_entries[] | "\(.value)  package/\(.key)"' "$digests" > "$artifacts/expected.sha256"
+    (cd "$artifacts/unpacked" && if sha256sum --version 2>&1 | grep -q GNU; then sha256sum --quiet --check; else shasum -a 256 --quiet --check; fi) < "$artifacts/expected.sha256"
+  done
+  echo "The tarball includes the package files every executable reports."
+
+# Refuse to stage or verify without the executables' digests.
+elif [[ "${1:-}" == "--stage" || "${1:-}" == "--verify-public" ]]; then
+  echo "Set EXECUTABLE_FILES to the folder of executable .files.json digests." >&2
+  exit 1
+fi
+
 # Exercise npm staging locally without making a registry change.
 if [[ "${1:-}" == "--dry-run" ]]; then
   archive=$(jq -r '.[0].filename' "$artifacts/health-code.json")

@@ -4,9 +4,50 @@
 
 Try a dependency upgrade on a public GitHub repository from a CI job. On the CI machine, the command reads GitHub and the npm registry to decide what to test. The upgraded code then runs in one Runta sandbox on your own Runta account. Your pipeline receives an Inspection Report and a pull request with the tested patch.
 
-## Setup
+## Install
 
-You need Node 22.18 or later on the 22.x line. Node 24.11 or later also works.
+Pipelines run the standalone executable. It is one file for Linux x64, Linux arm64 or macOS arm64, built from the release's locked dependencies. The job that holds your Runta token installs no npm packages and needs no Node. The executable needs nothing else on the machine except `git` and `gh` for `--pull-request`.
+
+### GitHub Actions
+
+```yaml
+- uses: doubleoevan/health-code@<commit of v0.4.0> # v0.4.0
+- run: health-code check https://github.com/${{ github.repository }}
+```
+
+The action downloads the executable for the runner, checks it against the release checksum and verifies its build provenance. Only then does it put `health-code` on `PATH`. It installs the release of the commit you use and requires that the release workflow built the executable from that commit, so refer to the action by the commit of a release tag with the version in a comment. Dependabot and Renovate keep that line current. Find the commit with `git ls-remote https://github.com/doubleoevan/health-code refs/tags/v0.4.0`. Set the `version` input to install another release. The action fails on any other runner and names the npx command.
+
+The action reads releases and attestations with `github.token`. A workflow that sets `permissions` grants `attestations: read` for the check.
+
+### Verify a download
+
+Other CI systems download one exact version. Each release includes the executables, `health-code-<version>.sha256` and the build provenance:
+
+```sh
+version=0.4.0
+platform=linux-x64
+base=https://github.com/doubleoevan/health-code/releases/download/v$version
+curl --fail --location --remote-name "$base/health-code-$version-$platform" &&
+  curl --fail --location --remote-name "$base/health-code-$version.sha256" &&
+  sha256sum --check --ignore-missing "health-code-$version.sha256" &&
+  gh attestation verify "health-code-$version-$platform" \
+    --repo doubleoevan/health-code \
+    --signer-workflow doubleoevan/health-code/.github/workflows/release.yml \
+    --source-ref "refs/tags/v$version" \
+    --deny-self-hosted-runners &&
+  chmod +x "health-code-$version-$platform" &&
+  mv "health-code-$version-$platform" /usr/local/bin/health-code
+```
+
+Each command runs only after the one before it succeeds, so a failed check installs nothing. The checksum proves the file is the one the release published. The attestation proves this repository's release workflow built it from that tag on a GitHub-hosted runner. Add `--source-digest` with the commit you reviewed to also require that commit. On macOS, check the checksum with `shasum -a 256 --check --ignore-missing "health-code-$version.sha256"`. Without the GitHub CLI, check the file against `health-code-<version>.sigstore.json` from the same release with `cosign verify-blob-attestation`.
+
+Apple has not signed the executable. A file downloaded with `curl` or `gh` runs as is. macOS blocks one downloaded in a browser until you run `xattr -d com.apple.quarantine health-code-0.4.0-darwin-arm64`.
+
+### npx
+
+On another platform, or without the executable, run `npx health-code` with Node 22.18 or later on the 22.x line. Node 24.11 or later also works. npx installs the package's dependencies in the job when it runs.
+
+## Setup
 
 | Required | Value |
 | --- | --- |
@@ -16,7 +57,7 @@ You need Node 22.18 or later on the 22.x line. Node 24.11 or later also works.
 | `HEALTH_CODE_MODEL` | Model ID such as `claude-opus-5-5`. |
 
 
-1. Set these variables on your own machine and run `npx health-code setup` once. Setup stores the model key in Runta and verifies it.
+1. Set these variables on your own machine and run `health-code setup` or `npx health-code setup` once. Setup stores the model key in Runta and verifies it.
 2. Remove `MODEL_API_KEY`. Add `RUNTA_TOKEN` to your CI secrets and set the model host and model ID in the job.
 
 | Optional | Use |
@@ -36,8 +77,10 @@ The prices apply to every model you set and drive the spend limits. Set them whe
 ## Run in CI
 
 ```sh
-npx health-code check https://github.com/owner/repository --dependency zod --to 4.0.0
+health-code check https://github.com/owner/repository --dependency zod --to 4.0.0
 ```
+
+With npx, run `npx health-code check` with the same arguments.
 
 `--dependency` and `--to` accept any version that meets five conditions:
 
@@ -56,6 +99,8 @@ zod 4.0.3 is deprecated. Eligible versions: 4.0.5, 4.0.4 and 4.0.2. (invalid-upg
 Omit the target to test the first eligible upgrade. The command then builds the upgrade menu, the newest minor and the newest major version of each direct dependency, and saves it as `upgrade-menu.json`.
 
 The command writes `inspection-report.json` and any `.patch` files to `health-code-report/`. Use `--output` to change the folder and `--revision` to inspect one commit.
+
+`health-code --version` prints the release, such as `health-code 0.4.0`. `health-code --version --json` also prints the runtime and the SHA-256 digest of each file the command reads from its own package: `package.json`, the prompt templates and the code it uploads to the sandbox. The executable and the npm package of one version print the same digests. Either form exits 1 and names the file when one is missing or damaged.
 
 | Result | Exit code |
 | --- | --- |
@@ -94,6 +139,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  attestations: read
 jobs:
   health-code:
     runs-on: ubuntu-latest
@@ -101,10 +147,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      - run: npx health-code check https://github.com/${{ github.repository }} --pull-request
+      - uses: doubleoevan/health-code@<commit of v0.4.0> # v0.4.0
+      - run: health-code check https://github.com/${{ github.repository }} --pull-request
         env:
           RUNTA_TOKEN: ${{ secrets.RUNTA_TOKEN }}
           HEALTH_CODE_MODEL_HOST: https://api.anthropic.com
@@ -135,6 +179,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  attestations: read
 jobs:
   health-code:
     runs-on: ubuntu-latest
@@ -142,10 +187,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      - run: npx health-code check https://github.com/${{ github.repository }} --dependency "$DEPENDENCY" --to "$VERSION" --revision "$BASE" --upgrade-only --pull-request
+      - uses: doubleoevan/health-code@<commit of v0.4.0> # v0.4.0
+      - run: health-code check https://github.com/${{ github.repository }} --dependency "$DEPENDENCY" --to "$VERSION" --revision "$BASE" --upgrade-only --pull-request
         env:
           DEPENDENCY: ${{ inputs.dependency }}
           VERSION: ${{ inputs.version }}
@@ -158,6 +201,6 @@ jobs:
 
 ## Unpublished checkout
 
-Build the library with `bun run --cwd packages/health-code build`, then run `bun run --cwd apps/cli build`. Use `node packages/health-code/dist/cli/cli.js` in place of `npx health-code`.
+Build the library with `bun run --cwd packages/health-code build`, then run `bun run --cwd apps/cli build`. Use `node packages/health-code/dist/cli/cli.js` in place of `npx health-code`. `bun run test:executable` also builds the standalone executable for your machine at `apps/cli/build/health-code-<version>-<platform>`.
 
 MIT licensed.

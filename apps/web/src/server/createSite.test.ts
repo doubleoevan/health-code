@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { libraryVersion } from "health-code"
 import { replayRepositoryUrl as repository } from "../report.ts"
 import { isReplayEnabled } from "./createLiveSource.ts"
 import { createSite } from "./createSite.tsx"
@@ -337,5 +338,13 @@ test("failed visibility verification terminates the stream before inspection", a
 	const app = site(store)
 	expect(await (await app.request("/api/inspections/" + id + "/events")).text()).toContain("data: failed")
 	expect(await (await app.request("/r/" + id)).text()).toContain("Inspection failed")
+	store.database.close()
+})
+
+test("liveness reports the installed library version", async () => {
+	const store = new InspectionStore(":memory:")
+	const response = await site(store).request("/health/live")
+	expect(response.status).toBe(200)
+	expect(await response.json()).toEqual({ live: true, version: libraryVersion })
 	store.database.close()
 })

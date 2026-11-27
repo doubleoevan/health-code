@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises"
 import { setTimeout as delay } from "node:timers/promises"
 import { gzipSync } from "node:zlib"
 import { ApiError, Runta } from "@runta/runta-sdk"
@@ -13,6 +12,7 @@ import {
 	type SandboxProvider,
 	SandboxUnavailableError,
 } from "../contracts.ts"
+import { readPackageFile } from "../readPackageFile.ts"
 import { toRepositoryUrl } from "../toRepositoryUrl.ts"
 import { createModelRequestSandbox } from "./createModelRequestSandbox.ts"
 import { executeCommand, type Instance } from "./executeCommand.ts"
@@ -360,7 +360,7 @@ export function connectProvider(
 					["nodeTestReporter.mjs", "nodeTestReporter.mjs"],
 				] as const) {
 					// upload the guest bundle built into the release package
-					const contents = await readFile(new URL(`../../dist/${local}`, import.meta.url))
+					const contents = readPackageFile(`dist/${local}`)
 					remaining()
 					const archive = `/opt/health-code/${remote}.gz`
 					await providerRequest(runtime.files.write(archive, gzipSync(contents)))

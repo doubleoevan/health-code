@@ -9,7 +9,9 @@ Run these commands from the repository root. The root package manifest names the
 | `check-comment-groups.sh` | Check tracked TypeScript, JavaScript and shell files with `--tracked`, one path as an argument, or a Claude Code edit event on stdin. The project hook lives in `../.claude/settings.json`. |
 | `preflight.sh` | Runs the offline checks in order. CI, /ship, and `bun run check` invoke this file. |
 | `check-packed-library.sh` | Packs the release through its prepack hook and checks Node, Bun, and declaration consumers. |
-| `check-structure.sh` | Checks tracked and untracked package manifests with Git. |
+| `check-structure.sh` | Checks tracked and untracked package manifests with Git, and that library source reads package files only through `readPackageFile.ts`. |
+| `releaseWorkflow.test.ts` | Parses `../.github/workflows/release.yml` and checks which jobs can write to the repository and see `NPM_TOKEN`. |
+| `installExecutable.test.ts` | Runs `../action/install-executable.sh` against `fixtures/stub-gh.sh` and a stub release. |
 | `checkPackageBoundaries.ts` | Discovers app and package workspaces. Checks literal imports, declarations, and project references. |
 | `checkDeclaredVersions.ts` | Compares the package manager with the Bun version file. Verifies each patched dependency exists at the specified version in the lockfile. |
 | `checkDependencyAdvisories.ts` | Validates Bun's registry response and the reviewed advisory exceptions. Runs in its own CI job. |

@@ -1,6 +1,6 @@
 # Inspection library
 
-The public ESM package `health-code` owns Repository inspections. Its single entry exports `listUpgrades`, `resolveUpgrade`, `getUpgrade`, `inspectRepository`, provider factories, errors, and the Inspection Report and Inspection Event types. It also exports the helpers the site and the CI command share: `toUpgradeMenuReport`, `toReleaseAgeNotice`, `explainedErrorCodes`, `packageManagerDisplayNames`, `isExactVersion` and `createFakeGithub`. The site, the CI command and scheduled consumers import by package name.
+The public ESM package `health-code` owns Repository inspections. Its single entry exports `listUpgrades`, `resolveUpgrade`, `getUpgrade`, `inspectRepository`, provider factories, errors, and the Inspection Report and Inspection Event types. It also exports the helpers the site and the CI command share: `toUpgradeMenuReport`, `toReleaseAgeNotice`, `explainedErrorCodes`, `packageManagerDisplayNames`, `isExactVersion`, `createFakeGithub` and `readPackageFileDigests`. The site, the CI command and scheduled consumers import by package name.
 
 | Module | Responsibility |
 | --- | --- |
@@ -10,7 +10,7 @@ The public ESM package `health-code` owns Repository inspections. Its single ent
 | `prompts/` | Versioned instructions for four model roles, credential verification and Patch handoff. |
 | `test/` | Offline tests, shared provider contract, and live fixture harness. |
 
-Run `bun run --cwd packages/health-code build` from the root. The package emits JavaScript and declarations into `dist/` and builds the standalone guest modules. Verify the published shape with `bun run check:package` and verify production operations with `bun run test:provider`. Each module maintains its own AGENTS.md alongside the root README. The npm prepack hook also builds the CI command into `dist/cli/`. The `health-code` bin points to its Node CLI. Pack the release from the repository root with `npm pack ./packages/health-code`.
+Run `bun run --cwd packages/health-code build` from the root. The package emits JavaScript and declarations into `dist/` and builds the standalone guest modules. Verify the published shape with `bun run check:package` and verify production operations with `bun run test:provider`. Each module maintains its own AGENTS.md alongside the root README. The npm prepack hook also builds the CI command into `dist/cli/`. The library reads `package.json`, `prompts/` and the Guest bundles at run time only through `src/readPackageFile.ts`, so the standalone executable can embed the same files. The `health-code` bin points to its Node CLI. Pack the release from the repository root with `npm pack ./packages/health-code`.
 
 The web report calls `buildInvestigationPrompt` to hand incomplete checks to a coding agent with bounded, fenced evidence.
 

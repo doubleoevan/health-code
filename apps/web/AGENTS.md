@@ -23,7 +23,7 @@ Use the public `health-code` package for live Inspections. In development, `repl
 
 From the root, build the library with `bun run --cwd packages/health-code build`. Run `doppler run --project health-code --config dev -- bun run --cwd apps/web dev` for live inspections at `http://localhost:3000`. Use `bun run --cwd apps/web replay` for the credential-free recording. Both support `PORT`. `createLocalSiteRuntime.ts` uses separate local SQLite queues and a local sandbox namespace. Developers fund live work with their own Runta and model credentials. Local workers use the inspection queue directly. The production entry always uses hosted admission. `developSite.ts` serves Vite Fast Refresh and reloads the Hono routes. `startInspections.ts` initializes the hosted worker and its admission limits. Browser and stylesheet edits preserve the worker. Run `bun test apps/web` for HTTP, persistence, replay and publication tests. Build the browser assets with `bun run --cwd apps/web build` and serve them with `bun run --cwd apps/web start`.
 
-See `HOSTING.md` for the Northflank deployment, limits, health checks and backups.
+`/health/live` returns the `libraryVersion` from the public `health-code` entry. See `HOSTING.md` for the Northflank deployment, limits, health checks and backups.
 
 Follow code-style, jsx-conventions and vercel-react-best-practices. Review browser interactions against web-design-guidelines.
 

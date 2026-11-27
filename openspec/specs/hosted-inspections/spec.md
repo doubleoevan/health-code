@@ -130,7 +130,7 @@ Development and test mode SHALL reproduce recorded event timing and the correspo
 
 ### Requirement: Resolve the cache before charging a visitor
 
-The site SHALL reuse a conclusive report for the same public repository, commit, library version and hosted deployment commit, including confirmed upgrade failures. Incomplete discovery, an unusable baseline or an Untested upgrade SHALL allow a fresh submission under the usual limits. A new deployment commit SHALL start a fresh cache and preserve existing report URLs.
+The site SHALL reuse a conclusive report for the same public repository, commit, library version and hosted deployment commit, including confirmed upgrade failures. Incomplete discovery, an unusable baseline, a stopped inspection or an Untested upgrade SHALL allow a fresh submission under the usual limits. A new deployment commit SHALL start a fresh cache and preserve existing report URLs.
 
 #### Scenario: Verify a public checkout
 
@@ -141,6 +141,11 @@ The site SHALL reuse a conclusive report for the same public repository, commit,
 
 - **WHEN** an inspection loses its sandbox
 - **THEN** the report distinguishes completed checks, interrupted work and selected upgrades that never started. A retry measures a fresh baseline and may reuse conclusive results from the same repository, commit, library and deployment for the exact workspace versions and target. Each reused upgrade links to its original report.
+
+#### Scenario: Retry after a timed-out report
+
+- **WHEN** a visitor resubmits a repository whose report has a Baseline install that reached its check limit, or stopped at the inspection limit
+- **THEN** the site starts a new inspection and keeps the earlier report readable
 
 #### Scenario: Cached result at the cap
 

@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto"
 import { z } from "zod"
 import type { CodeFeatureMatch, Patch } from "../agentContracts.ts"
-import { redact, rethrowInspectionFailure } from "../collectEvents.ts"
+import { rethrowInspectionFailure } from "../collectEvents.ts"
 import { InspectionError, SandboxUnavailableError } from "../contracts.ts"
 import type { ModelInspection } from "../inspection/inspectModels.ts"
+import { hasSecret } from "../redactSecrets.ts"
 import { attemptUpgrade } from "./attemptUpgrade.ts"
 import { bumpManifest, toManifestPath } from "./bumpManifest.ts"
 import { formatManifest } from "./formatManifest.ts"
@@ -127,7 +128,7 @@ async function preparePatch(evidence: PatchEvidence, state: State, match?: CodeF
 	// verify the restored candidate before exporting replayed mailbox bytes
 	const verification = await verifyTree(evidence, state)
 	const mailbox = await workspace(evidence, { kind: "export", base: state.base, tip: state.tip })
-	if (!mailbox.startsWith("From ") || redact(mailbox) !== mailbox) {
+	if (!mailbox.startsWith("From ") || hasSecret(mailbox)) {
 		throw new Error("Patch replay unavailable")
 	}
 

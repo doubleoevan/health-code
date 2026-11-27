@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { checkRepository, checkUsage } from "./checkRepository.ts"
+import { describeVersion, versionUsage } from "./describeVersion.ts"
 import { setupAccount } from "./setupAccount.ts"
 import { toFailureMessage } from "./toFailureMessage.ts"
 import { UserError } from "./userError.ts"
@@ -10,9 +11,15 @@ async function main(args: string[]): Promise<void> {
 		return
 	}
 
+	// name the release before reading any setting
+	if (args[0] === "--version") {
+		console.log(describeVersion(args.slice(1)))
+		return
+	}
+
 	// reject unsupported subcommands before loading account settings
 	if (args[0] !== "setup" || args.length > 1) {
-		throw new UserError(`Usage: health-code setup\n${checkUsage}`)
+		throw new UserError(`Usage: health-code setup\n${checkUsage}\n${versionUsage}`)
 	}
 	console.log(await setupAccount(process.env))
 }

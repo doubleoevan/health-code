@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto"
-import { readFileSync } from "node:fs"
 import { parse } from "yaml"
 import { z } from "zod"
 import type { ModelRole } from "./agentContracts.ts"
+import { readPackageFile } from "./readPackageFile.ts"
 
 export type PromptName = ModelRole | "applyPatch" | "verifyCredential"
 export type PromptOverrides = Partial<Record<PromptName, string>>
@@ -18,7 +18,7 @@ const metadata = z.strictObject({
 })
 
 function bundledSource(name: PromptName | "investigateInspection"): string {
-	return readFileSync(new URL(`../prompts/${name}.md`, import.meta.url), "utf8")
+	return readPackageFile(`prompts/${name}.md`).toString("utf8")
 }
 
 export function credentialProbePrompt(): string {
@@ -35,7 +35,10 @@ export function readInvestigationPromptTemplate(): string {
 	return investigationTemplateBody
 }
 
-function readTemplate<Name extends PromptName | "investigateInspection">(
+/**
+ * Validates a prompt template and returns its instructions and reference.
+ */
+export function readTemplate<Name extends PromptName | "investigateInspection">(
 	name: Name,
 	source: string | undefined,
 ): { body: string; reference: { name: Name; version: number; sha256: string } } {

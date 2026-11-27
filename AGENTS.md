@@ -9,11 +9,12 @@ The TypeScript library owns inspections. The site and the CI command expose the 
 | --- | --- |
 | `packages/health-code/` | Library workspace. Owns inspection behavior and the public package entry. Read its AGENTS.md for the boundary. |
 | `apps/web/` | Web application (`@health-code/web`). Owns submission, upgrade menus built in the server, SQLite persistence, SSE, browser interactions and Inspection Report publication. |
-| `apps/cli/` | Source for the `health-code check` and `health-code setup` Node commands that ship in the library package. Owns account setup and the CI run. |
+| `apps/cli/` | Source for the `health-code check`, `health-code setup` and `health-code --version` commands that ship in the library package and as the standalone executable. Owns account setup, the CI run and the executable build. |
+| `action.yml`, `action/` | GitHub Action that installs the standalone executable after checking its checksum and build provenance. |
 | `evals/` | On-demand inspection cases at fixed commits and the Baseline test inventory for maintainer review. |
 | `DEVELOPMENT.md` | Contributor commands and release verification. |
 | `scripts/` | Repository checks, preflight, and the developer inspection CLI. Use `bun run inspect <repo-url> [--fake]` for a rolling log and a local JSON Inspection Report. |
-| `.github/` | CI, CodeQL, weekly dependency updates, and shared Bun setup. |
+| `.github/` | CI, CodeQL, the tag release of the npm package and standalone executables, weekly dependency updates, and shared Bun setup. |
 | `openspec/` | Specifications and change artifacts. |
 | `.agents/` | Project skills and commands. Claude Code uses the links under `.claude/`. |
 
@@ -29,9 +30,10 @@ The library ships the inspection engine. The site and command workspaces consume
 | Package-manager detection, install, bump, typecheck, tests, or upgrade discovery | `packages/health-code/` | Ecosystem Adapter boundary. |
 | Model-facing instructions, evidence interpolation, or model calls | `packages/health-code/` | prompt-authoring, ai-sdk |
 | Hosted submission, recovery, SSE, live log, timeline, or Inspection Report publication | `apps/web/` | jsx-conventions, vercel-react-best-practices, web-design-guidelines |
-| The CI command, its arguments, output files or account setup | `apps/cli/` | Consume the library through its public entry. |
+| The CI command, its arguments, output files, account setup or the standalone executable build | `apps/cli/` | Consume the library through its public entry. |
+| Installing the standalone executable in GitHub Actions | `action/` | Verify the checksum and the attestation before anything reaches `PATH`. |
 | Lint, types, dependency policy, import rules, or test discovery | `scripts/` and root tool configs | See scripts/AGENTS.md and DEVELOPMENT.md. |
-| CI or dependency updates | `.github/` | CI and /ship both invoke `bash scripts/preflight.sh`. |
+| CI, releases or dependency updates | `.github/` | CI and /ship both invoke `bash scripts/preflight.sh`. Only `publish-executables` in `release.yml` may hold `contents: write`. |
 | Naming or documentation | `.agents/skills/` and the affected module guide | domain-model, write-docs |
 
 ## Paths never to read

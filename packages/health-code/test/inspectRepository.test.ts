@@ -15,7 +15,7 @@ import {
 	providerContract,
 	registryCommand,
 } from "./providerContract.ts"
-import { clean, command, provider, report, scripts } from "./replayProjectChecks.ts"
+import { clean, command, provider, scripts } from "./replayProjectChecks.ts"
 
 test("shares one provider contract with the credentialed suite", async () => {
 	// exercise the shared provider contract with recorded observations
@@ -150,22 +150,6 @@ test("incomplete installation coverage keeps measured upgraded checks and an unt
 	assert.equal(upgrade.typecheck.status, "passed")
 	assert.equal(upgrade.tests.status, "passed")
 	assert.equal(upgrade.result.status, "untested")
-})
-
-test("an upgrade install timeout names the check and reports its recorded duration", async () => {
-	const entries = scripts([], [], [])
-	entries[6]!.result = { exitCode: 124, timedOut: true, durationMs: 180000 }
-	const inspection = await inspectRepository({
-		repositoryUrl: fixtureUrl,
-		sandboxProvider: provider(entries),
-		limits: { maxUpgrades: 1 },
-	})
-
-	// The upgrade deadline is independent of the successful baseline installation.
-	const install = inspection.upgrades[0]?.install
-	assert.equal(inspection.baseline.install.status, "passed")
-	assert.ok(install?.status === "untested")
-	assert.equal(install.detail, "The upgrade install timed out after 180 seconds.")
 })
 
 test("a blocked install script download retries without scripts for every install", async () => {

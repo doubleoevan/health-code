@@ -36,7 +36,7 @@ The upgraded code runs in a Runta sandbox with the network locked to package reg
 
 <a id="ci-setup"></a>
 
-**In CI:** needs [Node.js](https://nodejs.org/) 22.18+ or 24.11+, a [Runta](https://dashboard.runta.com) account and a model key. Store the model key in Runta once from your own machine:
+**In CI:** needs a [Runta](https://dashboard.runta.com) account and a model key. Store the model key in Runta once from your own machine with [Node.js](https://nodejs.org/) 22.18+ or 24.11+:
 
 ```sh
 export RUNTA_TOKEN=...
@@ -47,7 +47,7 @@ export HEALTH_CODE_MODEL=claude-opus-5-5
 npx health-code setup
 ```
 
-Add `RUNTA_TOKEN` to the repository's Actions secrets. Turn on **Allow GitHub Actions to create and approve pull requests** under Settings > Actions > General. Then add a job that tries an upgrade and opens a pull request with the tested patch:
+Add `RUNTA_TOKEN` to the repository's Actions secrets. Turn on **Allow GitHub Actions to create and approve pull requests** under Settings > Actions > General. Then add a job that tries an upgrade and opens a pull request with the tested patch. The action installs the standalone executable, so the job installs no npm packages and needs no Node:
 
 ```yaml
 name: Try dependency upgrades
@@ -58,6 +58,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  attestations: read
 jobs:
   health-code:
     runs-on: ubuntu-latest
@@ -65,10 +66,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      - run: npx health-code check https://github.com/${{ github.repository }} --pull-request
+      - uses: doubleoevan/health-code@<commit of v0.4.0> # v0.4.0
+      - run: health-code check https://github.com/${{ github.repository }} --pull-request
         env:
           RUNTA_TOKEN: ${{ secrets.RUNTA_TOKEN }}
           HEALTH_CODE_MODEL_HOST: https://api.anthropic.com
@@ -80,13 +79,13 @@ jobs:
           path: health-code-report
 ```
 
-See the [CI guide](apps/cli/README.md) for settings and options.
+See the [CI guide](apps/cli/README.md) for settings, options, the commit to use for each release and how to verify a download on other CI systems.
 
 ## Packages
 
 | Package | Use |
 | --- | --- |
-| [`health-code`](https://www.npmjs.com/package/health-code) | Inspection library and CI command |
+| [`health-code`](https://www.npmjs.com/package/health-code) | Inspection library and CI command. The command also ships as a standalone executable on each [release](https://github.com/doubleoevan/health-code/releases). |
 | [`apps/web`](apps/web) | Demo site |
 
 Guides: [library](packages/health-code/GUIDE.md) · [CI](apps/cli/README.md) · [development](DEVELOPMENT.md)

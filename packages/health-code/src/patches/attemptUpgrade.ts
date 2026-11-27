@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto"
 import { type AgentRole, agentRoleLabels, type CodeFeatureMatch } from "../agentContracts.ts"
-import { redact, rethrowInspectionFailure } from "../collectEvents.ts"
+import { rethrowInspectionFailure } from "../collectEvents.ts"
 import { SandboxUnavailableError } from "../contracts.ts"
 import type { ModelInspection } from "../inspection/inspectModels.ts"
 import { buildPrompt, parseAnswer } from "../models/buildPrompt.ts"
 import { attemptBudget, requestOverheadBytes } from "../models/modelBudget.ts"
+import { hasSecret } from "../redactSecrets.ts"
 import { sections } from "../upgrades/readLockedDependencies.ts"
 import { applyDecision } from "./applyAgentEdits.ts"
 import { fitAgentPrompt } from "./fitAgentPrompt.ts"
@@ -259,7 +260,7 @@ async function loadAllowedFiles({
 		const text = await workspace(evidence, { kind: "read", file, revision: state.tip }).catch(() => undefined)
 
 		// retain source only when redaction leaves the bytes intact
-		if (text !== undefined && redact(text) === text) {
+		if (text !== undefined && !hasSecret(text)) {
 			state.files.set(file, text)
 		}
 	}

@@ -12,4 +12,13 @@ while IFS= read -r path; do
     status=1
   fi
 done <<< "$paths"
+
+# read library package files only through the list the standalone executable embeds
+sources=$(git ls-files --cached --others --exclude-standard -- 'packages/health-code/src/*.ts' ':!*.test.ts' ':!packages/health-code/src/readPackageFile.ts')
+while IFS= read -r path; do
+  if [[ -f "$path" ]] && grep -q 'import\.meta\.url' "$path"; then
+    echo "$path: read package files through readPackageFile in packages/health-code/src/readPackageFile.ts" >&2
+    status=1
+  fi
+done <<< "$sources"
 exit "$status"

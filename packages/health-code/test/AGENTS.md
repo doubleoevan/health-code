@@ -20,4 +20,4 @@ The legacy Bun fixture stores its exact lockfile bytes as Base64. The adapter te
 
 `modelRequestSandbox.test.ts` covers time and cost admission, fenced prompt parity and both HTTPS protocols. `modelRequestSandboxProvider.test.ts` exercises verified binding replacement, network readback and recovery by exact allocation name.
 
-`replayProjectChecks.ts` supplies recorded commands for inspection and recovery tests. `recoverInspection.test.ts` covers partial results, replacement runtimes and registry discovery.
+`replayProjectChecks.ts` supplies recorded commands for inspection and recovery tests. `checkLimits.test.ts` covers a check that outlasts its check limit and an upgrade install that times out. `recoverInspection.test.ts` covers partial results, replacement runtimes and registry discovery.

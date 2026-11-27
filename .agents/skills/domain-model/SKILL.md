@@ -40,10 +40,11 @@ An **Inspection** targets a **Repository** at one inspected commit. An **Ecosyst
 | Sandbox Provider | The interface checks use to create a sandbox, execute commands in it, and destroy it. | Runta is the shipped provider. Unit tests use a fake. |
 | Ecosystem Adapter | Language support behind one interface to detect the package manager, install, bump a dependency, typecheck, test, and list upgrades. | The Node adapter covers JavaScript and TypeScript. |
 | Guest | The code that runs inside the sandbox beside the Repository checkout. | The Ecosystem Adapter commands, installation observer, agent request and patch tools in `guest/`. The host controls them through the Sandbox Provider. |
+| Standalone executable | The `health-code` CI command compiled with Bun's runtime into one file per platform, released beside the npm package. | Use executable in customer copy. It is a second build of the same CLI source with the same package files, never a second implementation. Name a file `health-code-<version>-<platform>`. |
 
 ## Inspection Report labels
 
-Use **Inspection Report** in product copy. In API docs, call the model-enabled result the **version 2 Inspection Report** (`InspectionReportV2`). **Repair** and **Feature adoption** are the two Agent Attempt roles. Their API IDs are `repair` and `featureAdoption`. **Turn limit** (`maxTurns`) bounds how many turns an attempt can take.
+Use **Inspection Report** in product copy. In API docs, call the model-enabled result the **version 2 Inspection Report** (`InspectionReportV2`). **Repair** and **Feature adoption** are the two Agent Attempt roles. Their API IDs are `repair` and `featureAdoption`. **Turn limit** (`maxTurns`) bounds how many turns an attempt can take. A **check limit** (`limits.timeouts.<stage>`) bounds one install, typecheck or tests check. A check that reaches it is a **check timeout** (`CheckTimeoutError`) and is untested. Its detail names the step, as in "The install step reached its 10-minute limit." The **inspection limit** (`maxDurationMs`) bounds the whole Inspection, and only it stops one with "The inspection reached its time limit."
 
 Use **Direct replacement** or **Inferred replacement** for a Code Feature Match. Identify the **Source location**, **Affected call sites** and **Adoption outcome**. Reserve **Verdict** for the Upgrade.
 

@@ -84,6 +84,8 @@ The Node adapter supports npm, pnpm, Bun and Yarn workspaces. It selects stable 
 
 Read each upgrade's `install.status` for the install command's Check Result. Its `observation.findings` list records off-registry connections, connection attempts with an unknown destination hostname and writes outside the project. Check `observation.complete` alongside that list. Even an empty list leaves the Upgrade Check untested when coverage is incomplete.
 
+Each check has its own check limit inside the inspection's. Install and tests get 600,000 ms each, typecheck gets 120,000 ms and the whole inspection gets 30 minutes without models. Override a check limit with `limits.timeouts.install`, `limits.timeouts.typecheck` or `limits.timeouts.tests` in milliseconds. A check that reaches its check limit is untested with the reason `command-timeout` and a detail such as "The install step reached its 10-minute limit.". The next check starts once the sandbox ends the timed-out command. The inspection goes on: a Baseline install timeout skips the upgrades because the Baseline is unusable, and an upgrade's timeout leaves that upgrade Untested. Only the inspection limit sets `stoppedReason` to "The inspection reached its time limit."
+
 If an install script fails after trying to reach a blocked host, Health Code reinstalls without scripts. It uses that policy for every later install and sets `installScriptsSkipped` on the Check Result.
 
 ## Inspections with models
@@ -109,3 +111,7 @@ A **Final patch check** produces **Patch verification**. **Download patch** prov
 The **Test file errors** list (`testFileErrors`) records the file and reason for each load, setup or other runner error outside a named case. Named test failures and skips have their own counts.
 
 Library callers can select `callerModelExecution: "modelRequestSandbox"` and pass stored-credential routes for all four roles. Omitting the option keeps summaries and Code Feature Matches in the caller’s process. A model request sandbox starts on the first eligible request. Each model request sandbox call has up to 120 seconds within the Inspection’s remaining work time. The Inspection Report records runtime cost bounds separately from model charges. `runtimeUsage.usageAsOf` gives the time through which runtime usage was measured.
+
+## Package files
+
+`libraryVersion` gives the installed release. `readPackageFileDigests()` reads every file the library loads from its own package: `package.json`, the prompt templates and the Guest bundles it uploads to the sandbox. It validates the templates and returns each file's path and SHA-256 digest. A missing or invalid file throws `InspectionError` with the code `package-files` and a message that names the file. Compare two installs or builds of one version by their digests.

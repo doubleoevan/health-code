@@ -1,6 +1,7 @@
 import { ApiError, type Runta } from "@runta/runta-sdk"
-import { checkOperation, redact } from "../collectEvents.ts"
+import { checkOperation } from "../collectEvents.ts"
 import { type CommandResult, InspectionError, type Operation, SandboxUnavailableError } from "../contracts.ts"
+import { redactSecrets } from "../redactSecrets.ts"
 export type Runtime = Awaited<ReturnType<Runta["runtimes"]["create"]>>
 export function translate(error: unknown): Error {
 	if (error instanceof InspectionError) {
@@ -91,7 +92,10 @@ export async function checked(
 
 	// surface bounded diagnostics for unsuccessful guest commands
 	if (result.exitCode !== 0) {
-		throw new InspectionError("sandbox-command", `Sandbox operation failed: ${redact(result.stderr).slice(-600)}`)
+		throw new InspectionError(
+			"sandbox-command",
+			`Sandbox operation failed: ${redactSecrets(result.stderr).slice(-600)}`,
+		)
 	}
 	return result.stdout
 }

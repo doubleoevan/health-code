@@ -302,6 +302,7 @@ export class InspectionError extends Error {
 export const explainedErrorCodes: ReadonlySet<string> = new Set([
 	"github-rate-limit",
 	"github-unavailable",
+	"package-files",
 	"registry-unavailable",
 	"repository-unavailable",
 	"revision-unavailable",

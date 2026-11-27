@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { checkOperation, type InspectionContext, redact } from "../collectEvents.ts"
+import { type CheckTimeoutError, checkOperation, type InspectionContext } from "../collectEvents.ts"
 import type {
 	Baseline,
 	CheckResult,
@@ -17,6 +17,7 @@ import type {
 	UpgradeReport,
 } from "../contracts.ts"
 import { InspectionError, SandboxUnavailableError } from "../contracts.ts"
+import { redactSecrets } from "../redactSecrets.ts"
 import {
 	ProjectEvidenceError,
 	parseRegistryVersions,
@@ -95,7 +96,7 @@ export class NodeAdapter implements EcosystemAdapter {
 		}
 
 		if (result.exitCode || result.stdoutTruncated) {
-			throw new ProjectEvidenceError(redact(result.stderr).slice(-512) || "Incomplete project metadata")
+			throw new ProjectEvidenceError(redactSecrets(result.stderr).slice(-512) || "Incomplete project metadata")
 		}
 
 		// Reject malformed metadata before using it as project evidence.
@@ -293,7 +294,22 @@ export class NodeAdapter implements EcosystemAdapter {
 				return { check: this.withPolicyDisclosure(stage, check), observation }
 			},
 			(value) => value.check.status,
+			(error) => ({ check: this.withPolicyDisclosure(stage, this.toTimedOutCheck(error)), observation: unobserved }),
 		)
+	}
+
+	// record a check that reached its check limit as untested, naming the step and its limit
+	private toTimedOutCheck(error: CheckTimeoutError): CheckResult {
+		this.lastObservation = unobserved
+		const evidence: Evidence = {
+			stdout: "",
+			stderr: error.message,
+			exitCode: 124,
+			durationMs: error.limitMs,
+			stdoutTruncated: false,
+			stderrTruncated: false,
+		}
+		return { ...untested("command-timeout", [evidence]), detail: error.message }
 	}
 
 	// apply and disclose the install policy chosen for the baseline
@@ -307,8 +323,8 @@ export class NodeAdapter implements EcosystemAdapter {
 	// redact and publish the bounded command output
 	private async recordOutput(raw: CommandResult, stepId: string, signal?: AbortSignal): Promise<Evidence> {
 		const evidence: Evidence = {
-			stdout: redact(raw.stdout).slice(0, 65536),
-			stderr: redact(raw.stderr).slice(0, 65536),
+			stdout: redactSecrets(raw.stdout).slice(0, 65536),
+			stderr: redactSecrets(raw.stderr).slice(0, 65536),
 			exitCode: raw.exitCode,
 			durationMs: raw.durationMs,
 			stdoutTruncated: raw.stdoutTruncated || raw.stdout.length > 65536,

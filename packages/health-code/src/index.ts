@@ -1,11 +1,9 @@
 export type { PromptName, PromptOverrides, PromptReference } from "./readPrompt.ts"
 
-import { readFileSync } from "node:fs"
+import { readPackageFile } from "./readPackageFile.ts"
 
 // Include the installed release in hosted inspection cache keys.
-export const libraryVersion: string = JSON.parse(
-	readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-).version
+export const libraryVersion: string = JSON.parse(readPackageFile("package.json").toString("utf8")).version
 
 export type {
 	/**
@@ -112,6 +110,8 @@ export {
 	readModelRoutes,
 	toModelSecretName,
 } from "./models/readModelRoutes.ts"
+export type { PackageFile } from "./readPackageFile.ts"
+export { type PackageFileDigest, readPackageFileDigests } from "./readPackageFileDigests.ts"
 export {
 	createFakeSandboxProvider,
 	type FixtureCommand,

@@ -1,6 +1,6 @@
 import type { InspectionOptionsV2, InspectionReportV2, PreviousInspectionOptions } from "../agentContracts.ts"
 import { retainMeasuredStages } from "../checks/preservePartialReport.ts"
-import { bounded, InspectionContext, redactEvidence } from "../collectEvents.ts"
+import { bounded, InspectionContext } from "../collectEvents.ts"
 import {
 	InspectionError,
 	type InspectionOptions,
@@ -10,6 +10,7 @@ import {
 	type WithSandboxProvider,
 } from "../contracts.ts"
 import type { ModelRequestSandboxInspectionReport, ModelRequestSandboxOptions } from "../models/modelRequestSandbox.ts"
+import { redactSecretsIn } from "../redactSecrets.ts"
 import { isApplicationVariable } from "../sandbox/buildGuestArguments.ts"
 import { createSandboxProvider } from "../sandbox/createSandboxProvider.ts"
 import { toInspectionMode } from "../toInspectionMode.ts"
@@ -95,7 +96,7 @@ export async function inspectRepository(
 
 	// Include every prompt dispatched before cleanup completed.
 	inspectionReport.promptVersions = context.prompts.references
-	return engine ? engine.buildInspectionReport(redactEvidence(inspectionReport)) : redactEvidence(inspectionReport)
+	return engine ? engine.buildInspectionReport(redactSecretsIn(inspectionReport)) : redactSecretsIn(inspectionReport)
 }
 
 // reject names that would override the trusted sandbox controls
@@ -277,7 +278,7 @@ async function failInspection(
 		await context.emit({
 			type: "inspection.failed",
 			code: error.code,
-			message: redactEvidence(error.message),
+			message: redactSecretsIn(error.message),
 			...(error.cleanupId ? { cleanupId: error.cleanupId } : {}),
 			...(engine && error.cleanupIds ? { cleanupIds: error.cleanupIds } : {}),
 			...(error.runtimeUsage ? { runtimeUsage: error.runtimeUsage } : {}),
@@ -285,7 +286,7 @@ async function failInspection(
 	} catch {
 		// Preserve the inspection error when terminal delivery also fails.
 	}
-	error.message = redactEvidence(error.message)
+	error.message = redactSecretsIn(error.message)
 	throw error
 }
 

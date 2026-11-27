@@ -1,4 +1,4 @@
-import { InspectionError, toFeaturePage, toUpgradeMenu, type UpgradeMenuTarget } from "health-code"
+import { InspectionError, libraryVersion, toFeaturePage, toUpgradeMenu, type UpgradeMenuTarget } from "health-code"
 import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { HTTPException } from "hono/http-exception"
@@ -161,7 +161,7 @@ export function createSite(options: {
 			return false
 		}
 	}
-	app.get("/health/live", (context) => context.json({ live: true }))
+	app.get("/health/live", (context) => context.json({ live: true, version: libraryVersion }))
 	app.get("/health/ready", (context) => {
 		try {
 			// Keep archived reports routable while paid admissions wait for recovery.
