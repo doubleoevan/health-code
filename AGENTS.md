@@ -8,9 +8,9 @@ The TypeScript library owns inspections. The site and the CI command expose the 
 | Path | Responsibility |
 | --- | --- |
 | `packages/health-code/` | Library workspace. Owns inspection behavior and the public package entry. Read its AGENTS.md for the boundary. |
-| `apps/web/` | Web application (`@health-code/web`). Owns submission, SQLite persistence, SSE, browser interactions and Inspection Report publication. |
+| `apps/web/` | Web application (`@health-code/web`). Owns submission, upgrade menus built in the server, SQLite persistence, SSE, browser interactions and Inspection Report publication. |
 | `apps/cli/` | Source for the `health-code check` and `health-code setup` Node commands that ship in the library package. Owns account setup and the CI run. |
-| `evals/` | On-demand, pinned inspection cases and the Baseline test inventory for maintainer review. |
+| `evals/` | On-demand inspection cases at fixed commits and the Baseline test inventory for maintainer review. |
 | `DEVELOPMENT.md` | Contributor commands and release verification. |
 | `scripts/` | Repository checks, preflight, and the developer inspection CLI. Use `bun run inspect <repo-url> [--fake]` for a rolling log and a local JSON Inspection Report. |
 | `.github/` | CI, CodeQL, weekly dependency updates, and shared Bun setup. |
@@ -24,6 +24,7 @@ The library ships the inspection engine. The site and command workspaces consume
 | When changing | Start here | Guidance |
 | --- | --- | --- |
 | Baseline, install or upgrade checks, feature matching, agent attempts, patches, verdicts, events, or inspection reports | `packages/health-code/` | domain-model, code-style |
+| The upgrade menu, GitHub reads, the locked dependencies, a named version or the minimum release age | `packages/health-code/` | Treat repository files and registry responses as untrusted. Send requests to GitHub's API origin and `registry.npmjs.org` only. |
 | Sandbox creation, Model Request Sandbox credentials, network policy, command execution, teardown, or the fake provider | `packages/health-code/` | Sandbox Provider boundary. Use provider names in identifiers only inside their provider. |
 | Package-manager detection, install, bump, typecheck, tests, or upgrade discovery | `packages/health-code/` | Ecosystem Adapter boundary. |
 | Model-facing instructions, evidence interpolation, or model calls | `packages/health-code/` | prompt-authoring, ai-sdk |
@@ -39,7 +40,7 @@ Keep secret files such as `.env` and `.env.*` out of agent context. Skip install
 
 ## Verification
 
-Run `bash scripts/preflight.sh` from the repository root before handoff. It stops at the first failure. It checks comment groups, Biome, manifest placement, package boundaries, dependency pins, Knip, the TypeScript projects, and tests.
+Run `bash scripts/preflight.sh` from the repository root before handoff. It stops at the first failure. It checks comment groups, Biome, manifest placement, package boundaries, declared versions, Knip, the TypeScript projects, and tests.
 
 The independent CI advisories job runs `bun run check:advisories` against the registry. Record a reviewed exception in `dependency-advisories.json` with its advisory ID, package, reason, and review date. Remove it once the advisory clears.
 
@@ -49,7 +50,7 @@ The independent CI advisories job runs `bun run check:advisories` against the re
 
 - **Comments.** Preflight checks tracked TypeScript, JavaScript and shell files for runs over eight uncommented statement lines. Claude Code runs the checker after edits and writes. Review TSX section comments with jsx-conventions during /ship. Leave one blank line before each standalone comment group wherever the formatter allows, and keep the comment directly above its code. Write JSDoc with the opening `/**`, description and closing `*/` on separate lines. Use imperative voice for inline comments and third person for JSDoc. Keep a short why for a non-obvious choice. Delete restatements, decision history, NOT-X notes, trailing “since” or “because” justifications, definitions by negation, and notes about other modules. Rewrite a comment when its claim changes.
 - **Code style.** Follow code-style. This repository overrides its file rules: name `.ts` files in camelCase and component files in PascalCase, keep shell scripts in kebab-case, write the `.ts` or `.tsx` extension in import specifiers, and use relative imports with no path alias. Use verb-plus-noun names for modules that perform an action and a `to` prefix for cheap synchronous transforms. Write explicit return types. Use an options object for three or more parameters. Use only abbreviations on the skill's whitelist. Write multi-line `if` blocks with braces. Give a second copy one shared home. Review any file past about 400 lines and split distinct responsibilities.
-- **Vocabulary.** Follow domain-model in code, comments, and specs. Add a new domain noun to the skill in the same change. Use descriptive identifiers and keep branding in customer copy. Highlight and pin Sandbox Events in the live log and timeline.
+- **Vocabulary.** Follow domain-model in code, comments, and specs. Add a new domain noun to the skill in the same change. Use descriptive identifiers and keep branding in customer copy. Highlight Sandbox Events and list them above the live log and timeline.
 - **Documentation.** Give every module its own `AGENTS.md` when you create it. Keep it current alongside the README in the same change. Document ownership, folders, public entry points, commands, and verification. Update the root map and routing entries when ownership changes.
 - **Git.** Work on `main` only. Suggest a Conventional Commit message that makes sense without project context. Get explicit approval before committing and separate explicit approval before pushing.
 - **Agent prompts.** State the task and reference the relevant skills in one line. Leave conventions in the skills and omit commit instructions.

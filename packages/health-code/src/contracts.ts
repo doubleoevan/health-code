@@ -58,7 +58,12 @@ export type CheckResult = (
 	attempts?: { status: "passed" | "failed" | "untested"; failingTests: TestFailure[] }[]
 }
 
-export type Upgrade = { dependency: string; from: Record<string, string>; to: string; kind: "minor" | "major" }
+export type Upgrade = {
+	dependency: string
+	from: Record<string, string>
+	to: string
+	kind: "minor" | "major" | "patch"
+}
 export type PackageManager = "npm" | "bun" | "pnpm" | "yarn"
 
 // describe the detected manager and workspace dependencies
@@ -72,6 +77,16 @@ export type Project = {
 	typecheck: "build" | "check" | "none"
 	testScript?: string
 	environment: string[]
+}
+
+// the tool the sandbox runs for a package manager. yarn-modern is yarn 2 and later
+export type ToolName = PackageManager | "yarn-modern"
+
+// an exact version of one package manager's official package
+export type PackageManagerInstall = {
+	tool: ToolName
+	version: string
+	hash?: string
 }
 
 export type Sandbox = { id: string }
@@ -131,6 +146,11 @@ export interface SandboxProvider {
 	modelRequestSandbox?: import("./models/modelRequestSandbox.ts").ModelRequestSandbox
 	openCredentialSession?: AgentCapability
 	patchWorkspace?(sandbox: Sandbox, request: PatchOperation, operation: Operation): Promise<string | null>
+
+	// install a verified package manager version before repository code runs
+	installPackageManager?(sandbox: Sandbox, request: PackageManagerInstall, operation: Operation): Promise<void>
+
+	// the availability check and the cost estimate for a duration
 	checkAvailability(options?: Operation): Promise<void>
 	estimateMaxCost(durationMs: number): number
 
@@ -177,8 +197,8 @@ export type InspectionOptions = InspectionModeOptions & {
 	includeTestInventory?: boolean
 	applicationEnvironment?: "empty" | "placeholders" | Readonly<Record<string, string>>
 
-	// optionally pin an upgrade and supply role configuration
-	upgrade?: { dependency: string; from: string | Record<string, string>; to: string }
+	// optionally select an upgrade and supply role configuration
+	upgrade?: { dependency: string; from?: string | Record<string, string>; to: string }
 	models?: Readonly<Record<string, string>>
 	signal?: AbortSignal
 }
@@ -229,7 +249,17 @@ export type InspectionReport = {
 	// Identify the revision associated with the Inspection Report.
 	inspectionId: string
 	repository: { url: string; commit: string }
-	packageManager: { name: PackageManager; version: string } | { reason: string }
+	packageManager:
+		| {
+				name: PackageManager
+				version: string
+
+				// where the version that ran came from, and why a declared version did not run
+				source?: "declared" | "bundled"
+				declared?: { version: string; file: string }
+				fallbackReason?: string
+		  }
+		| { reason: string }
 	baseline: Baseline
 
 	// retain selected upgrades and their ordered timeline
@@ -254,6 +284,10 @@ export class InspectionError extends Error {
 	// preserve cleanup state on typed inspection failures
 	cleanupId?: string
 	cleanupIds?: string[]
+
+	// when a rate limit lifts, and the versions a rejected target could have been
+	retryAt?: string
+	eligibleDependencyVersions?: string[]
 	runtimeUsage?: import("./models/modelRequestSandbox.ts").RuntimeUsage
 	constructor(
 		readonly code: string,
@@ -263,6 +297,16 @@ export class InspectionError extends Error {
 		this.name = "InspectionError"
 	}
 }
+
+// the error codes whose message names the next step
+export const explainedErrorCodes: ReadonlySet<string> = new Set([
+	"github-rate-limit",
+	"github-unavailable",
+	"registry-unavailable",
+	"repository-unavailable",
+	"revision-unavailable",
+	"unsupported-project",
+])
 
 // distinguish provider availability errors by reason
 export class SandboxUnavailableError extends InspectionError {

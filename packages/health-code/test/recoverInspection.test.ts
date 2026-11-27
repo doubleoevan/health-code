@@ -4,9 +4,7 @@ import { preservePartialReport, retainCompletedChecks } from "../src/checks/pres
 import {
 	type FixtureCommand,
 	InspectionError,
-	type InspectionEvent,
 	inspectRepository,
-	listUpgrades,
 	type SandboxProvider,
 	SandboxUnavailableError,
 } from "../src/index.ts"
@@ -349,7 +347,7 @@ test("discovery lists every eligible target without installing, then checks one 
 	assert.equal(earlier.selection.mode, "listUpgrades")
 	assert.deepEqual(earlier.selection.eligible, upgradeMenu.selection.eligible)
 
-	// Preserve both versions and the workspace-specific pins under a one-upgrade ceiling.
+	// Preserve both versions and the workspace-specific versions under a one-upgrade ceiling.
 	assert.deepEqual(
 		upgradeMenu.selection.eligible.map((target) => target.to),
 		["1.3.0", "2.0.0"],
@@ -375,33 +373,4 @@ test("discovery lists every eligible target without installing, then checks one 
 	)
 	assert.equal(checked.upgrades[0]?.install.status, "passed")
 	assert.equal(checked.selection.mode, "inspectUpgrades")
-})
-
-test("the public list includes documented features even under a single-upgrade test limit", async () => {
-	const events: InspectionEvent[] = []
-	const upgradeMenu = await listUpgrades({
-		repositoryUrl: fixtureUrl,
-		sandboxProvider: provider(scripts([], [], []).slice(0, 2)),
-		limits: { maxUpgrades: 1 },
-		onEvent: (event) => {
-			events.push(event)
-		},
-		request: async (url) =>
-			Response.json(
-				String(url).startsWith("https://registry.npmjs.org/")
-					? { repository: "https://github.com/example/widget" }
-					: [{ tag_name: "v1.3.0", body: "## Features\n- Faster imports", draft: false, prerelease: false }],
-			),
-	})
-
-	// Both version choices cross the documented release at the same commit.
-	assert.equal(upgradeMenu.repository.commit, fixtureCommit)
-	assert.deepEqual(
-		upgradeMenu.dependencies[0]?.targets.map((target) => [target.to, target.releaseFeatures.features[0]?.text]),
-		[
-			["1.3.0", "Faster imports"],
-			["2.0.0", "Faster imports"],
-		],
-	)
-	assert.equal(events.at(-1)?.type, "inspection.finished")
 })

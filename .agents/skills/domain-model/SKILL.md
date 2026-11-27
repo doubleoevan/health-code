@@ -9,13 +9,20 @@ An **Inspection** targets a **Repository** at one inspected commit. An **Ecosyst
 
 | Entity | What it is | Notes |
 | --- | --- | --- |
-| Repository | A public GitHub repository an Inspection targets. | Pin the commit for each Inspection. |
+| Repository | A public GitHub repository an Inspection targets. | Resolve one commit for each Inspection. |
 | Inspection | One end-to-end check of a Repository at an inspected commit. | Produces one Inspection Report. |
 | Baseline | The install, typecheck, and tests on the Repository before any change. | Exclude tests that fail here when attributing failures to an Upgrade. |
 | Upgrade | Moving one dependency from its current version to a newer one. | Identify the dependency and both versions. |
-| Upgrade menu | The eligible versions of direct dependencies at a Repository commit. | Use upgrade menu in copy and upgradeMenuId when a caller opens, pages or selects from a saved upgrade menu. |
+| Upgrade menu | The targets offered for direct dependencies at a Repository commit, chosen from their eligible dependency versions. | Use upgrade menu in copy and upgradeMenuId when a caller opens, pages or selects from a saved upgrade menu. |
+| Locked dependencies | The locked version of each direct dependency per workspace at a Repository commit, with the dependencies skipped for an unsupported or unresolved source. | The Guest reads them from the checkout and the upgrade menu reads them from GitHub, through one implementation. Name the type `LockedDependencies`. |
 | Linked dependency | A declared dependency upgraded in the same Patch because the packages must move together. | Check it with its Upgrade and list it under **Dependency changes**. |
 | Minimum release age | The repository’s package manager setting for how old a release must be before install. | Offer only releases old enough to install. |
+| Named version | One dependency version a caller names to test, which the upgrade menu may not list. | Check it against the rule for an eligible dependency version. Use named version in code and copy. |
+| Eligible dependency version | A dependency version the target rule accepts: published, stable, not deprecated, newer than the highest locked version and old enough for the minimum release age. | Patch releases qualify, so the eligible dependency versions include more than the upgrade menu's targets. List them under `eligibleDependencyVersions` when a named version is rejected. Customer copy may say eligible versions beside the dependency's name. |
+| Unreadable repository | A Repository whose committed files the upgrade menu cannot read through GitHub: a binary lockfile, a truncated tree, a symbolic link or a file past a limit. | Return the reason under `unreadable` and offer the sandbox listing. |
+| Sandbox listing | The eligible upgrades a sandbox lists from a checkout, with `mode: "listUpgrades"`. | Use it for an unreadable repository. It returns an Inspection Report with no Upgrade tested. |
+| Declared package manager version | The exact package manager version a Repository's committed files declare, in `packageManager`, `devEngines.packageManager`, `engines` or Bun's `.bun-version`. | A range declares no version. Install a declared version inside the supported range before any Repository file runs. Name the value with its source `DeclaredPackageManager`. |
+| Bundled package manager version | The package manager version the sandbox ships and runs when the Repository declares none or its declared version cannot be installed. | Record `packageManager.source` as `declared` or `bundled` in the Inspection Report, with `declared` and `fallbackReason`. |
 | Release feature | A change described in a dependency’s release notes. | Use “What’s new” in the upgrade menu. Cite the release. A Code Feature Match also identifies where the change applies in the Repository. |
 | Install Check | Installation of an Upgrade with the network locked to package registries. | Record attempted connections and files written outside the project. |
 | Installation Finding | One observed connection attempt or filesystem change attributed to an Install Check. | Record its source and coverage. |
@@ -28,7 +35,7 @@ An **Inspection** targets a **Repository** at one inspected commit. An **Ecosyst
 | Verdict | The final result for one Upgrade. | Passes as is, Fixed, Fixed with test changes, Can't fix, or Untested. |
 | Inspection Report | The result of the Inspection. | Include the Baseline, per-upgrade findings, Verdicts, Patches, and event timeline. |
 | Inspection Event | A typed event emitted as an Inspection progresses. | Step started, step finished, detail, inspection finished, or inspection failed. |
-| Sandbox Event | An Inspection Event recording an action by the sandbox's controls. | Sandbox created, network locked, connection blocked, agent started with its key kept out of the sandbox, or sandbox deleted. Highlight and pin these events in the live log and timeline. |
+| Sandbox Event | An Inspection Event recording an action by the sandbox's controls. | Sandbox created, network locked, connection blocked, agent started with its key kept out of the sandbox, or sandbox deleted. Highlight these events and list them above the live log and timeline. |
 | Model Request Sandbox | An isolated provider runtime that sends release-summary and Code Feature Match requests through a verified stored credential. | One per Inspection on first use. It contains no Repository checkout. Its verified startup is a Sandbox Event. |
 | Sandbox Provider | The interface checks use to create a sandbox, execute commands in it, and destroy it. | Runta is the shipped provider. Unit tests use a fake. |
 | Ecosystem Adapter | Language support behind one interface to detect the package manager, install, bump a dependency, typecheck, test, and list upgrades. | The Node adapter covers JavaScript and TypeScript. |
@@ -58,5 +65,14 @@ In the daily admin view, **share rate** is the fraction of completed Inspection 
 | “Run” outside infrastructure code | Inspection for the end-to-end check. Reserve run for infrastructure such as a process or CI job. |
 | Runta in a code identifier outside its provider | Sandbox Provider or Sandbox Event, according to what the identifier represents. Customer copy may name Runta. |
 | Plugin or plug-in for language support | Ecosystem Adapter. |
+| Chosen version | Named version. |
+| Refuse or refusal for a version or a request | Reject or rejection. |
+| Hostile input | Untrusted input. |
+| Pin, pinned or pinning | Declared package manager version for a package manager. Inspected commit, or resolve and keep one commit, for a Repository. Workspace versions for locked versions. List first for Sandbox Events. |
+| Dependency inventory | Locked dependencies. Keep inventory for the Baseline test inventory and a Sandbox Provider's runtime inventory. |
+| Accepted version | Eligible dependency version. |
+| Bundled version | Bundled package manager version. |
+| Unreadable project | Unreadable repository. |
+| A bare `version` in an identifier that could be a dependency's or a package manager's | Name the owner: `eligibleDependencyVersions`, `bundledPackageManagerVersion`, `declaredPackageManagerVersion`. |
 
 Keep branding in customer copy. In code, comments, and specs, name what the thing does.

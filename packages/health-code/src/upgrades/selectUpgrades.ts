@@ -1,11 +1,13 @@
-import { gt, major, minor, prerelease, rcompare, valid } from "semver"
+import { rcompare } from "semver"
 import type { Project, Upgrade } from "../contracts.ts"
+import { readOwnProperty } from "../readOwnProperty.ts"
+import { isNewerStable, toHighestVersion, toUpgradeKind } from "./checkUpgradeTarget.ts"
 
 /**
  * Selects stable targets that advance every declaring workspace.
  */
 export function selectUpgrades(
-	project: Project,
+	project: Pick<Project, "sources" | "skipped">,
 	registry: Record<string, string[]>,
 	limit: number,
 ): { eligible: Upgrade[]; selected: Upgrade[]; omitted: Upgrade[]; skipped: string[] } {
@@ -14,22 +16,19 @@ export function selectUpgrades(
 	for (const dependency of Object.keys(project.sources).sort()) {
 		const from = project.sources[dependency] ?? {}
 
-		// compare registry targets with the highest installed workspace version
-		const highest = Object.values(from)
-			.filter((v) => valid(v))
-			.sort(rcompare)[0]
-		const versions = Object.hasOwn(registry, dependency) ? registry[dependency] : undefined
-		if (!highest || !versions) {
+		// compare registry targets with the highest locked workspace version
+		const lockedVersions = Object.values(from)
+		const highestLockedVersion = toHighestVersion(lockedVersions)
+		const versions = readOwnProperty(registry, dependency)
+		if (!highestLockedVersion || !versions) {
 			skipped.push(`${dependency}: registry or lockfile evidence unavailable`)
 			continue
 		}
 
 		// choose stable minor and major upgrades that advance every workspace
-		const newer = versions.filter((v) => valid(v) && !prerelease(v) && gt(v, highest)).sort(rcompare)
+		const newerVersions = versions.filter((version) => isNewerStable(version, highestLockedVersion)).sort(rcompare)
 		for (const kind of ["minor", "major"] as const) {
-			const to = newer.find((v) =>
-				kind === "major" ? major(v) > major(highest) : major(v) === major(highest) && minor(v) > minor(highest),
-			)
+			const to = newerVersions.find((version) => toUpgradeKind(lockedVersions, version) === kind)
 			if (to) {
 				eligible.push({ dependency, from, to, kind })
 			}

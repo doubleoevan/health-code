@@ -1,24 +1,4 @@
-export type Manifest = {
-	name?: string
-	overrides?: Record<string, string | Record<string, unknown>>
-	packageManager?: string
-	workspaces?: string[] | { packages: string[] }
-	scripts?: { test?: string }
-
-	// list editable dependency sections in the manifest
-	dependencies?: Record<string, string>
-	devDependencies?: Record<string, string>
-	optionalDependencies?: Record<string, string>
-	peerDependencies?: Record<string, string>
-}
-export const lockfiles = {
-	npm: ["npm-shrinkwrap.json", "package-lock.json"],
-	bun: ["bun.lock", "bun.lockb"],
-	pnpm: ["pnpm-lock.yaml"],
-	yarn: ["yarn.lock"],
-} as const
-
-export const sections = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"] as const
+import { type Manifest, sections } from "../upgrades/readLockedDependencies.ts"
 
 /**
  * Returns the manifest path of a workspace directory.

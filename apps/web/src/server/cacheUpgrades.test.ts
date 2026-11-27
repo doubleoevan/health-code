@@ -1,3 +1,4 @@
+import { expect } from "bun:test"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import type { UpgradeFeatures } from "health-code"
@@ -121,7 +122,7 @@ test("a partial report caches only the exact completed upgrade and links its pro
 	report.upgrades.push(skipped)
 	report.stoppedReason = "The sandbox became unavailable."
 
-	// Admit a retry at the same pin with a higher selection limit.
+	// Admit a retry at the same commit with a higher selection limit.
 	function admit(release: string, limit: number): string {
 		return store.admission.admit({
 			head: { repositoryId: "fixture", sizeKiB: 1, revision: report.repository.commit },
@@ -139,7 +140,7 @@ test("a partial report caches only the exact completed upgrade and links its pro
 	const retry = admit("release", 3)
 	const lookup = store.upgrades.reader(retry)
 
-	// Reject changed pins, targets, workspace versions and releases.
+	// Reject changed commits, targets, workspace versions and releases.
 	assert.equal(lookup(report.repository, finished)?.reusedFromInspectionId, original)
 	assert.equal(lookup(report.repository, skipped), undefined)
 	assert.equal(lookup({ ...report.repository, commit: "b".repeat(40) }, finished), undefined)
@@ -266,4 +267,22 @@ test("release lookups share a result until its coverage-specific expiry", async 
 	now += 60000
 	await cache.read(target, load)
 	assert.equal(calls, 2)
+})
+
+test("release notes lookups stop at the hourly allowance and resume in the next hour", async () => {
+	let now = 0
+	const cache = new ReleaseFeatureCache(() => now)
+	const target = { dependency: "widget", from: { ".": "1.2.0" }, to: "1.3.0", kind: "minor" as const }
+	const load = async (): Promise<UpgradeFeatures> => ({ features: [], sources: [], gaps: ["incomplete"] })
+
+	// read a different release on each lookup
+	const read = (index: number): Promise<unknown> => cache.read({ ...target, to: `1.3.${index}` }, load)
+	for (let index = 0; index < 500; index++) {
+		await read(index)
+	}
+
+	// check that the next lookup is refused and one in the next hour is served
+	await expect(read(500)).rejects.toMatchObject({ status: 503 })
+	now += 3600000
+	await expect(read(500)).resolves.toBeDefined()
 })

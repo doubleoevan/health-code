@@ -5,10 +5,11 @@ import { HTTPException } from "hono/http-exception"
 import type { PageProps } from "../client/Page.tsx"
 import { continuousIntegrationSetupUrl } from "../report.ts"
 import { adminPage } from "./adminPage.tsx"
+import type { AdmissionRequest } from "./admitInspections.ts"
 import { buildReportInvestigationPrompt } from "./buildReportInvestigationPrompt.ts"
 import type { Inspections } from "./executeInspection.ts"
 import { SiteError } from "./inspectionSource.ts"
-import { readSubmission, resolveChoice } from "./readSubmission.ts"
+import { readSubmission, resolveChoice, type Submission } from "./readSubmission.ts"
 import { AdmissionError, toUtcDay, type Visitor } from "./recordAdmissions.ts"
 import { type Assets, renderPage } from "./renderPage.tsx"
 import { streamInspection } from "./streamInspection.ts"
@@ -54,6 +55,7 @@ function admissionFailure(context: Context, error: unknown, key?: string): Respo
 			{
 				message: error.message,
 				...(error.status === 403 ? { siteKey: key } : {}),
+				...(error.shouldOfferSandboxListing ? { shouldOfferSandboxListing: true } : {}),
 				...(error.cap || error.status === 503 ? { continuousIntegrationSetupUrl } : {}),
 			},
 			error.status,
@@ -71,6 +73,36 @@ function admissionFailure(context: Context, error: unknown, key?: string): Respo
 		return context.json({ message: "Enter a public GitHub URL like https://github.com/owner/repository." }, 400)
 	}
 	throw error
+}
+
+type StartSubmissionOptions = {
+	inspections: Inspections
+	submission: Submission
+
+	// the visitor to admit on the hosted site
+	request?: AdmissionRequest
+}
+
+// open a tested patch, build an upgrade menu in the server or queue paid work
+async function startSubmission({
+	inspections,
+	submission,
+	request,
+}: StartSubmissionOptions): Promise<{ id: string; reused: boolean }> {
+	const { readyId, ...choice } = resolveChoice(submission, inspections)
+	if (readyId) {
+		return { id: readyId, reused: true }
+	}
+
+	// build the upgrade menu in the server unless the visitor asked for a sandbox listing
+	if (choice.mode === "listUpgrades" && submission.isSandboxListing !== true) {
+		return inspections.upgradeMenuBuilds.discover(submission.repositoryUrl, request)
+	}
+
+	// Reserve the selected job under the normal visitor and spending limits.
+	return request
+		? inspections.admit(submission.repositoryUrl, request, choice)
+		: { id: inspections.submit(submission.repositoryUrl, choice), reused: false }
 }
 
 export function createSite(options: {
@@ -189,26 +221,14 @@ export function createSite(options: {
 			return context.json({ message: "Enter a public GitHub URL like https://github.com/owner/repository." }, 400)
 		}
 
-		// return a report location as soon as the inspection is queued
+		// return a report location as soon as the work is saved
 		try {
-			const { readyId, ...choice } = resolveChoice(input, inspections)
-			if (readyId) {
-				context.header("Location", `/r/${readyId}`)
-				return context.json({ id: readyId }, 200)
-			}
-
-			// Reserve the selected job under the normal visitor and spending limits.
-			const { id, reused } = launch
-				? await inspections.admit(
-						input.repositoryUrl,
-						{
-							identify: () => visitor(context),
-							challenge: input.challenge,
-							hostname,
-						},
-						choice,
-					)
-				: { id: inspections.submit(input.repositoryUrl, choice), reused: false }
+			const request = { identify: () => visitor(context), challenge: input.challenge, hostname }
+			const { id, reused } = await startSubmission({
+				inspections,
+				submission: input,
+				request: launch ? request : undefined,
+			})
 			context.header("Location", `/r/${id}`)
 			return context.json({ id }, reused ? 200 : 202)
 		} catch (error) {
@@ -240,12 +260,14 @@ export function createSite(options: {
 						view: upgradeMenuView,
 						commit: report.repository.commit,
 						repositoryUrl: report.repository.url,
-						issue: report.registryLookupIssue ?? report.stoppedReason ?? report.detection,
+						issue: report.unreadable?.message ?? report.registryLookupIssue ?? report.stoppedReason ?? report.detection,
+						isUnreadable: Boolean(report.unreadable),
+						releaseAgeNotice: report.releaseAgeNotice,
 					}
 				: undefined
 		const url = `${options.origin}/r/${id}`
 		snapshot.investigationPrompt = buildReportInvestigationPrompt(snapshot, url)
-		snapshot.canStop = canVisitorStop(context, id)
+		snapshot.canStop = !snapshot.isUpgradeMenuBuild && canVisitorStop(context, id)
 		const demoCallsLeft = readDemoCallsLeft(context)
 		return context.html(
 			renderPage({ snapshot: upgradeMenu ? null : snapshot, upgradeMenu, siteMode, demoCallsLeft, url }, assets),

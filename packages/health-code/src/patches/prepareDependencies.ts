@@ -1,7 +1,8 @@
 import { gt, valid } from "semver"
 import type { z } from "zod"
 import type { CodeFeatureMatch } from "../agentContracts.ts"
-import { bumpManifest, type Manifest, sections, toManifestPath } from "./bumpManifest.ts"
+import { type Manifest, sections } from "../upgrades/readLockedDependencies.ts"
+import { bumpManifest, toManifestPath } from "./bumpManifest.ts"
 import { formatManifest } from "./formatManifest.ts"
 import type { decision } from "./proposeEdits.ts"
 import {

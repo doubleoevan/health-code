@@ -178,7 +178,7 @@ export function Timeline({
 				<CurrentStep label={toStepLabel(current.label)} start={current.timestamp} />
 			)}
 
-			{/* pinned sandbox events */}
+			{/* sandbox events listed above the log */}
 			{sandboxEvents.length > 0 && (
 				<aside>
 					<h2>Runta sandbox</h2>

@@ -1,136 +1,110 @@
 import { execFileSync } from "node:child_process"
 import { existsSync, lstatSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { parse as parseClassicLock } from "@yarnpkg/lockfile"
 import { applyEdits, parse as jsonc, modify } from "jsonc-parser/lib/esm/main.js"
-import { valid, validRange } from "semver"
-import { parse as yaml } from "yaml"
-import type { PackageManager, Project } from "../src/contracts.ts"
+import { valid } from "semver"
+import type { PackageManager, Project, ToolName } from "../src/contracts.ts"
 import { applyManifestChanges } from "../src/patches/applyManifestChanges.ts"
-import { bumpManifest, lockfiles, type Manifest, sections } from "../src/patches/bumpManifest.ts"
+import { bumpManifest } from "../src/patches/bumpManifest.ts"
+import { toToolName } from "../src/sandbox/packageManagerVersions.ts"
+import {
+	type LockedDependenciesOptions,
+	listLockfileNames,
+	type Manifest,
+	parseManifest,
+	readLockedDependencies,
+	selectPackageManager,
+	toLockfileName,
+} from "../src/upgrades/readLockedDependencies.ts"
+import { type DeclaredPackageManager, toDeclaredPackageManager } from "../src/upgrades/toDeclaredPackageManager.ts"
 import { filesUnder, readManifest, readText, workspaceManifests } from "./readProjectFiles.ts"
 
 export function detectProject(): Project {
-	// identify the package manager and its locked versions
+	// read the locked dependencies from the checkout's committed files
 	const files = filesUnder(".")
-	const entries = workspaceManifests(files)
-	const root = readManifest(".")
-	const manager = managerName(root)
+	const rootManifest = readManifest(".")
+	const lockedDependencies = readLockedDependencies(readLockedDependenciesFiles(files, rootManifest))
+	const { manager } = lockedDependencies
 	const version = execFileSync(manager, ["--version"], { encoding: "utf8", timeout: 10000 }).trim()
-	const lookup = versionLookup(manager)
 
-	// group resolved dependency versions by workspace
-	const sources: Project["sources"] = Object.create(null)
-	const skipped = new Set<string>()
-	const unsupported = new Set<string>()
-	for (const [dir, manifest] of entries) {
-		for (const [name, range] of sections.flatMap((section) => Object.entries(manifest[section] ?? {}))) {
-			// mark incomplete or non-registry resolutions as unsupported
-			const value = lookup(dir, name, range)
-			if (typeof value !== "string" || !valid(value) || !registrySource(range)) {
-				unsupported.add(name)
-				skipped.add(`${dir} ${name}: unsupported or unresolved source`)
-				continue
-			}
-
-			// retain the workspace-specific installed version
-			sources[name] ??= Object.create(null)
-			;(sources[name] as Record<string, string>)[dir] = value
-		}
-	}
-
-	// exclude dependencies with any unsupported workspace occurrence
-	for (const name of unsupported) {
-		delete sources[name]
-	}
+	// scan the names of the environment variables the project reads
+	const skipped = new Set(lockedDependencies.skipped)
 	const environment = envNames(files, skipped)
 	const config = existsSync("tsconfig.json") ? jsonc(readText("tsconfig.json")) : undefined
 
-	// report the available project checks and public inventory
+	// report the available project checks and locked dependencies
 	return {
 		manager,
 		version,
-		sources,
+		sources: lockedDependencies.sources,
 		skipped: [...skipped].sort(),
 		typecheck: config ? (config.references?.length ? "build" : "check") : "none",
-		testScript: root.scripts?.test,
+		testScript: rootManifest.scripts?.test,
 		environment,
 	}
 }
 
-export function managerName(manifest: Manifest): PackageManager {
-	const detected = (Object.keys(lockfiles) as PackageManager[]).filter((name) =>
-		lockfiles[name].some((file) => existsSync(file)),
-	)
-
-	// use the declared manager when its lockfile is present
-	const declared = manifest.packageManager?.split("@")[0]
-	if (declared && detected.includes(declared as PackageManager)) {
-		return declared as PackageManager
-	}
-	if (detected.length === 1 && !declared) {
-		return detected[0] as PackageManager
-	}
-
-	// reject missing or conflicting package manager evidence
-	throw new Error("Unsupported or ambiguous root lockfile")
+/**
+ * Reads the tool the checkout runs and the package manager version its committed files declare.
+ */
+export function readCheckoutDeclaredPackageManager(): {
+	tool: ToolName
+	declaredPackageManager?: DeclaredPackageManager
+} {
+	// read the manifest, the lockfile names and bun's version file from the checkout
+	const manifest = parseManifest(readText("package.json"))
+	const manager = selectPackageManager(manifest, listLockfileNames(existsSync))
+	const bunVersionFile = existsSync(".bun-version") ? readText(".bun-version") : undefined
+	const declaredPackageManager = toDeclaredPackageManager({ manager, manifest, bunVersionFile })
+	return { tool: readToolName(manager), ...(declaredPackageManager && { declaredPackageManager }) }
 }
 
-type VersionLookup = (dir: string, name: string, range: string) => unknown
-function versionLookup(manager: PackageManager): VersionLookup {
-	// resolve npm versions through workspace and root lock entries
-	if (manager === "npm") {
-		const lock = JSON.parse(readText(lockfiles.npm.find((file) => existsSync(file)) ?? "package-lock.json"))
-		return (dir, name) =>
-			lock.packages?.[join(dir, "node_modules", name)]?.version ??
-			lock.packages?.[`node_modules/${name}`]?.version ??
-			lock.dependencies?.[name]?.version
-	}
-
-	// read the matching importer from the pnpm lockfile
-	if (manager === "pnpm") {
-		const lock = yaml(readText("pnpm-lock.yaml"))
-		return (dir, name) => {
-			const importer = lock.importers?.[dir] ?? (dir === "." ? lock : {})
-			for (const section of sections) {
-				const value = importer?.[section]?.[name]
-
-				// strip peer dependency qualifiers from the locked version
-				if (value) {
-					return String(value.version ?? value).split("(")[0]
-				}
-			}
+/**
+ * Names the tool the checkout runs for a package manager.
+ */
+export function readToolName(manager: PackageManager): ToolName {
+	// read the files that tell modern yarn from classic
+	const files = new Map<string, string>()
+	for (const name of [".yarnrc.yml", "yarn.lock"]) {
+		if (manager === "yarn" && existsSync(name)) {
+			files.set(name, readText(name))
 		}
 	}
-
-	// resolve bun workspace package aliases before root packages
-	if (manager === "bun" && existsSync("bun.lock")) {
-		const lock = jsonc(readText("bun.lock"))
-		return (dir, name) => {
-			const workspace = lock.workspaces?.[dir]?.name
-			const entry = lock.packages?.[`${workspace}/${name}`] ?? lock.packages?.[name]
-			return entry?.[0]?.slice(name.length + 1)
-		}
-	}
-
-	// decode binary bun lockfiles or read yarn text directly
-	const raw =
-		manager === "bun"
-			? execFileSync("bun", [lockfiles.bun[1]], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 })
-			: readText("yarn.lock")
-	const lock: Record<string, { version: string }> = raw.includes("__metadata:")
-		? yaml(raw)
-		: parseClassicLock(raw).object
-
-	// match the requested descriptor in the decoded lockfile
-	return (_dir, name, range) =>
-		Object.entries(lock).find(([key]) =>
-			key.split(", ").some((k) => k === `${name}@${range}` || k === `${name}@npm:${range}`),
-		)?.[1]?.version
+	return toToolName(manager, files)
 }
 
-function registrySource(range: string): boolean {
-	return !!validRange(range) || /^[a-z][a-z0-9_.-]*$/i.test(range)
+/**
+ * Selects the checkout's package manager from a manifest and the lockfiles present.
+ */
+export function detectPackageManager(manifest: Manifest): PackageManager {
+	return selectPackageManager(manifest, listLockfileNames(existsSync))
+}
+
+// collect the text of the manifests, the lockfile and the bun version file
+function readLockedDependenciesFiles(files: string[], rootManifest: Manifest): LockedDependenciesOptions {
+	const lockfileNames = listLockfileNames(existsSync)
+	const workspaces = workspaceManifests(files).map(([directory]) => directory)
+	const workspaceDirectories = workspaces.filter((directory) => directory !== ".")
+
+	// read the root manifest and each workspace manifest as text
+	const fileContents = new Map<string, string>([["package.json", readText("package.json")]])
+	for (const directory of workspaceDirectories) {
+		fileContents.set(`${directory}/package.json`, readText(join(directory, "package.json")))
+	}
+
+	// decode a binary bun lockfile with bun and read every other lockfile as text
+	const lockfileName = toLockfileName(selectPackageManager(rootManifest, lockfileNames), lockfileNames)
+	const lockfileText =
+		lockfileName === "bun.lockb"
+			? execFileSync("bun", [lockfileName], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 })
+			: readText(lockfileName)
+	fileContents.set(lockfileName, lockfileText)
+
+	// include the bun version file when the project commits one
+	if (existsSync(".bun-version")) {
+		fileContents.set(".bun-version", readText(".bun-version"))
+	}
+	return { files: fileContents, lockfileNames, workspaceDirectories }
 }
 
 function envNames(files: string[], skipped: Set<string>): string[] {

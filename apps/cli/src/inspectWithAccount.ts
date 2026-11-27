@@ -10,10 +10,8 @@ import { type PersonalProvider, personalProvider } from "./personalModelRequestS
 import { accountToken, readGithubToken, requireSettings } from "./readEnvironmentSettings.ts"
 
 // the choices a caller makes for one inspection
-export type InspectOptions = Pick<
-	InspectionOptions,
-	"revision" | "mode" | "upgrade" | "limits" | "applicationEnvironment"
-> & {
+export type InspectOptions = Pick<InspectionOptions, "revision" | "mode" | "upgrade" | "applicationEnvironment"> & {
+	limits?: InspectionOptions["limits"] & { maxFeatureMatches?: number }
 	repositoryUrl: string
 	signal: AbortSignal
 	onEvent: (event: ModelRequestSandboxEvent) => void

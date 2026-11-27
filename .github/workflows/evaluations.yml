@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       case:
-        description: Pinned case to score
+        description: Case to score
         type: choice
         options:
           [

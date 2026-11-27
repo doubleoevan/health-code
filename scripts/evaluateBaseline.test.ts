@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url"
 import type { InspectionReport } from "health-code"
 import { openBaseline } from "./evaluateBaseline.ts"
 
-test("record requires a complete pinned Baseline and scores only reviewed measurements", async () => {
+test("record requires a complete Baseline case and scores only reviewed measurements", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "health-code-case-"))
 	const path = pathToFileURL(join(dir, "case.json"))
 	try {

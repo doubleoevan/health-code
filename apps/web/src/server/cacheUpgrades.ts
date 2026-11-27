@@ -42,7 +42,7 @@ export class UpgradeCache {
 	}
 
 	readyReport(scope: string, upgrade?: InspectionOptionsV2["upgrade"]): string | undefined {
-		if (!upgrade || typeof upgrade.from === "string") {
+		if (!upgrade?.from || typeof upgrade.from === "string") {
 			return undefined
 		}
 		const target = toUpgradeTargetKey({ dependency: upgrade.dependency, from: upgrade.from, to: upgrade.to })

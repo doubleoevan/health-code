@@ -9,13 +9,22 @@ import {
 } from "health-code"
 import { inspectionFixtureUrl } from "./inspectionSettings.ts"
 
+type ModelRequestSandboxFixtureOptions = {
+	makeProvider: typeof createFakeSandboxProvider
+
+	// the token every GitHub request must send and the version the inspection is told to test
+	githubToken?: string
+	selectedUpgrade?: { to: string }
+}
+
 /**
  * Creates a recorded Inspection with model replies and a restorable release transport.
  */
-export async function modelRequestSandboxFixture(
-	makeProvider: typeof createFakeSandboxProvider,
-	githubToken?: string,
-): Promise<{
+export async function modelRequestSandboxFixture({
+	makeProvider,
+	githubToken,
+	selectedUpgrade,
+}: ModelRequestSandboxFixtureOptions): Promise<{
 	provider: ReturnType<typeof createFakeSandboxProvider>
 	phases: string[]
 	mailbox: string
@@ -59,22 +68,26 @@ export async function modelRequestSandboxFixture(
 		unresolved: [],
 	})
 
+	// install the selected version and skip the registry listing
+	const upgradedVersion = selectedUpgrade?.to ?? "1.3.0"
+	const selectedBump = selectedUpgrade ? { ...bump, argv: [...bump.argv.slice(0, -1), selectedUpgrade.to] } : bump
+
 	// order guest responses to match the inspection phases
 	const commands = [
 		detect,
-		registry,
+		...(selectedUpgrade ? [] : [registry]),
 		usage,
 		install,
 		size,
 		tests,
 		report,
 		inventory,
-		bump,
+		selectedBump,
 		command(["changelog", "widget"], ""),
 		size,
 		tests,
 		report,
-		bump,
+		selectedBump,
 		install,
 		tests,
 		report,
@@ -115,7 +128,9 @@ export async function modelRequestSandboxFixture(
 			// return revision-specific manifest and source contents
 			case "read":
 				if (request.file === "package.json") {
-					return JSON.stringify({ dependencies: { widget: request.revision === fixture.commit ? "1.2.0" : "1.3.0" } })
+					return JSON.stringify({
+						dependencies: { widget: request.revision === fixture.commit ? "1.2.0" : upgradedVersion },
+					})
 				}
 				assert.equal(request.file, source)
 				return "widget()"

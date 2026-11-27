@@ -386,7 +386,7 @@ test("rejects malformed revisions before allocation and reclaims failed checkout
 	await assert.rejects(inspectRepository({ ...options, revision: "main", onEvent }), /full commit SHA/)
 	assert.equal(actions.length, 0)
 
-	// Verify cleanup whether GitHub rejects the pin or a provider returns another commit.
+	// Verify cleanup whether GitHub rejects the revision or a provider returns another commit.
 	for (const result of ["mismatch", "inaccessible"]) {
 		sandboxProvider.prepareRepository = async () => {
 			if (result === "inaccessible") {

@@ -3,12 +3,13 @@ import type { Context } from "hono"
 import type { Inspections } from "./executeInspection.ts"
 import { type InspectionChoice, SiteError } from "./inspectionSource.ts"
 
-type Submission = {
+export type Submission = {
 	repositoryUrl: string
 	challenge?: unknown
 
 	// Describe the requested work, including the older menuId name.
 	action?: unknown
+	isSandboxListing?: unknown
 	upgradeMenuId?: unknown
 	menuId?: unknown
 	dependency?: unknown

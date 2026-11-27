@@ -8,6 +8,7 @@ import {
 	readUpgradeFeatures,
 	reconcileSandboxes,
 } from "health-code"
+import { buildUpgradeMenuInProcess } from "./buildUpgradeMenu.ts"
 import type { InspectionSource } from "./inspectionSource.ts"
 
 import { createRepositoryLookup } from "./verifyRepository.ts"
@@ -61,12 +62,19 @@ export function createLiveSource(
 		throw new Error("Expected a whole-number upgrade limit")
 	}
 
-	// bind github lookup and sandbox recovery to the hosted deployment
+	// require a GitHub token in production. the server builds upgrade menus from GitHub
 	const githubToken = environment.GITHUB_TOKEN
+	if (environment.NODE_ENV === "production" && !githubToken) {
+		throw new Error("Configure GITHUB_TOKEN before starting the live site")
+	}
+
+	// bind github lookup and sandbox recovery to the hosted deployment
 	const firstSeen = new Map<string, number>()
 	return {
 		...createRepositoryLookup(githubToken),
 		features: (upgrade) => readUpgradeFeatures(upgrade, { githubToken }),
+		upgradeMenu: (repositoryUrl, { onEvent, ...upgradeMenuOptions }) =>
+			buildUpgradeMenuInProcess({ request: { repositoryUrl, githubToken, ...upgradeMenuOptions }, onEvent }),
 		maxDurationMs: limits.maxDurationMs,
 		async recover(options): Promise<number> {
 			await reconcileSandboxes({ deployment, token, liveInspectionIds: new Set(), firstSeen, ...options })

@@ -150,6 +150,31 @@ test("server HTML renders each Verdict, license decision, evidence and preview b
 	store.database.close()
 })
 
+test("a version 2 report whose upgrade is a patch release renders on the report page", async () => {
+	const store = new InspectionStore(":memory:")
+	const output = await replay.inspect(repository, () => {})
+	const upgrade = output.report.upgrades[0]
+	if (!upgrade) {
+		throw new Error("fixture requires an upgrade")
+	}
+
+	// record the upgrade as a patch release of its dependency
+	Object.assign(upgrade, { kind: "patch", from: { ".": "4.17.19" }, to: "4.17.21" })
+	const id = store.enqueue(repository)
+	store.finish(id, publishReport(output, "MIT"))
+	const response = await site(store).request(`/r/${id}`)
+	const html = (await response.text()).replaceAll("<!-- -->", "")
+
+	// check that the page shows the finished report with the patch release's versions
+	expect(output.report.version).toBe(2)
+	expect(response.status).toBe(200)
+	expect(html).toContain("<h1>Inspection complete</h1>")
+	expect(html).toContain(". · 4.17.19 → 4.17.21")
+	expect(html).toContain(`${upgrade.dependency}@4.17.21 · upgrade patch`)
+	expect(store.snapshot(id)?.card?.upgrades[0]?.verdict).toBe(upgrade.verdict)
+	store.database.close()
+})
+
 test("a timed-out upgrade install explains which checks did not run", async () => {
 	const output = await replay.inspect(repository, () => {})
 	const upgrade = output.report.upgrades[0]!

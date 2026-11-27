@@ -6,19 +6,25 @@ import { isReusableReport, UpgradeCache } from "./cacheUpgrades.ts"
 import type { InspectionChoice } from "./inspectionSource.ts"
 import { type Publication, readPublishedReport, withheldReason } from "./publishReport.ts"
 import { AdmissionLedger, migrateAdmissions } from "./recordAdmissions.ts"
+import { UpgradeMenuLedger } from "./storeUpgradeMenus.ts"
 
 // use the final report's license once it exists and the license recorded before the run until then
 const licenseColumn = `CASE WHEN report IS NULL
    THEN (SELECT license FROM inspected_licenses l WHERE l.id=inspections.id) ELSE json_extract(report,'$.license') END`
 
 type StoredRow = Pick<Snapshot, "id" | "state" | "repositoryUrl" | "message"> & { report: string | null }
+
+// a running inspection that is not an upgrade menu build
+const abandonedInspection = "state='running' AND id NOT IN (SELECT id FROM upgrade_menus)"
+
 export class InspectionStore {
 	readonly database: Database
 	readonly admission: AdmissionLedger
 	readonly upgrades: UpgradeCache
+	readonly upgradeMenus: UpgradeMenuLedger
 	constructor(
 		path: string,
-		private readonly makeId: () => string = () => randomBytes(12).toString("base64url"),
+		readonly makeId: () => string = () => randomBytes(12).toString("base64url"),
 	) {
 		// open the database with concurrent readers enabled
 		this.database = new Database(path, { create: true, strict: true })
@@ -62,6 +68,7 @@ export class InspectionStore {
 		this.database.exec("CREATE TABLE IF NOT EXISTS inspected_licenses(id TEXT PRIMARY KEY, license TEXT NOT NULL)")
 		this.admission = new AdmissionLedger(this.database)
 		this.upgrades = new UpgradeCache(this.database)
+		this.upgradeMenus = new UpgradeMenuLedger(this.database)
 	}
 	position(id: string): number | null {
 		// Expose a one-based queue position for durable rows.
@@ -129,7 +136,7 @@ export class InspectionStore {
 		dependency: string
 		to: string
 	}): Upgrade | undefined {
-		// Read only the workspace pins and target needed for release lookup.
+		// Read only the workspace versions and target needed for release lookup.
 		const row = this.database
 			.query<{ value: string }, [string, string, string]>(`
 			SELECT item.value FROM inspections i, json_each(coalesce(json_extract(i.report,'$.upgradeMenu'),json_extract(i.report,'$.menu'))) item
@@ -208,19 +215,21 @@ export class InspectionStore {
 		})()
 	}
 
-	// mark jobs left running by a previous process
+	// mark jobs left running by a previous process. upgrade menu builds start before recovery ends and are failed apart
 	interrupt(): { id: string; repositoryUrl: string; durationMs: number }[] {
 		return this.database
 			.transaction(() => {
 				const abandoned = this.database
 					.query<{ id: string; repositoryUrl: string; durationMs: number }, []>(
-						"SELECT id,repositoryUrl,max(0,unixepoch('now')-unixepoch(updated))*1000 durationMs FROM inspections WHERE state='running'",
+						`SELECT id,repositoryUrl,max(0,unixepoch('now')-unixepoch(updated))*1000 durationMs FROM inspections WHERE ${abandonedInspection}`,
 					)
 					.all()
 
 				// Mark and report exactly the inspections claimed by the previous process.
 				this.database
-					.query("UPDATE inspections SET state='interrupted',message=?,updated=CURRENT_TIMESTAMP WHERE state='running'")
+					.query(
+						`UPDATE inspections SET state='interrupted',message=?,updated=CURRENT_TIMESTAMP WHERE ${abandonedInspection}`,
+					)
 					.run("This inspection was interrupted when the server restarted. You can start a new inspection.")
 				return abandoned
 			})
@@ -290,6 +299,7 @@ export class InspectionStore {
 				mode: choice?.mode,
 				selectedDependencyUpgrade: choice?.upgrade,
 				upgradeMenuId: this.findUpgradeMenuId(row.repositoryUrl),
+				isUpgradeMenuBuild: this.upgradeMenus.isUpgradeMenu(id) || undefined,
 				message: row.message,
 				repositoryUrl: row.repositoryUrl,
 				events,

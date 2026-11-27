@@ -3,7 +3,7 @@ import { openBaseline } from "./evaluateBaseline.ts"
 import { evaluateUpgrade, upgradeCaseIds } from "./evaluateUpgrade.ts"
 
 async function evaluateBaseline(record: boolean, signal: AbortSignal): Promise<void> {
-	// load the pinned baseline and select its recording mode
+	// load the baseline case and select its recording mode
 	const path = new URL("../evals/baseline-test-counts.json", import.meta.url)
 	const { fixture, finish } = await openBaseline(path, record)
 	const started = Date.now()

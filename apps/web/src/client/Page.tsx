@@ -1,228 +1,24 @@
-import type { UpgradeMenuTarget } from "health-code"
-import { type FormEvent, type KeyboardEvent, type ReactElement, useCallback, useEffect, useState } from "react"
+import { type ReactElement, useEffect, useState } from "react"
 import {
 	continuousIntegrationSetupUrl,
 	readmeUrl,
-	replayRepositoryUrl,
 	runtaSignupUrl,
 	type SiteEvent,
 	type Snapshot,
 	toVersionChange,
 } from "../report.ts"
-import { Challenge } from "./Challenge.tsx"
+import { Home, type HomeProps } from "./Home.tsx"
 import { InspectionDetails } from "./InspectionDetails.tsx"
 import { TroubleshootingPrompt } from "./PromptBox.tsx"
 import { Copy, Link, UpgradeMenuLink } from "./ReportControls.tsx"
 import { ReportView } from "./ReportView.tsx"
 import { StopInspection } from "./StopInspection.tsx"
 import { Timeline } from "./Timeline.tsx"
-import { UpgradeMenu, type UpgradeMenuView } from "./UpgradeMenu.tsx"
 
-export type PageProps = {
-	upgradeMenu?: { id: string; view: UpgradeMenuView; repositoryUrl: string; commit: string; issue?: string }
-	paused?: boolean
+export type PageProps = HomeProps & {
 	snapshot: Snapshot | null
 	url: string
-	siteMode: "local" | "hosted" | "replay"
 	demoCallsLeft?: number
-}
-function handleRepositoryKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
-	const input = event.currentTarget
-
-	// Preserve caret navigation and text selection when a repository has been entered.
-	if (
-		event.key === "ArrowRight" &&
-		!input.readOnly &&
-		!input.value &&
-		!event.shiftKey &&
-		!event.altKey &&
-		!event.ctrlKey &&
-		!event.metaKey
-	) {
-		event.preventDefault()
-		input.value = "https://github.com/"
-	}
-}
-
-function Home({ siteMode, paused, upgradeMenu }: Pick<PageProps, "siteMode" | "paused" | "upgradeMenu">): ReactElement {
-	const replay = siteMode === "replay"
-	const [error, setError] = useState("")
-	const [verification, setVerification] = useState<{
-		siteKey: string
-		repositoryUrl: string
-		target?: UpgradeMenuTarget
-	} | null>(null)
-	const [pending, setPending] = useState(false)
-	const [shouldOfferContinuousIntegration, setShouldOfferContinuousIntegration] = useState(false)
-	const submit = useSubmit(upgradeMenu?.id, {
-		setPending,
-		setError,
-		setShouldOfferContinuousIntegration,
-		setVerification,
-	})
-	const verified = useCallback(
-		(token: string): void => {
-			if (verification) {
-				setVerification(null)
-				void submit(verification.repositoryUrl, verification.target, token)
-			}
-		},
-		[submit, verification],
-	)
-	const retry = useCallback((): void => {
-		setVerification(null)
-		setPending(false)
-		setShouldOfferContinuousIntegration(true)
-		setError("Verification could not finish. Retry the inspection or run Health Code in CI.")
-	}, [])
-	function handleSubmit(event: FormEvent<HTMLFormElement>): void {
-		event.preventDefault()
-		void submit(String(new FormData(event.currentTarget).get("repositoryUrl")))
-	}
-
-	// Show how the server answered a submission that did not start an inspection.
-	const inspectionSubmissionResponse = (
-		<div className="inspection-submission-response">
-			{/* visitor verification */}
-			{verification && <Challenge siteKey={verification.siteKey} onToken={verified} onFailure={retry} />}
-
-			{/* submission error */}
-			{error && (
-				<p role="alert">
-					{error} {shouldOfferContinuousIntegration && <Link href={continuousIntegrationSetupUrl}>CI setup</Link>}
-				</p>
-			)}
-		</div>
-	)
-	return (
-		<section className={upgradeMenu ? "home" : "home landing"}>
-			{/* inspection overview */}
-			{upgradeMenu ? (
-				<>
-					<header className="inspection-heading">
-						<h1>Try an upgrade</h1>
-						<p className="mono">
-							<Link href={upgradeMenu.repositoryUrl}>{upgradeMenu.repositoryUrl.slice(19)}</Link> ·{" "}
-							{upgradeMenu.commit.slice(0, 8)}
-						</p>
-					</header>
-					{inspectionSubmissionResponse}
-					<UpgradeMenu
-						view={upgradeMenu.view}
-						issue={upgradeMenu.issue}
-						upgradeMenuId={upgradeMenu.id}
-						pending={pending}
-						onSelect={(target) => void submit(upgradeMenu.repositoryUrl, target)}
-					/>
-				</>
-			) : (
-				<>
-					<h1>
-						Inspect your code
-						<span>for new features</span>
-					</h1>
-					<p className="intro">
-						AI health inspectors show you new dependency features and try an upgrade on your codebase inside a Runta
-						sandbox. The network is locked, model keys stay outside and successful upgrades return tested patches.
-					</p>
-
-					{/* repository inspection steps */}
-					<ol className="steps">
-						<li>Enter your public GitHub repo URL (Node.js or Bun) and click New features</li>
-						<li>Choose a dependency and click Try upgrade to try it on your codebase in a Runta sandbox.</li>
-					</ol>
-
-					{/* public repository submission */}
-					{paused && (
-						<p role="status">
-							The hosted budget is reserved or temporarily unavailable. The daily allowance resets at 00:00 UTC. Cached
-							reports remain available.{" "}
-							<Link href={continuousIntegrationSetupUrl}>Run it in CI with your Runta account</Link>.
-						</p>
-					)}
-					<form onSubmit={handleSubmit}>
-						<div className="field">
-							<input
-								id="repository"
-								aria-label="Public GitHub repository"
-								name="repositoryUrl"
-								type="url"
-								required
-								maxLength={200}
-								autoComplete="off"
-								spellCheck={false}
-								placeholder="https://github.com/owner/repository"
-								readOnly={pending || replay}
-								onKeyDown={handleRepositoryKeyDown}
-								onChange={() => {
-									setVerification(null)
-									setError("")
-									setShouldOfferContinuousIntegration(false)
-								}}
-								defaultValue={replay ? replayRepositoryUrl : ""}
-							/>
-							<button type="submit" disabled={pending}>
-								{pending ? "Starting inspection…" : replay ? "Play recorded inspection" : "New features"}
-							</button>
-						</div>
-					</form>
-				</>
-			)}
-			{!upgradeMenu && inspectionSubmissionResponse}
-		</section>
-	)
-}
-type Verification = { siteKey: string; repositoryUrl: string; target?: UpgradeMenuTarget }
-function useSubmit(
-	upgradeMenuId: string | undefined,
-	{
-		setPending,
-		setError,
-		setShouldOfferContinuousIntegration,
-		setVerification,
-	}: {
-		setPending: (pending: boolean) => void
-		setError: (message: string) => void
-		setShouldOfferContinuousIntegration: (offer: boolean) => void
-		setVerification: (input: Verification) => void
-	},
-): (repositoryUrl: string, target?: UpgradeMenuTarget, challenge?: string) => Promise<void> {
-	return useCallback(
-		async (repositoryUrl: string, target?: UpgradeMenuTarget, challenge?: string): Promise<void> => {
-			setPending(true)
-			setError("")
-			setShouldOfferContinuousIntegration(false)
-			try {
-				const response = await fetch("/api/inspections", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						repositoryUrl,
-						challenge,
-						action: target ? "select" : "discover",
-						upgradeMenuId,
-						dependency: target?.dependency,
-						to: target?.to,
-					}),
-				})
-				const body = await response.json()
-				if (!response.ok) {
-					// Verify only a new submission and resume the same repository after success.
-					if (!challenge && body.siteKey) {
-						setVerification({ siteKey: body.siteKey, repositoryUrl, target })
-						return
-					}
-					setShouldOfferContinuousIntegration(Boolean(body.continuousIntegrationSetupUrl || challenge))
-					throw new Error(body.message ?? "Could not start the inspection.")
-				}
-				window.location.assign(`/r/${body.id}`)
-			} catch (failure) {
-				setError(failure instanceof Error ? failure.message : "Could not start the inspection.")
-				setPending(false)
-			}
-		},
-		[upgradeMenuId, setPending, setError, setShouldOfferContinuousIntegration, setVerification],
-	)
 }
 
 // describe the inspection state. package names omit the scope sign
@@ -235,6 +31,9 @@ function toInspectionHeading(snapshot: Snapshot, live: boolean): string {
 	}
 	if (snapshot.state === "stopped") {
 		return "Inspection stopped"
+	}
+	if (snapshot.isUpgradeMenuBuild) {
+		return "Couldn’t list upgrades"
 	}
 	return snapshot.state === "interrupted" ? "Inspection interrupted" : "Inspection failed"
 }
@@ -280,7 +79,7 @@ function Inspection({ snapshot, url }: { snapshot: Snapshot; url: string }): Rea
 	}, [live, snapshot.id, snapshot.events, snapshot.upgradeMenuId])
 
 	// show the queue position only while the inspection waits
-	const isWaiting = live && !events.length
+	const isWaiting = live && !events.length && !snapshot.isUpgradeMenuBuild
 	const queueStatus = position ? `Queue position: ${position}` : "Queued for inspection"
 	const status = snapshot.message ?? (isWaiting ? queueStatus : null)
 	const finished = events.findLast((event) => event.type === "inspection.finished")

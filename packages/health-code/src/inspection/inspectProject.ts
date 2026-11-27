@@ -46,10 +46,23 @@ export async function inspectProject({
 	try {
 		// restore the inspected tree before detecting the project
 		await adapter.resetProject()
+		await adapter.installDeclaredPackageManager()
 		const project = await adapter.detectProject()
-		inspectionReport.packageManager = { name: project.manager, version: project.version }
+		inspectionReport.packageManager = {
+			name: project.manager,
+			version: project.version,
+			...adapter.packageManagerSource,
+		}
 		if (!inspectionReport.selection.selected.length) {
 			Object.assign(inspectionReport.selection, await adapter.listUpgrades(project, context.maximum))
+		}
+
+		// end a target the package manager would reject as too new before anything installs
+		const [tooNewUpgrade] = inspectionReport.selection.selected
+		if (adapter.tooNewReason && tooNewUpgrade) {
+			const skippedUpgradeResult = skippedUpgrade(tooNewUpgrade, "minimum-release-age", adapter.tooNewReason)
+			inspectionReport.upgrades.push({ ...skippedUpgradeResult, coverage: "skipped" })
+			return inspectionReport
 		}
 
 		// Return the upgrade menu before allocating an installation or model budget.

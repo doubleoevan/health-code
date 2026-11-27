@@ -4,7 +4,5 @@ export const modelSettings = {
 	HEALTH_CODE_INPUT_USD_PER_MILLION: "4",
 	HEALTH_CODE_OUTPUT_USD_PER_MILLION: "20",
 }
-export const inspectionFixtureUrl = new URL(
-	"../../../../packages/health-code/test/fixtures/recorded/npm/sandbox.json",
-	import.meta.url,
-)
+export const recordedProjectsUrl = new URL("../../../../packages/health-code/test/fixtures/recorded/", import.meta.url)
+export const inspectionFixtureUrl = new URL("npm/sandbox.json", recordedProjectsUrl)

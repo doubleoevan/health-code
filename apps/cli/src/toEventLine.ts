@@ -1,9 +1,9 @@
-import type { ModelRequestSandboxEvent } from "health-code"
+import type { InspectionEvent, ModelRequestSandboxEvent } from "health-code"
 
 /**
  * Describes an inspection event in one line.
  */
-export function toEventLine(event: ModelRequestSandboxEvent): string {
+export function toEventLine(event: InspectionEvent | ModelRequestSandboxEvent): string {
 	switch (event.type) {
 		// highlight sandbox activity
 		case "sandbox.event":

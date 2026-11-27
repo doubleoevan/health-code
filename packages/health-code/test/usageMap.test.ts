@@ -5,10 +5,10 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
 import { collectJsonInventory } from "../guest/collectTestInventory.ts"
-import { selectRegistryVersions } from "../guest/selectRegistryVersions.ts"
 import type { Locator } from "../src/agentContracts.ts"
 import { locateDiagnostics } from "../src/checks/readUpgradeEvidence.ts"
 import { verifyMatch } from "../src/inspection/rankFeatureMatches.ts"
+import { selectRegistryVersions } from "../src/upgrades/selectRegistryVersions.ts"
 
 test("inspected usage distinguishes aliases, shadowed names, generated source and dynamic imports", async () => {
 	const root = mkdtempSync(join(tmpdir(), "usage-fixture-"))

@@ -1,4 +1,10 @@
-import type { InspectionReportV2, UpgradeFeatures } from "health-code"
+import {
+	createFakeGithub,
+	type InspectionReportV2,
+	listUpgrades,
+	type UpgradeFeatures,
+	type UpgradeMenu,
+} from "health-code"
 import { replayRepositoryUrl, type SiteEvent } from "../report.ts"
 import { type InspectionSource, SiteError } from "./inspectionSource.ts"
 import type { RepositoryHead } from "./recordAdmissions.ts"
@@ -39,6 +45,34 @@ export function createReplaySource(
 		},
 		async license(): Promise<string> {
 			return "MPL-2.0"
+		},
+		async upgradeMenu(url, { onEvent }): Promise<UpgradeMenu> {
+			await this.verify(url)
+			const report: InspectionReportV2 = await Bun.file(recording).json()
+
+			// serve the recorded project's manifest and lockfile in place of GitHub and the registry
+			const versions: Record<string, object> = {}
+			const dependencies: Record<string, string> = {}
+			const packages: Record<string, { version: string }> = {}
+
+			// lock each recorded dependency at its installed version and publish its target
+			for (const target of report.selection.eligible) {
+				const lockedVersion = Object.values(target.from)[0] ?? target.to
+				dependencies[target.dependency] = lockedVersion
+				packages[`node_modules/${target.dependency}`] = { version: lockedVersion }
+				Object.assign(versions, { [lockedVersion]: {}, [target.to]: {} })
+			}
+
+			// answer the menu's requests from those files at the recorded commit
+			const files = new Map([
+				["package.json", JSON.stringify({ dependencies })],
+				["package-lock.json", JSON.stringify({ lockfileVersion: 3, packages })],
+			])
+			const recordedGithub = createFakeGithub({
+				repositories: { [new URL(url).pathname.slice(1)]: { files, commit: report.repository.commit } },
+				versions,
+			})
+			return listUpgrades({ repositoryUrl: url, request: recordedGithub.request, onEvent })
 		},
 		async inspect(
 			_url: string,

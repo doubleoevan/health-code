@@ -12,7 +12,7 @@
 		"check:style": "biome check .",
 		"check:structure": "bash scripts/check-structure.sh",
 		"check:boundaries": "bun scripts/checkPackageBoundaries.ts",
-		"check:pins": "bun scripts/checkDependencyPins.ts",
+		"check:declared-versions": "bun scripts/checkDeclaredVersions.ts",
 		"check:unused": "knip",
 		"check:advisories": "bun scripts/checkDependencyAdvisories.ts",
 		"typecheck": "bun run --cwd packages/health-code build && tsc -b --force",

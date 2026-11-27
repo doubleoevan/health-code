@@ -2,7 +2,7 @@
 
 Start with the [README](README.md) for installation and a first inspection. This guide covers every option and report field.
 
-The default sandbox provider reads `RUNTA_TOKEN`. Pass `sandboxProvider: createSandboxProvider({ token })` to set the token or memory. Supply model roles through the public options to enable model-assisted inspections. Use `onEvent` to follow progress and `revision` to pin a full Git commit SHA. The caller owns storage and delivery.
+The default sandbox provider reads `RUNTA_TOKEN`. Pass `sandboxProvider: createSandboxProvider({ token })` to set the token or memory. Supply model roles through the public options to enable model-assisted inspections. Use `onEvent` to follow progress and `revision` to inspect one full Git commit SHA. The caller owns storage and delivery.
 
 Registry lookup has its own three-minute timeout. Set `limits.timeouts.registry` in milliseconds to override it. If package version information is unavailable, `selection.registryLookupIssue` explains the failure and the Inspection Report keeps upgrades found from successful lookups. If the sandbox command outlasts the host deadline, the inspection returns a partial Inspection Report and deletes the sandbox.
 
@@ -16,9 +16,57 @@ If the sandbox becomes unavailable after checkout and network lockdown, the repo
 
 The engine completes each selected upgrade and its eligible feature adoption before starting the next upgrade from the inspected commit. After transient sandbox loss it can allocate one replacement once deletion is acknowledged and the original time and spend ceilings permit it. It rebuilds the baseline, carries completed results forward and checks untouched targets before retrying the interrupted upgrade. Both lifetimes appear in the same timeline.
 
-Call `listUpgrades({ repositoryUrl, order })` to get all eligible dependency versions and their source-linked release features. Choose a target from `dependencies` and pass it to `getUpgrade({ repositoryUrl, models, revision: upgradeMenu.repository.commit, upgrade: target })`. Read the selected upgrade’s `patches`, verdict and checks from the returned inspection report. Pass `onEvent` to either function to display the rolling log. Each event carries its inspection ID, sequence and type. The caller supplies the Runta account and model configuration.
+## The upgrade menu
+
+Call `listUpgrades({ repositoryUrl, order })` to get the eligible versions of every direct dependency at one commit. The call runs in your process. It reads the commit's file tree, manifests, lockfile and package manager configuration through GitHub's API and queries the public npm registry. It uses no Runta account, no sandbox and no model, never clones the repository and never runs a package manager. Testing a version is the step that needs a Runta account.
+
+Choose a target from `dependencies` and pass it to `getUpgrade({ repositoryUrl, models, revision: upgradeMenu.repository.commit, upgrade: target })`. Read the selected upgrade’s `patches`, verdict and checks from the returned inspection report. Pass `onEvent` to either function to display the rolling log. Each event includes its inspection ID, sequence and type. An upgrade menu emits the `detect` and `registry` steps and no sandbox event.
+
+| Result field | Meaning |
+| --- | --- |
+| `repository` | The URL and the commit that was read. Pass `revision` to choose the commit. |
+| `packageManager` | The package manager and the version the sandbox would run, or `{ reason }` for an unsupported project. |
+| `dependencies` | One entry per dependency with its newest eligible minor and major targets. |
+| `skipped` | Dependencies that resolve from a source the registry does not serve. |
+| `issue` | What a partial registry lookup left out, or why nothing could be listed. |
+| `minimumReleaseAge` | The age that was applied, its exempt packages and the file or default it came from. `isAssumed` marks a value the upgrade menu could not read, and `source` then holds the reason. |
+| `unreadable` | Why the committed files could not be read without a checkout: `binary-lockfile`, `tree-truncated`, `symbolic-link` or `limit`. The upgrade menu allocates nothing. Call `inspectRepository({ mode: "listUpgrades" })` to list in a sandbox. |
+
+Read release features for the choices you show with `readUpgradeMenuFeatures(choices, { githubToken })`. `listUpgrades` reads none. To save an upgrade menu in the format of a sandbox listing, call `toUpgradeMenuReport(upgradeMenu, events)` with the events `onEvent` delivered.
+
+**GitHub requests.** An upgrade menu costs one request for the commit, one for the tree, one per manifest, one for the lockfile and up to two for configuration files, plus one visibility check when you pass `githubToken`. A repository with 15 workspaces costs about 20. GitHub allows 60 requests an hour per address without a token, 1,000 per repository for the Actions token and 5,000 for a personal token. At the limit the call throws `github-rate-limit` with `retryAt` and does not retry. A token never reads a private repository: the call rejects it first.
+
+**Typed errors.** A failure with no upgrade menu throws `InspectionError` with one of these codes: `invalid-repository`, `invalid-revision`, `repository-unavailable`, `revision-unavailable`, `github-rate-limit`, `github-token-rejected`, `github-unavailable`, `deadline`, `cancelled`, `menu-failed` or `event-delivery`. `event-delivery` means your `onEvent` callback threw. `explainedErrorCodes` holds the codes whose message names the next step, so a caller can show that message as it is.
+
+**Bounds.** Set `limits` to lower them. A value above a bound returns `unreadable` with the reason `limit`.
+
+| Limit | Default |
+| --- | --- |
+| `maxDurationMs` | 120,000. The GitHub reads share 30 seconds of it. |
+| `maxWorkspaces` | 200 workspace manifests |
+| `maxLockfileBytes` | 16 MiB |
+| `maxTotalBytes` | 32 MiB for every file read |
+| `registryConcurrency` | 16 lookups, or 4 when a minimum release age applies |
+| `maxRegistryResponseBytes` | 32 MiB, or 48 MiB for a lookup with publish dates. A package above a lower value is listed under `skipped` with the limit. Parsing the largest responses takes about 400 MiB of memory. |
+| `timeouts.registry` | 180,000 |
+
+**Minimum release age.** The upgrade menu reads the setting from committed files: `.npmrc` for npm, `pnpm-workspace.yaml` (and `.npmrc` before pnpm 11) for pnpm, `.yarnrc.yml` for Yarn and `bunfig.toml` for Bun. A package manager's default applies when the file sets nothing: one day from pnpm 11 and from Yarn 4.15. When two files disagree, a value does not parse or the version is newer than the upgrade menu knows, the upgrade menu assumes one day, or the larger value it read, and sets `isAssumed`. `toReleaseAgeNotice(minimumReleaseAge)` returns the sentence that tells a reader so. The sandbox stays the authority: `getUpgrade` ends a version the package manager would reject as too new as Untested with the reason `minimum-release-age`, before anything installs.
+
+**A named version.** `resolveUpgrade({ repositoryUrl, dependency, to })` validates one version in your process and returns its `upgrade`. A version is eligible when the registry lists it, it is not deprecated, it is not a prerelease, it is above the highest version the repository locks and it passes the minimum release age. Patch releases qualify and have the kind `patch`. A rejected version throws `invalid-upgrade` with `eligibleDependencyVersions`, newest first. `getUpgrade` applies the same rule in the sandbox. Omit `from` to use the checkout's locked versions.
+
+**Deprecated on `listUpgrades`.** `sandboxProvider`, `prompts`, `telemetry`, `includeTestInventory`, `applicationEnvironment`, `callerModelExecution`, `limits.maxUpgrades`, `limits.maxCostUsd` and every `limits.timeouts` stage except `registry` are accepted and ignored. They are removed in 0.4.0.
+
+## The package manager version
+
+The sandbox installs the package manager version the repository declares, in place of its bundled one, so a patch's lockfile is written by the version the repository's frozen install uses. The declared version is the first exact version in `packageManager`, `devEngines.packageManager`, `engines` and, for Bun, `.bun-version`. A range declares no version.
+
+A declared version is installed only when all of these hold. The library maps each package manager to its official npm package and the repository supplies only the version number. The version is inside the supported range. The registry lists it, it is not deprecated and it was published at least one day ago. The downloaded archive matches the integrity the registry records, and the hash in `packageManager` when there is one. Otherwise the bundled version runs.
+
+`report.packageManager` records `version`, the version that ran, with `source` (`declared` or `bundled`), `declared` (the version and its file) and `fallbackReason`. `packageManagerDisplayNames` maps each package manager to the name to show, and `isExactVersion` checks that a version is three plain numbers.
 
 Use `mode: "listUpgrades"` or `mode: "inspectUpgrades"` with the lower-level `inspectRepository` call. The default is `inspectUpgrades`.
+
+Set `limits.maxFeatureMatches` to `0` to test the upgrade only. The engine then sends no Code Feature Match request and runs no Feature adoption. It still summarizes the release notes, which the repair reads. Before 0.3.0 a zero limit still returned ranked matches.
 
 `readUpgradeFeatures(upgrade)` returns all feature entries identified in the collected release notes, with sources and affected workspaces. Consumers can paginate the returned `features` array.
 

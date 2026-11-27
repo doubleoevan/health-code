@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import type { SiteEvent } from "../report.ts"
 import { Timeline } from "./Timeline.tsx"
 
-test("a saved model request sandbox startup is shown once in the pinned list and once in the timeline", () => {
+test("a saved model request sandbox startup is shown once in the sandbox event list and once in the timeline", () => {
 	const detail = "Model request sandbox started. Runta supplies the model key. This machine doesn’t need it."
 	const event: SiteEvent = {
 		version: 2,

@@ -1,18 +1,18 @@
 # inspection-evaluations Specification
 
 ## Purpose
-Measure how the inspection engine handles pinned real upgrades and Baselines against independently recorded answers.
+Measure how the inspection engine handles real upgrades and Baselines at fixed commits against independently recorded answers.
 
 ## Requirements
 
-### Requirement: Reproduce and score pinned cases
+### Requirement: Reproduce and score cases at fixed commits
 
 The evaluation runner SHALL accept versioned cases with repository, full commit, exact upgrade or Baseline-only mode, expected checks, expected Verdicts, failure criteria and an optional reference patch. It SHALL execute the same engine phases as consumers and keep grading data separate from model inputs. Each report SHALL give case pass/fail, outcome, existing test changes, dependency reviews, source diff against the reference where available, cost and elapsed time.
 
 #### Scenario: A later dependency version exists
 
 - **WHEN** a newer registry version becomes available
-- **THEN** the case still checks the exact recorded versions at the pinned commit, and compares source changes with the recorded reference independently of patch metadata.
+- **THEN** the case still checks the exact recorded versions at the case's commit, and compares source changes with the recorded reference independently of patch metadata.
 
 #### Scenario: Running preflight
 
@@ -21,7 +21,7 @@ The evaluation runner SHALL accept versioned cases with repository, full commit,
 
 ### Requirement: Grade the TypeScript boundary failure
 
-The TypeScript seed SHALL inspect 5.9.3 to 7.0.2 at Health Code commit 7e6d81920e7959933822dc628fe7ad184f56cf61. It SHALL require a confirmed failed Upgrade Check and a pinned locator in scripts/readWorkspace.ts. The preferred result is Fixed with green tests and unchanged existing cases. A Can't fix diagnosis is acceptable only with the expected removed TypeScript APIs, supporting evidence and no patch. The reference is f89eebc05313cb8e49e1d81934ac2484f640cb92.
+The TypeScript seed SHALL inspect 5.9.3 to 7.0.2 at Health Code commit 7e6d81920e7959933822dc628fe7ad184f56cf61. It SHALL require a confirmed failed Upgrade Check and a named locator in scripts/readWorkspace.ts. The preferred result is Fixed with green tests and unchanged existing cases. A Can't fix diagnosis is acceptable only with the expected removed TypeScript APIs, supporting evidence and no patch. The reference is f89eebc05313cb8e49e1d81934ac2484f640cb92.
 
 #### Scenario: A working repair differs from the reference
 
@@ -30,7 +30,7 @@ The TypeScript seed SHALL inspect 5.9.3 to 7.0.2 at Health Code commit 7e6d81920
 
 #### Scenario: Verify the default repair budget
 
-- **WHEN** the pinned TypeScript case uses public version 2 defaults with no overrides
+- **WHEN** the TypeScript case uses public version 2 defaults with no overrides
 - **THEN** the budget acceptance check requires Fixed within all ceilings, a green final check and unchanged existing tests. The grader checks observed turns, attempt and inspection durations, metered or reserved costs, and the 8,192-output-token ceiling for each agent reply. It includes the sandbox cost bound in the inspection total. An acceptable diagnosis alone leaves this check unmet.
 
 #### Scenario: A false green result
@@ -58,7 +58,7 @@ The Baseline seed SHALL inspect commit 2c229c8d44e957e93d5178a8664d5e2d5cbbe0f6 
 
 #### Scenario: Record the first Baseline
 
-- **WHEN** a developer invokes `bun run eval --case baseline-test-counts --record` and the pinned Baseline inventory and cleanup complete
+- **WHEN** a developer invokes `bun run eval --case baseline-test-counts --record` and the Baseline inventory and cleanup complete
 - **THEN** the runner atomically writes passed, failed, skipped and todo counts and the sorted list of test file errors with their paths and reasons into that case. It marks the measurements pending review and issues no passing score.
 
 #### Scenario: Recording fails before the inventory is complete

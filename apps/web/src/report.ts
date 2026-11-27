@@ -5,6 +5,7 @@ import type {
 	InspectionReport,
 	ModelRequestSandboxEvent,
 	Patch,
+	UnreadableRepository,
 	UpgradeMenuTarget,
 	UpgradeReport,
 	Verdict,
@@ -84,6 +85,10 @@ export type PublishedReport = {
 	detection?: string
 	registryLookupIssue?: string
 
+	// why an upgrade menu could not read the project, and whether it assumed the minimum release age
+	unreadable?: UnreadableRepository
+	releaseAgeNotice?: string
+
 	// retain the publication license alongside the measured upgrade results
 	license: string | null
 	upgrades: UpgradeCard[]
@@ -107,6 +112,9 @@ export type Snapshot = {
 	// whether this visitor can stop the inspection
 	canStop?: boolean
 
+	// whether the server built this upgrade menu
+	isUpgradeMenuBuild?: boolean
+
 	// the repository's newest upgrade menu
 	upgradeMenuId?: string
 
@@ -116,6 +124,9 @@ export type Snapshot = {
 }
 
 export function toVersionChange({ from, to }: NonNullable<Snapshot["selectedDependencyUpgrade"]>): string {
+	if (from === undefined) {
+		return to
+	}
 	const versions = typeof from === "string" ? from : [...new Set(Object.values(from))].join(", ")
 	return `${versions} → ${to}`
 }

@@ -101,7 +101,7 @@ bun consumer.mjs
 
 # typecheck both inspection report versions against the packed declarations
 cat > consumer.ts <<'TS'
-import { inspectRepository, listUpgrades, getUpgrade, type InspectionOptions, type InspectionReport } from "health-code"
+import { inspectRepository, listUpgrades, getUpgrade, resolveUpgrade, InspectionError, type InspectionOptions, type InspectionReport } from "health-code"
 import type {InspectionOptionsV2, InspectionReportV2} from "health-code"
 
 // Check the report entry and the earlier type spelling against the installed public package.
@@ -115,6 +115,20 @@ export async function selectedUpgrade(options: InspectionOptionsV2): Promise<Ins
   const upgrade = upgradeMenu.dependencies[0]?.targets[0]
   if (upgrade) {
     return getUpgrade({...options, revision: upgradeMenu.repository.commit, upgrade})
+  }
+}
+
+// Compile the upgrade menu's result fields, its limits and a named version against the published API.
+export async function namedUpgrade(repositoryUrl: string): Promise<import("health-code").Upgrade | undefined> {
+  const limits: import("health-code").UpgradeMenuLimits = {maxDurationMs: 45000, maxWorkspaces: 100}
+  const upgradeMenu: import("health-code").UpgradeMenu = await listUpgrades({repositoryUrl, limits})
+  const reason: import("health-code").UnreadableRepository["reason"] | undefined = upgradeMenu.unreadable?.reason
+  const age: import("health-code").MinimumReleaseAge | undefined = upgradeMenu.minimumReleaseAge
+  void [reason, age?.isAssumed, "name" in upgradeMenu.packageManager ? upgradeMenu.packageManager.name : upgradeMenu.packageManager.reason]
+  try {
+    return (await resolveUpgrade({repositoryUrl, dependency: "widget", to: "1.2.1"})).upgrade
+  } catch (error) {
+    if (error instanceof InspectionError) void [error.retryAt, error.eligibleDependencyVersions]
   }
 }
 export function inspectWithModels(options: InspectionOptionsV2): Promise<InspectionReportV2> {

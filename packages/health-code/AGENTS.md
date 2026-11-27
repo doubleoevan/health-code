@@ -1,6 +1,6 @@
 # Inspection library
 
-The public ESM package `health-code` owns Repository inspections. Its single entry exports `listUpgrades`, `getUpgrade`, `inspectRepository`, provider factories, errors, and the Inspection Report and Inspection Event types. The site, the CI command and scheduled consumers import by package name.
+The public ESM package `health-code` owns Repository inspections. Its single entry exports `listUpgrades`, `resolveUpgrade`, `getUpgrade`, `inspectRepository`, provider factories, errors, and the Inspection Report and Inspection Event types. It also exports the helpers the site and the CI command share: `toUpgradeMenuReport`, `toReleaseAgeNotice`, `explainedErrorCodes`, `packageManagerDisplayNames`, `isExactVersion` and `createFakeGithub`. The site, the CI command and scheduled consumers import by package name.
 
 | Module | Responsibility |
 | --- | --- |
@@ -22,4 +22,4 @@ The four structured model roles select the version 2 Inspection Report (`Inspect
 
 The public model request sandbox overload accepts serializable credential routes and emits a verified Model Request Sandbox startup event. Existing model handles select local execution by default. Both execution paths validate the same fenced prompts and model replies.
 
-Pass an optional full Git SHA as `revision` to pin admission and checkout to the same commit. `libraryVersion` gives consumers the installed release for cache identity.
+Pass an optional full Git SHA as `revision` to hold admission and checkout at the same commit. `libraryVersion` gives consumers the installed release for cache identity.

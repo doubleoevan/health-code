@@ -12,13 +12,30 @@
 
 Folders import in one direction: root, `models/`, `sandbox/`, `upgrades/`, `checks/` and `patches/`, then `inspection/`. The exception is the `ModelInspection` type, which `patches/` imports from `inspection/inspectModels.ts`. The file names below sit in these folders.
 
-`index.ts` is the public library entry. `contracts.ts` owns the JSON report and event types, provider interface, and typed errors. `openRepositoryRuntime.ts` owns repository runtime allocation, checkout, network lockdown and replacement admission. `inspectRepository.ts` owns one bounded recovery attempt and final cleanup. `inspectProject.ts` runs the Baseline and serial upgrade checks.
+`index.ts` is the public library entry. `contracts.ts` owns the JSON report and event types, provider interface, typed errors and the error codes whose message names the next step. `openRepositoryRuntime.ts` owns repository runtime allocation, checkout, network lockdown and replacement admission. `inspectRepository.ts` owns one bounded recovery attempt and final cleanup. `inspectProject.ts` runs the Baseline and serial upgrade checks. `parseYaml.ts` parses untrusted YAML for every folder with the duplicate key check off, which keeps a large lockfile linear. `readOwnProperty.ts` reads an own property of parsed data for every folder.
 
-`checkProject.ts` drives the Node Ecosystem Adapter and compares check evidence. `parseRegistryVersions.ts` separates completed registry lookups from timeouts and explains failed lookups. `selectUpgrades.ts` orders registry targets. `collectEvents.ts` owns per-inspection deadlines and callback delivery. `createFakeSandboxProvider.ts` replays caller-supplied fixtures. The `sandbox/` module owns the production provider.
+`readLockedDependencies.ts` turns manifest, lockfile and workspace declaration text into the locked dependencies and the declared package manager version. `readVersionLookup.ts` reads the locked versions from the text of an npm, pnpm, Bun or Yarn lockfile. `toDeclaredPackageManager.ts` reads the exact version that `packageManager`, `devEngines`, `engines` or `.bun-version` declares. The three read no file and start no process, so the Guest and the upgrade menu share them. `fetchRegistryVersions.ts` and `selectRegistryVersions.ts` look up and select registry versions for both. `readCommittedReleaseAge.ts` reads the minimum release age from committed configuration text.
+
+`upgradeMenuContext.ts` builds an upgrade menu in the caller's process: it holds the call's deadline, emits the upgrade menu's Inspection Events and composes the readers below. `requestGithubApi.ts` sends bounded requests to GitHub's API origin only, follows redirects that stay there and maps rate limits to typed errors. `readRepositoryFiles.ts` resolves the commit, lists the tree and reads the manifests, the lockfile and the package manager configuration by blob ID inside the byte, workspace and request bounds. `checkUpgradeTarget.ts` holds the rule for an eligible dependency version and looks up and checks one named version for the Guest and the upgrade menu. `selectUpgradeTarget.ts` applies the rule to a named version in the sandbox. `installDeclaredPackageManager.ts` installs the package manager version the Repository declares before any Repository file runs and records which version wrote the lockfile. `../sandbox/packageManagerVersions.ts` lists each package manager's official package, bundled version, supported range and display name. `createFakeGithub.ts` serves a project's files in the shapes of GitHub's commit, repository, tree and blob responses and answers registry lookups, for tests of the upgrade menu. `forEachConcurrently.ts` bounds the registry lookups and the file reads in flight, and `toUtcTime.ts` formats the time in a rate limit or a target rejection.
+
+The upgrade menu parses untrusted files outside the sandbox. Each parser is bounded and tested against untrusted input in `test/untrustedInput.test.ts`:
+
+| Input | Parser | Cases covered |
+| --- | --- | --- |
+| Tree, manifests, `package-lock.json`, registry responses | `JSON.parse` | Deep nesting, a document that is not an object, `__proto__`, `constructor` and `toString` as names, paths and keys |
+| `pnpm-lock.yaml`, `pnpm-workspace.yaml`, modern Yarn lockfile, `.yarnrc.yml` | `yaml` | Deep nesting, alias expansion, prototype member names |
+| Yarn 1 lockfile | `@yarnpkg/lockfile` | A 900 KB line, prototype member names |
+| `bun.lock` | `JSON.parse` after `dropTrailingCommas` | A `__proto__` key in the workspace map |
+| `bunfig.toml` | `smol-toml` | A file that does not parse |
+| Workspace and exemption patterns | `path.matchesGlob` behind `isBoundedGlob.ts` | At most 256 patterns of 256 characters, two brace groups, 16 alternatives and two wildcards per path segment, timed on Bun and Node |
+
+Every lookup into parsed data by an untrusted name goes through `readOwnProperty`. A parser that throws becomes the reason "Unreadable project file".
+
+`checkProject.ts` drives the Node Ecosystem Adapter and compares check evidence. `parseRegistryVersions.ts` separates completed registry lookups from timeouts and explains failed lookups. `selectUpgrades.ts` orders registry targets. `collectEvents.ts` owns per-inspection deadlines and callback delivery, and builds the event envelope and tracks each step for an Inspection and an upgrade menu. `createFakeSandboxProvider.ts` replays caller-supplied fixtures. The `sandbox/` module owns the production provider.
 
 Verify with the library tests and the root packed-package check. Keep the public entry usable in Node and Bun.
 
-The public entry also exports Repository URL normalization and deployment-scoped startup cleanup.
+The public entry also exports Repository URL normalization and deployment-scoped startup cleanup. For the site and the CI command it exports `toReleaseAgeNotice`, `explainedErrorCodes`, `packageManagerDisplayNames`, `isExactVersion`, `toUpgradeMenuReport` and `createFakeGithub` with its `versions` option.
 
 `readModelRoutes.ts` resolves caller model settings for Anthropic and OpenAI-compatible hosts without choosing a model. `agentContracts.ts` defines the version 2 envelope. `inspectModels.ts` dispatches reading, matching and Agent Attempts. `modelBudget.ts` reserves per-request charges. `evaluatePatch.ts` reconstructs and checks proposed source edits before exporting the mailbox. Each proposed dependency is checked for newly introduced lifecycle hooks before its commit is accepted.
 
@@ -40,6 +57,6 @@ A confirmed install failure can enter repair after a clean observation. The supe
 
 `inspectUpgrade.ts` runs the Install Check, confirms new failures and compares each Upgrade Check against the Baseline.
 
-`listUpgrades.ts` exposes the two operations to discover an upgrade menu with release features and test one selected upgrade. `readUpgradeFeatures.ts` extracts bounded, source-linked feature entries from release notes for a chosen target. Set `mode: "listUpgrades"` to list eligible upgrades and release the sandbox before installation. Pass an exact `upgrade` and `revision` to test a chosen target. The public `health-code` entry groups, searches and sorts eligible versions.
+`listUpgrades.ts` exposes three operations. `listUpgrades` builds an upgrade menu without a sandbox, `resolveUpgrade` checks one named version the same way and `getUpgrade` tests one selected upgrade. Its `toUpgradeMenuReport` shapes an upgrade menu and its events as the Inspection Report of a sandbox listing. `readUpgradeFeatures.ts` extracts bounded, source-linked feature entries from release notes for a selected target. Set `mode: "listUpgrades"` on `inspectRepository` for the sandbox listing, which lists eligible upgrades and releases the sandbox before installation. Pass an exact `upgrade` and `revision` to test a selected target. The public `health-code` entry groups, searches and sorts eligible versions.
 
 `requestHostModel.ts` dispatches summaries and feature matching. It omits release notes from the end until the prompt fits its route bound. `mergeTestInventory.ts` combines test inventory and command results. `isPackagePath.ts` checks whether a module path names a package or one of its subpaths.

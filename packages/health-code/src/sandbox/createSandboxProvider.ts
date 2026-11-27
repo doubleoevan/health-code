@@ -18,8 +18,21 @@ import { createModelRequestSandbox } from "./createModelRequestSandbox.ts"
 import { executeCommand, type Instance } from "./executeCommand.ts"
 import { confirmNetworkPolicy, validateRegistryHosts } from "./networkPolicy.ts"
 import { openCredentialSession } from "./openCredentialSession.ts"
+import {
+	isExactVersion,
+	isSupportedVersion,
+	packageManagerTools,
+	toArchivePath,
+	unsupportedVersionReason,
+} from "./packageManagerVersions.ts"
 import { readProjectFile, writeProjectFile } from "./projectFiles.ts"
-import { checkout, provision, restore } from "./provision.ts"
+import {
+	checkout,
+	packageManagerInstallFailures,
+	packageManagerInstallScript,
+	provision,
+	restore,
+} from "./provision.ts"
 import { toSandboxPrefix } from "./reconcileSandboxes.ts"
 import {
 	availabilityReason,
@@ -53,7 +66,7 @@ export function createSandboxProvider(options: ProviderOptions = {}): SandboxPro
 }
 
 /**
- * Connects the sandbox client and optionally pins acquisition to a specific revision.
+ * Connects the sandbox client and optionally holds acquisition at a specific revision.
  */
 export function connectProvider(
 	options: ProviderOptions,
@@ -346,7 +359,7 @@ export function connectProvider(
 					["patch.mjs", "patch.mjs"],
 					["nodeTestReporter.mjs", "nodeTestReporter.mjs"],
 				] as const) {
-					// upload the pinned guest bundle from the release package
+					// upload the guest bundle built into the release package
 					const contents = await readFile(new URL(`../../dist/${local}`, import.meta.url))
 					remaining()
 					const archive = `/opt/health-code/${remote}.gz`
@@ -367,7 +380,10 @@ export function connectProvider(
 				} catch (error) {
 					// report unavailable repositories separately from provider failures
 					if (error instanceof InspectionError && error.code === "sandbox-command") {
-						throw new InspectionError("repository-unavailable", "Public repository or inspected commit is unavailable")
+						throw new InspectionError(
+							"repository-unavailable",
+							"The sandbox could not clone the repository at that commit. Check that it is public and try again.",
+						)
 					}
 					throw error
 				}
@@ -402,6 +418,26 @@ export function connectProvider(
 		},
 		async resetProject(sandbox, operation): Promise<void> {
 			await withCommand(locked(sandbox), (runtime) => checked(runtime, ["sh", "-c", restore], operation))
+		},
+		async installPackageManager(sandbox, request, operation): Promise<void> {
+			// build every path from the fixed package name and a validated version
+			const { tool: toolName, version, hash = "" } = request
+			const tool = packageManagerTools[toolName]
+			if (!isExactVersion(version) || !isSupportedVersion(toolName, version)) {
+				throw new InspectionError("package-manager-install", unsupportedVersionReason)
+			}
+			const archivePath = toArchivePath({ packageName: tool.package, version })
+			const argv = [
+				...["sh", "-c", packageManagerInstallScript, "install-package-manager", toolName, tool.package],
+				...[archivePath, version, tool.bin, tool.commandName, hash],
+			]
+
+			// run the install as trusted setup under the registry-only policy
+			await withCommand(locked(sandbox), (runtime) => checked(runtime, argv, operation)).catch((error: unknown) => {
+				const marker = error instanceof InspectionError ? /hc-install:([a-z]+)/.exec(error.message)?.[1] : undefined
+				const reason = packageManagerInstallFailures[marker ?? ""] ?? "could not be downloaded"
+				throw new InspectionError("package-manager-install", reason)
+			})
 		},
 		async executeCommand(sandbox, command): Promise<CommandResult> {
 			return executeCommand(locked(sandbox), command)

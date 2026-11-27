@@ -1,8 +1,15 @@
 import { spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { bumpDependency, detectProject, managerName } from "./detectProject.ts"
-import { fetchRegistryVersions, isPackageName } from "./fetchRegistryVersions.ts"
+import { checkRegistryTarget, type TargetCheck } from "../src/upgrades/checkUpgradeTarget.ts"
+import { fetchRegistryVersions, isPackageName } from "../src/upgrades/fetchRegistryVersions.ts"
+import {
+	bumpDependency,
+	detectPackageManager,
+	detectProject,
+	readCheckoutDeclaredPackageManager,
+	readToolName,
+} from "./detectProject.ts"
 import { measureTests } from "./measureTests.ts"
 import { readLifecycleHookSignatures, readPatchVerificationInputs } from "./readPatchVerificationInputs.ts"
 import { readManifest } from "./readProjectFiles.ts"
@@ -29,7 +36,7 @@ function resolveLock(manager: string): number {
 	}
 	if (manager === "yarn") {
 		// select the lockfile mode supported by this yarn version
-		const modern = existsSync(".yarnrc.yml") || /^yarn@(?:[2-9]|\d\d)/.test(readManifest(".").packageManager ?? "")
+		const modern = readToolName("yarn") === "yarn-modern"
 		return execute(modern ? ["yarn", "install", "--mode=update-lockfile"] : ["yarn", "install", "--ignore-scripts"])
 	}
 	return execute([manager, "install", "--lockfile-only", "--ignore-scripts"])
@@ -42,7 +49,7 @@ function install(args: string[]): number {
 	const scripts = skipsScripts ? ["--ignore-scripts"] : []
 
 	// determine the workspace manager before handling install modes
-	const manager = managerName(readManifest("."))
+	const manager = detectPackageManager(readManifest("."))
 
 	// resolve only the lockfile when requested
 	if (name === "--resolve-lock") {
@@ -74,7 +81,7 @@ function install(args: string[]): number {
 
 // enable lockfile edits only for a changed yarn install
 function installYarn(changed: boolean, skipsScripts: boolean): number {
-	const modern = existsSync(".yarnrc.yml") || /^yarn@(?:[2-9]|\d\d)/.test(readManifest(".").packageManager ?? "")
+	const modern = readToolName("yarn") === "yarn-modern"
 	if (changed && modern) {
 		process.env.YARN_ENABLE_IMMUTABLE_INSTALLS = "false"
 	}
@@ -88,7 +95,7 @@ function installYarn(changed: boolean, skipsScripts: boolean): number {
 // prepare a reporter path for the project's test script
 function tests(protectedReport = false): number {
 	const manifest = readManifest(".")
-	const manager = managerName(manifest)
+	const manager = detectPackageManager(manifest)
 	const script = manifest.scripts?.test ?? ""
 	mkdirSync(".health-code", { recursive: true })
 	if (!protectedReport) {
@@ -109,8 +116,20 @@ function discoverVersions(args: string[]): ReturnType<typeof fetchRegistryVersio
 	const signal = budget === undefined ? undefined : AbortSignal.timeout(budget)
 
 	// Offer only releases the repository's own policy would install.
-	const releaseAge = readReleaseAge(managerName(readManifest(".")))
+	const releaseAge = readReleaseAge(detectPackageManager(readManifest(".")))
 	return fetchRegistryVersions(budget === undefined ? args : args.slice(1), { releaseAge, signal })
+}
+
+// check one named version under the package manager's release age
+async function checkTarget([name = "", to = "", ...lockedVersions]: string[]): Promise<TargetCheck> {
+	const releaseAge = readReleaseAge(detectPackageManager(readManifest(".")))
+	const check = await checkRegistryTarget({ dependency: name, to, lockedVersions, registry: { releaseAge } })
+	if (check === "invalid-name") {
+		throw new Error("Invalid package name")
+	}
+
+	// report a registry that sent no record as unavailable
+	return typeof check === "string" ? { status: "unavailable", eligibleDependencyVersions: [] } : check
 }
 
 // dispatch the requested guest operation
@@ -157,12 +176,22 @@ async function main(): Promise<void> {
 			console.log(JSON.stringify(detectProject()))
 			break
 
+		// report the declared package manager version from committed files
+		case "declared-package-manager":
+			console.log(JSON.stringify(readCheckoutDeclaredPackageManager()))
+			break
+
 		// distinguish a bounded historical lookup from the upgrade menu lookup
 		case "lookup":
 			console.log(JSON.stringify(await fetchRegistryVersions(args.slice(0, 5), { includePrevious: true })))
 			break
 		case "registry":
 			console.log(JSON.stringify(await discoverVersions(args)))
+			break
+
+		// report one named version's status as a target
+		case "target":
+			console.log(JSON.stringify(await checkTarget(args)))
 			break
 
 		// run install and type checks through the detected manager
@@ -176,7 +205,7 @@ async function main(): Promise<void> {
 			// prefer the local compiler and fall back to yarn execution
 			process.exitCode = existsSync(local)
 				? execute([local, ...options])
-				: managerName(readManifest(".")) === "yarn"
+				: detectPackageManager(readManifest(".")) === "yarn"
 					? execute(["yarn", "exec", "tsc", ...options])
 					: 1
 			break

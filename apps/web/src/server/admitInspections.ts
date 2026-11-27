@@ -9,7 +9,7 @@ import { verifyChallenge } from "./verifyVisitor.ts"
 export type AdmissionRequest = { identify: () => Visitor; challenge: unknown; hostname: string }
 
 export class LaunchService {
-	private readonly releaseRevision: string
+	readonly releaseRevision: string
 	readonly settings: LaunchSettings
 	readonly visitorKey: string
 	readonly challengeKey: string
@@ -44,6 +44,28 @@ export class LaunchService {
 		store.admission.updateQueuedRelease(libraryVersion, this.releaseRevision)
 	}
 
+	// return the report cache key of a sandbox listing for this head
+	toSandboxListingCacheKey(head: RepositoryHead): string {
+		return this.cacheKeys(head, { mode: "listUpgrades" }).report
+	}
+
+	// return the cache key of an upgrade menu the server builds for this head
+	toUpgradeMenuCacheKey(head: RepositoryHead): string {
+		return JSON.stringify([...this.toReleaseScope(head), "menu"])
+	}
+
+	// reject a repository past the hosted size limit
+	requireHostedSize(head: RepositoryHead): void {
+		if (head.sizeKiB > this.settings.current.maxSizeKiB) {
+			throw new AdmissionError(413, "Repository exceeds the hosted size limit.")
+		}
+	}
+
+	// name the commit and the release that inspects it
+	private toReleaseScope(head: RepositoryHead): string[] {
+		return [head.repositoryId, head.revision, libraryVersion, this.releaseRevision]
+	}
+
 	private cacheKeys(head: RepositoryHead, choice?: InspectionChoice): { report: string; scope: string } {
 		if (choice?.revision && choice.revision !== head.revision) {
 			throw new AdmissionError(
@@ -53,15 +75,10 @@ export class LaunchService {
 		}
 
 		// Separate the upgrade menu and each target from automatic inspections in the cache.
-		const scope = [
-			head.repositoryId,
-			head.revision,
-			libraryVersion,
-			this.releaseRevision,
-			this.settings.current.maxUpgrades,
-		]
+		const releaseScope = this.toReleaseScope(head)
+		const scope = [...releaseScope, this.settings.current.maxUpgrades]
 		const job = choice?.mode === "listUpgrades" ? "menu" : choice?.upgrade
-		return { report: JSON.stringify(job ? [...scope, job] : scope), scope: JSON.stringify(scope.slice(0, 4)) }
+		return { report: JSON.stringify(job ? [...scope, job] : scope), scope: JSON.stringify(releaseScope) }
 	}
 
 	async admit(options: {
@@ -101,9 +118,7 @@ export class LaunchService {
 		}
 
 		// Check metadata and the current settings before requesting a paid-work challenge.
-		if (head.sizeKiB > this.settings.current.maxSizeKiB) {
-			throw new AdmissionError(413, "Repository exceeds the hosted size limit.")
-		}
+		this.requireHostedSize(head)
 		if (!workerAvailable() || !this.configured || !this.settings.available) {
 			throw new AdmissionError(503, "Inspection limits are temporarily unavailable. Run Health Code in CI.")
 		}

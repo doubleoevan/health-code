@@ -1,20 +1,13 @@
 import { expect, test } from "bun:test"
 import { replayRepositoryUrl as repositoryUrl } from "../report.ts"
-import { createTestSite, replay } from "./fixtures/createTestSite.ts"
+import { createTestSite, postSubmission, replay, waitForUpgradeMenu } from "./fixtures/createTestSite.ts"
 import { publishReport } from "./publishReport.ts"
 import { InspectionStore } from "./storeInspections.ts"
 
 test("browse an inspected upgrade menu, choose one release and reopen its licensed patch", async () => {
 	const store = new InspectionStore(":memory:")
 	const app = createTestSite(store)
-	const submit = (body: Record<string, unknown>): Promise<Response> =>
-		Promise.resolve(
-			app.request("/api/inspections", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ repositoryUrl, ...body }),
-			}),
-		)
+	const submit = (body: Record<string, unknown>): Promise<Response> => postSubmission(app, { repositoryUrl, ...body })
 	try {
 		// Publish the upgrade menu fixture through the durable submission path.
 		const upgradeMenu = await (await submit({ action: "discover" })).json()
@@ -22,8 +15,17 @@ test("browse an inspected upgrade menu, choose one release and reopen its licens
 			'<h1 class="shimmer">Finding upgrades...</h1>',
 		)
 		expect(store.choice(upgradeMenu.id)).toEqual({ mode: "listUpgrades" })
+
+		// wait for the server to build the menu and check it used no admission or sandbox
+		await waitForUpgradeMenu(store, upgradeMenu.id)
 		const menuReport = await replay.inspect(repositoryUrl, () => {}, { mode: "listUpgrades" })
-		store.finish(upgradeMenu.id, publishReport(menuReport, "MIT"))
+		const built = store.snapshot(upgradeMenu.id)
+		expect(built?.state).toBe("complete")
+		expect(built?.isUpgradeMenuBuild).toBe(true)
+		expect(built?.events.map((event) => event.type)).not.toContain("sandbox.event")
+		expect(store.database.query("SELECT count(*) count FROM admissions").get()).toEqual({ count: 0 })
+
+		// check that the page shows the menu the server built
 		const html = await (await app.request(`/r/${upgradeMenu.id}`)).text()
 		for (const label of ["Try an upgrade", "Search dependencies", "Most workspaces first", "Try upgrade"]) {
 			expect(html).toContain(label)
@@ -40,7 +42,7 @@ test("browse an inspected upgrade menu, choose one release and reopen its licens
 		expect((await preview.json()).features[0].text).toBe("Widget now provides shared configuration defaults.")
 		expect((await app.request(path + "9.9.9")).status).toBe(404)
 
-		// Reject invented versions and forward the chosen target with its workspace pins.
+		// Reject invented versions and forward the selected target with its workspace versions.
 		const choice = { action: "select", upgradeMenuId: upgradeMenu.id, dependency: "widget", to: "1.3.0" }
 		expect((await submit({ ...choice, to: "9.9.9" })).status).toBe(400)
 		const result = await (await submit({ ...choice, repositoryUrl: repositoryUrl + ".git/" })).json()

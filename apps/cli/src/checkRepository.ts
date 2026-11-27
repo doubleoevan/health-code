@@ -6,7 +6,8 @@ import { z } from "zod"
 import { type InspectOptions, inspectWithAccount } from "./inspectWithAccount.ts"
 import { openPullRequest, type RunCommand } from "./openPullRequest.ts"
 import { type PersonalProvider, personalProvider } from "./personalModelRequestSandboxes.ts"
-import { accountToken, requireSettings } from "./readEnvironmentSettings.ts"
+import { accountToken, readGithubToken, requireSettings } from "./readEnvironmentSettings.ts"
+import { selectCheckTarget } from "./selectCheckTarget.ts"
 import { toEventLine } from "./toEventLine.ts"
 import { UserError } from "./userError.ts"
 
@@ -20,11 +21,15 @@ type CheckArguments = {
 	// where the results go
 	output: string
 	shouldOpenPullRequest: boolean
+	isUpgradeOnly: boolean
 }
+
+// the file that holds a check's Inspection Report
+const inspectionReportFilename = "inspection-report.json"
 
 // the arguments shown for an invalid command
 export const checkUsage =
-	"Usage: health-code check <repo-url> [--dependency <name> --to <version>] [--revision <sha>] [--env NAME=value] [--output <folder>] [--pull-request]"
+	"Usage: health-code check <repo-url> [--dependency <name> --to <version>] [--revision <sha>] [--env NAME=value] [--output <folder>] [--upgrade-only] [--pull-request]"
 
 /**
  * Tests one upgrade and writes its Inspection Report and patches for a CI job.
@@ -37,26 +42,48 @@ export async function checkRepository(
 		sandboxProvider,
 		log = console.log,
 		run,
+		request,
 	}: {
 		environment: NodeJS.ProcessEnv
 		signal: AbortSignal
 		sandboxProvider?: PersonalProvider
 		log?: (line: string) => void
 		run?: RunCommand
+		request?: typeof fetch
 	},
 ): Promise<{ isComplete: boolean }> {
-	const request = readCheckArguments(args)
+	const checkArguments = readCheckArguments(args)
 	requireSettings(environment)
+
+	// decide what to test from GitHub and the registry before any sandbox exists
+	const { repositoryUrl, revision, dependency, to, output } = checkArguments
+	const target = await selectCheckTarget({
+		repositoryUrl,
+		revision,
+		dependency,
+		to,
+		output,
+		githubToken: readGithubToken(environment),
+		signal,
+		request,
+		log,
+	})
+	if (target.kind === "none") {
+		await removePreviousPatches(checkArguments.output)
+		await rm(join(checkArguments.output, inspectionReportFilename), { force: true })
+		return { isComplete: target.isComplete }
+	}
 	const provider = sandboxProvider ?? (await personalProvider(accountToken(environment)))
+	const limits = { ...target.choice.limits, ...(checkArguments.isUpgradeOnly && { maxFeatureMatches: 0 }) }
 
 	// print step and sandbox progress without command output
 	const inspect = (choice: Partial<InspectOptions>): Promise<ModelRequestSandboxInspectionReport> =>
 		inspectWithAccount(
 			{
 				...choice,
-				repositoryUrl: request.repositoryUrl,
+				repositoryUrl: checkArguments.repositoryUrl,
 				sandboxProvider: provider,
-				applicationEnvironment: request.applicationEnvironment,
+				applicationEnvironment: checkArguments.applicationEnvironment,
 				signal,
 				onEvent: (event) => {
 					if (event.type !== "detail") {
@@ -66,26 +93,31 @@ export async function checkRepository(
 			},
 			environment,
 		)
-	const report = await inspect(await selectTarget(request, inspect))
+	const report = await inspect({ ...target.choice, limits })
 
 	// save the complete evidence beside each replayable patch
-	await mkdir(request.output, { recursive: true })
-	await removePreviousPatches(request.output)
-	await writeFile(join(request.output, "inspection-report.json"), `${JSON.stringify(report, null, 2)}\n`)
+	await mkdir(checkArguments.output, { recursive: true })
+	await removePreviousPatches(checkArguments.output)
+	await writeFile(join(checkArguments.output, inspectionReportFilename), `${JSON.stringify(report, null, 2)}\n`)
 	for (const upgrade of report.upgrades) {
 		for (const patch of upgrade.patches) {
-			await writeFile(join(request.output, patch.filename), patch.mailbox)
+			await writeFile(join(checkArguments.output, patch.filename), patch.mailbox)
 		}
 		log(
 			`${upgrade.dependency} ${upgrade.to}: ${upgrade.verdict} · ${upgrade.patches.length} ${upgrade.patches.length === 1 ? "patch" : "patches"}`,
 		)
 	}
-	log(`Report written to ${request.output}`)
+	log(`Report written to ${checkArguments.output}`)
 
 	// hand each tested patch to the repository as a pull request
-	for (const upgrade of request.shouldOpenPullRequest ? report.upgrades : []) {
+	for (const upgrade of checkArguments.shouldOpenPullRequest ? report.upgrades : []) {
 		if (upgrade.patches.length) {
-			const branch = await openPullRequest({ upgrade, output: request.output, run })
+			const branch = await openPullRequest({
+				upgrade,
+				output: checkArguments.output,
+				packageManager: report.packageManager,
+				run,
+			})
 			log(`Pull request ready from ${branch}`)
 		}
 	}
@@ -94,38 +126,33 @@ export async function checkRepository(
 
 // remove only the patches that the folder's previous report lists
 async function removePreviousPatches(output: string): Promise<void> {
-	const text = await readFile(join(output, "inspection-report.json"), "utf8").catch(() => undefined)
+	const text = await readFile(join(output, inspectionReportFilename), "utf8").catch(() => undefined)
 	if (!text) {
 		return
 	}
+
+	// skip a report that an interrupted check left unreadable
 	const previous = z
 		.object({ upgrades: z.array(z.object({ patches: z.array(z.object({ filename: z.string() })) })) })
-		.parse(JSON.parse(text))
+		.safeParse(parseJson(text))
+	if (!previous.success) {
+		return
+	}
 
 	// keep deletion inside the output folder
-	for (const { filename } of previous.upgrades.flatMap((upgrade) => upgrade.patches)) {
+	for (const { filename } of previous.data.upgrades.flatMap((upgrade) => upgrade.patches)) {
 		if (basename(filename) === filename && filename.endsWith(".patch")) {
 			await rm(join(output, filename), { force: true })
 		}
 	}
 }
 
-// pin a requested dependency to the commit that lists it as eligible
-async function selectTarget(
-	{ revision, dependency, to }: CheckArguments,
-	inspect: (choice: Partial<InspectOptions>) => Promise<ModelRequestSandboxInspectionReport>,
-): Promise<Partial<InspectOptions>> {
-	if (!dependency) {
-		return { revision, limits: { maxUpgrades: 1 } }
+function parseJson(text: string): unknown {
+	try {
+		return JSON.parse(text)
+	} catch {
+		return undefined
 	}
-
-	// reject a target missing from the upgrade menu
-	const menu = await inspect({ revision, mode: "listUpgrades" })
-	const upgrade = menu.selection.eligible.find((target) => target.dependency === dependency && target.to === to)
-	if (!upgrade) {
-		throw new UserError(`${dependency} ${to} is not an eligible upgrade at ${menu.repository.commit}.`)
-	}
-	return { revision: menu.repository.commit, upgrade, mode: "inspectUpgrades" }
 }
 
 /**
@@ -156,6 +183,7 @@ export function readCheckArguments(args: string[]): CheckArguments {
 		output: values.output,
 		applicationEnvironment: pairs.length ? Object.fromEntries(pairs) : undefined,
 		shouldOpenPullRequest: values["pull-request"],
+		isUpgradeOnly: values["upgrade-only"],
 	}
 }
 
@@ -170,6 +198,7 @@ type ParsedArguments = {
 		// where the results go
 		output: string
 		"pull-request": boolean
+		"upgrade-only": boolean
 	}
 	positionals: string[]
 }
@@ -187,6 +216,7 @@ function parseCheckArguments(args: string[]): ParsedArguments {
 				output: { type: "string", default: "health-code-report" },
 				env: { type: "string", multiple: true, default: [] },
 				"pull-request": { type: "boolean", default: false },
+				"upgrade-only": { type: "boolean", default: false },
 			},
 		})
 	} catch {

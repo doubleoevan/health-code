@@ -9,7 +9,7 @@ Use the Bun version in `.bun-version`. From the repository root, run `bun instal
 | `bun run check:style` | Checks formatting, lint rules and import order with Biome. |
 | `bun run check:structure` | Checks the placement of package manifests. |
 | `bun run check:boundaries` | Checks imports, dependency declarations and TypeScript references across the workspaces. |
-| `bun run check:pins` | Compares the Bun pins and verifies patched dependency versions against the lockfile. |
+| `bun run check:declared-versions` | Compares the declared Bun versions and verifies patched dependency versions against the lockfile. |
 | `bun run check:unused` | Finds unused files, exports, types and dependencies with Knip. |
 | `bun run typecheck` | Typechecks the scripts and every product workspace. |
 | `bun run test` | Runs the tooling and workspace test suites with Bun. |
@@ -21,9 +21,9 @@ Use the Bun version in `.bun-version`. From the repository root, run `bun instal
 | `bun run --cwd apps/web start` | Serves the built page, Inspection API and event stream. |
 | `bun run --cwd apps/web dev` or `replay` | Serves live local inspections (`dev`) or a recorded example (`replay`) with hot reload. |
 | `bun run check:package` | Packs the library and verifies its public entry in fresh Node and Bun consumers with frozen workspace dependencies. |
-| `bun run test:provider` | Runs the shared production contract and two pinned public fixtures when the test harness has `RUNTA_TOKEN`. |
+| `bun run test:provider` | Runs the shared production contract and two public fixtures at fixed commits when the test harness has `RUNTA_TOKEN`. |
 | `doppler run -- bun run eval --case removed-apis` | Scores the historical repair under the default limits. `linked-dependencies` scores a repair that upgrades linked dependencies. `matching-versions` scores one that upgrades two packages to the same version. `mocked-import-path` scores one that changes a mocked path. `--all` scores every case. |
-| `doppler run --only-secrets RUNTA_TOKEN -- bun run eval --case baseline-test-counts --record` | Measures test counts and test file errors at the pinned commit and writes the case file for review. |
+| `doppler run --only-secrets RUNTA_TOKEN -- bun run eval --case baseline-test-counts --record` | Measures test counts and test file errors at the case's commit and writes the case file for review. |
 | `bun run check:advisories` | Queries the registry and fails on unreviewed high or critical advisories or stale exceptions. CI runs it separately. |
 
 Every module keeps its own AGENTS.md current with the README. For an approved change, implement it, run `/ship`, archive with OpenSpec, commit the implementation and archive together, then push to main.
@@ -45,7 +45,7 @@ Without credentials, `bun run --cwd apps/web replay` plays one recorded inspecti
 
 ## Model inspections
 
-Run `bun run test:credential` with the sandbox token and the model settings from the [CI guide](apps/cli/README.md#setup) to verify the live gateway. Run `bun run eval --case removed-apis` to score a pinned repair against the default budgets. The `baseline-test-counts` case supports `--record` for a new measurement. Scoring requires reviewed counts and test file errors.
+Run `bun run test:credential` with the sandbox token and the model settings from the [CI guide](apps/cli/README.md#setup) to verify the live gateway. Run `bun run eval --case removed-apis` to score a repair case against the default budgets. The `baseline-test-counts` case supports `--record` for a new measurement. Scoring requires reviewed counts and test file errors.
 
 ## Release and hosted verification
 

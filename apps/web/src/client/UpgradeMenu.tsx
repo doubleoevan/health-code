@@ -20,11 +20,13 @@ export function UpgradeMenu({
 	upgradeMenuId,
 	view,
 	issue,
+	releaseAgeNotice,
 	pending,
 	onSelect,
 }: {
 	view: UpgradeMenuView
 	issue?: string
+	releaseAgeNotice?: string
 	upgradeMenuId: string
 	pending: boolean
 	onSelect: (target: UpgradeMenuTarget) => void
@@ -73,6 +75,13 @@ export function UpgradeMenu({
 			{issue && (
 				<p className="upgrade-menu-warning" role="status">
 					{issue}
+				</p>
+			)}
+
+			{/* assumed minimum release age */}
+			{releaseAgeNotice && (
+				<p className="upgrade-menu-warning" role="status">
+					{releaseAgeNotice}
 				</p>
 			)}
 

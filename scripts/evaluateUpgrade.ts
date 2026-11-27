@@ -16,7 +16,7 @@ import { scoreBudget } from "./scoreBudget.ts"
 const commit = z.string().regex(/^[a-f0-9]{40}$/)
 
 /**
- * Lists the IDs of the pinned upgrade cases.
+ * Lists the IDs of the upgrade cases.
  */
 export const upgradeCaseIds = [
 	"removed-apis",
@@ -50,10 +50,10 @@ export const upgradeCaseSchema = z.object({
 })
 
 /**
- * Scores one pinned upgrade using the public version 2 defaults.
+ * Scores one upgrade case using the public version 2 defaults.
  */
 export async function evaluateUpgrade(upgradeCaseId: UpgradeCaseId, signal?: AbortSignal): Promise<void> {
-	// load the pinned upgrade and require both accounts
+	// load the upgrade case and require both accounts
 	const fixture = upgradeCaseSchema.parse(
 		JSON.parse(await readFile(new URL(`../evals/${upgradeCaseId}.json`, import.meta.url), "utf8")),
 	)
@@ -90,11 +90,11 @@ export async function evaluateUpgrade(upgradeCaseId: UpgradeCaseId, signal?: Abo
 		},
 	})
 
-	// require evidence from the pinned commit
+	// require evidence from the case's commit
 	const report = inspectionReport.upgrades[0]
 	if (!report || inspectionReport.repository.commit !== fixture.commit) {
 		throw new Error(
-			"Pinned upgrade did not produce evidence: " +
+			"Upgrade case did not produce evidence: " +
 				JSON.stringify({
 					manager: inspectionReport.packageManager,
 					selection: inspectionReport.selection,
@@ -220,7 +220,7 @@ export async function evaluateUpgrade(upgradeCaseId: UpgradeCaseId, signal?: Abo
 	}
 }
 
-// match the pinned source location when the case names one
+// match the source location when the case names one
 function matchesExpectedLocator(report: UpgradeReportV2, fixture: z.infer<typeof upgradeCaseSchema>): boolean {
 	const { locator } = fixture.expected
 	return (

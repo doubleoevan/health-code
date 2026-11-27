@@ -61,7 +61,7 @@ test("first-party cohorts exclude repeat and self views, count timely starts onc
 	assert.ok(html.includes("Viewers who started an inspection (7 days)"))
 	assert.ok(html.includes("<td>1/1 (100%)</td><td>1/2 (50%) (open)</td>"))
 	assert.ok(html.includes("<td>$0.40</td><td>$0.25</td><td>$0.75</td><td>$10.00</td>"))
-	assert.ok(html.includes("<td>3</td><td>1</td><td>1 / 1</td>"))
+	assert.ok(html.includes("<td>3</td><td>0 / 0</td><td>1</td><td>1 / 1</td>"))
 
 	// Exclude completed upgrade menus from both sides of the share rate across stored choice formats.
 	for (const payload of [{ mode: "listUpgrades" }, { discoveryOnly: true }]) {
@@ -92,6 +92,34 @@ test("first-party cohorts exclude repeat and self views, count timely starts onc
 			.find((item) => item.day === day)
 			?.counts.includes("converted"),
 	)
+	store.database.close()
+})
+
+test("the admin row shows a day's fresh and reused upgrade menus beside its upgrade tests", () => {
+	const store = new InspectionStore(":memory:")
+	const now = Date.now()
+	const day = new Date(now).toISOString().slice(0, 10)
+	const limits = toLaunchLimits({ HEALTH_CODE_DAILY_COST_USD: "100", HEALTH_CODE_DAILY_DEMO_LIMIT: "10" })
+
+	// count ten fresh menus and five reused ones
+	for (let index = 0; index < 15; index++) {
+		store.admission.count(index < 10 ? "menus" : "menuReuses", day)
+	}
+
+	// admit three upgrade tests, each for a version selected from a menu
+	for (const to of ["1.3.0", "1.4.0", "2.0.0"]) {
+		store.admission.admit({
+			key: to,
+			head: { repositoryId: "example/project", revision: "b".repeat(40), sizeKiB: 1 },
+			limits,
+			identity: { visitor: to, network: to },
+			now,
+			enqueue: () => store.enqueue(replayRepositoryUrl),
+		})
+	}
+
+	// check that the day's row reads starts, then fresh and reused menus
+	assert.ok(adminPage(store.admission, null).includes(`<td>${day}</td><td>3</td><td>10 / 5</td>`))
 	store.database.close()
 })
 

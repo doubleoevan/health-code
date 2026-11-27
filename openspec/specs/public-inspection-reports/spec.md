@@ -17,7 +17,7 @@ Each stable Inspection Report URL SHALL show a summary, Repository, inspected co
 #### Scenario: Review an Inspection on a phone
 
 - **WHEN** a visitor opens a report in either light or dark mode at a phone viewport
-- **THEN** each Upgrade is readable, followed by the complete ordered timeline with pinned Sandbox Events and expandable raw details
+- **THEN** each Upgrade is readable, followed by the complete ordered timeline with Sandbox Events listed first and expandable raw details
 
 #### Scenario: Incomplete recording of install activity
 

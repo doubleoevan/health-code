@@ -6,7 +6,17 @@ import { AdmissionError, type RepositoryHead } from "./recordAdmissions.ts"
 export function createRepositoryLookup(
 	token?: string,
 	request: typeof fetch = fetch,
-): Pick<InspectionSource, "verify" | "license" | "resolve"> {
+): Pick<InspectionSource, "verify" | "license" | "resolve" | "githubQuota"> {
+	// the requests GitHub last said this token has left, and when the count resets
+	let quota: { remaining: number; resetAt: number } | undefined
+	function recordQuota(response: Response): void {
+		const remaining = Number(response.headers.get("x-ratelimit-remaining") ?? Number.NaN)
+		const reset = Number(response.headers.get("x-ratelimit-reset") ?? Number.NaN)
+		if (Number.isFinite(remaining) && Number.isFinite(reset)) {
+			quota = { remaining, resetAt: reset * 1000 }
+		}
+	}
+
 	async function metadata(url: string): Promise<Response> {
 		// Follow repository renames only within the authenticated GitHub API origin.
 		const headers = { Accept: "application/vnd.github+json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }
@@ -17,6 +27,7 @@ export function createRepositoryLookup(
 			if (!response) {
 				throw new SiteError("GitHub could not verify the repository right now. Please try again.")
 			}
+			recordQuota(response)
 			if (![301, 302, 307, 308].includes(response.status)) {
 				return response
 			}
@@ -37,6 +48,7 @@ export function createRepositoryLookup(
 	// derive metadata paths under the trusted github api origin
 	const endpoint = (repositoryUrl: string): string => `https://api.github.com/repos${new URL(repositoryUrl).pathname}`
 	return {
+		githubQuota: () => quota,
 		async resolve(repositoryUrl): Promise<RepositoryHead> {
 			const url = endpoint(repositoryUrl)
 

@@ -39,7 +39,7 @@ export async function inspectRepository(
 	const options = { ...toCheckOptions(input, engine), mode: toInspectionMode(input) }
 	const repositoryUrl = toRepositoryUrl(options.repositoryUrl)
 
-	// Validate the requested pin before allocating either runtime.
+	// Validate the requested revision before allocating either runtime.
 	if (input.revision !== undefined && !/^[0-9a-f]{40}$/.test(input.revision)) {
 		throw new InspectionError("invalid-revision", "Expected a full commit SHA")
 	}
@@ -132,7 +132,7 @@ async function inspectWithRecovery({
 			return first
 		}
 
-		// Pin the replacement to the original commit and repeat its baseline.
+		// Keep the replacement on the original commit and repeat its baseline.
 		const replacement = await runtime.open(first.repository.commit, "Create replacement sandbox")
 		engine?.resume(first)
 		const retried = await inspectProject({ context, ...replacement, engine, previous: first })

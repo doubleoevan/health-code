@@ -1,56 +1,20 @@
-const tools = [
-	[
-		"node",
-		"node-linux-x64/-/node-linux-x64-24.14.0.tgz",
-		"BW+LjMox8A7Dh632x6aMw793/davUra1+JatUmW9abd62tlpzpTQGVL2ZqTRC2WNjnGyh91eWxZOpZOy4AK7KA==",
-		"bin/node",
-	],
-	[
-		"bun",
-		"@oven/bun-linux-x64/-/bun-linux-x64-1.4.3.tgz",
-		"RArgnpjeXjaGzjp5h7Rs89cUYJutO8IyqR3itE8OBaBzEt8KNm2jp/YozxBHq4eFovwrQLryeSwTAcmiT+zcoA==",
-		"bin/bun",
-	],
-	[
-		"npm",
-		"npm/-/npm-11.11.0.tgz",
-		"82gRxKrh/eY5UnNorkTFcdBQAGpgjWehkfGVqAGlJjejEtJZGGJUqjo3mbBTNbc5BTnPKGVtGPBZGhElujX5cw==",
-		"bin/npm-cli.js",
-	],
-	[
-		"pnpm",
-		"pnpm/-/pnpm-10.19.0.tgz",
-		"yfxyNukq31yK9C/VvxYS35nCzrYvJwRwMvRyCzP46s3eMRhl6RxBHyd09hjYLzIICOy1Fxi/qCwGDEunx2oyuA==",
-		"bin/pnpm.cjs",
-	],
-	[
-		"yarn",
-		"yarn/-/yarn-1.22.22.tgz",
-		"prL3kGtyG7o9Z9Sv8IPfBNrWTDmXB4Qbes8A9rEzt6wkJV8mUvoirjU0Mp3GGAU06Y0XQyA3/2/RQFVuK7MTfg==",
-		"bin/yarn.js",
-	],
-	[
-		"yarn-modern",
-		"@yarnpkg/cli-dist/-/cli-dist-4.9.2.tgz",
-		"qrMyWzvEnWhaWOflvE1pGxWGiVOPsO/q4XfGCeRPnLU8ECkvhrhJEfCNakcy3s3VHcApBASQ4fmL0sOEw6xtZQ==",
-		"bin/yarn.js",
-	],
-] as const
+import { packageManagerTools, toArchivePath } from "./packageManagerVersions.ts"
 
 /**
  * Provisions trusted tools before repository-controlled files execute.
  */
 export function provision(): string {
-	// verify each pinned tool archive before linking its executable
-	const downloads = tools.map(([name, tar, hash, bin]) =>
-		[
-			`curl -fsS --max-time 75 https://registry.npmjs.org/${tar} -o /tmp/hc-${name}.tgz`,
-			`test "$(openssl dgst -sha512 -binary /tmp/hc-${name}.tgz | openssl base64 -A)" = "${hash}"`,
-			`mkdir -p /opt/health-code/tools/${name}`,
-			`tar xzf /tmp/hc-${name}.tgz --strip-components=1 -C /opt/health-code/tools/${name}`,
-			`ln -sf /opt/health-code/tools/${name}/${bin} /opt/health-code/bin/${name}`,
-		].join("\n"),
-	)
+	// verify each tool archive before linking its executable
+	const downloads = [
+		toInstallSteps("node", nodeTool),
+		...Object.entries(packageManagerTools).map(([name, tool]) =>
+			toInstallSteps(name, {
+				archive: toArchivePath({ packageName: tool.package, version: tool.bundledPackageManagerVersion }),
+				hash: tool.bundledHash,
+				bin: tool.bin,
+			}),
+		),
+	]
 	return [
 		"set -eu",
 		'test "$(uname -m)" = x86_64',
@@ -65,6 +29,74 @@ export function provision(): string {
 		...downloads,
 	].join("\n")
 }
+
+// the node runtime that runs the guest tools, with the hash its archive must match
+const nodeTool = {
+	archive: "node-linux-x64/-/node-linux-x64-24.14.0.tgz",
+	hash: "BW+LjMox8A7Dh632x6aMw793/davUra1+JatUmW9abd62tlpzpTQGVL2ZqTRC2WNjnGyh91eWxZOpZOy4AK7KA==",
+	bin: "bin/node",
+}
+
+// download one tool archive, verify its hash and link its executable
+function toInstallSteps(name: string, tool: { archive: string; hash: string; bin: string }): string {
+	return [
+		`curl -fsS --max-time 75 https://registry.npmjs.org/${tool.archive} -o /tmp/hc-${name}.tgz`,
+		`test "$(openssl dgst -sha512 -binary /tmp/hc-${name}.tgz | openssl base64 -A)" = "${tool.hash}"`,
+		`mkdir -p /opt/health-code/tools/${name}`,
+		`tar xzf /tmp/hc-${name}.tgz --strip-components=1 -C /opt/health-code/tools/${name}`,
+		`ln -sf /opt/health-code/tools/${name}/${tool.bin} /opt/health-code/bin/${name}`,
+	].join("\n")
+}
+
+// the reasons the package manager install script reports, by the marker it prints
+export const packageManagerInstallFailures: Record<string, string> = {
+	unpublished: "is not published",
+	deprecated: "is deprecated",
+	recent: "was published less than a day ago",
+	integrity: "did not match the registry's integrity",
+	hash: "did not match the hash in packageManager",
+}
+
+/**
+ * Installs a declared package manager version after verifying its release and archive against the registry.
+ */
+export const packageManagerInstallScript = [
+	// read the tool name, package, archive path, version, executable path, command name and optional declared hash
+	`set -eu
+name="$1"; package="$2"; archive="$3"; version="$4"; bin="$5"; command_name="$6"; declared_hash="$7"
+record=/tmp/hc-install-$name.json; download=/tmp/hc-install-$name.tgz; target=/opt/health-code/tools/$name-$version
+fail() { echo "hc-install:$1" >&2; exit 1; }
+curl -fsS --max-time 45 "https://registry.npmjs.org/$package" -o "$record"`,
+
+	// read the release's status and integrity from the registry's record
+	`integrity=$(/opt/health-code/bin/node -e '
+const [file, version] = process.argv.slice(1)
+const record = JSON.parse(require("node:fs").readFileSync(file, "utf8"))
+const release = Object.hasOwn(record.versions ?? {}, version) ? record.versions[version] : undefined
+const fail = (reason) => { console.error("hc-install:" + reason); process.exit(1) }`,
+
+	// reject a release that is missing, deprecated, under a day old or without a sha512 integrity
+	`if (!release) fail("unpublished")
+if (release.deprecated) fail("deprecated")
+if (!(Date.parse((record.time ?? {})[version]) <= Date.now() - 86400000)) fail("recent")
+const integrity = String((release.dist ?? {}).integrity ?? "")
+if (!/^sha512-[A-Za-z0-9+/=]+$/.test(integrity)) fail("integrity")
+process.stdout.write(integrity.slice(7))' "$record" "$version")`,
+
+	// verify the archive before anything from it is unpacked
+	`curl -fsS --max-time 120 "https://registry.npmjs.org/$archive" -o "$download"
+test "$(openssl dgst -sha512 -binary "$download" | openssl base64 -A)" = "$integrity" || fail integrity
+if [ -n "$declared_hash" ]; then
+  test "$(openssl dgst "-\${declared_hash%%.*}" -r "$download" | cut -d" " -f1)" = "\${declared_hash#*.}" || fail hash
+fi`,
+
+	// unpack beside the bundled tools and point the command at the declared version
+	`mkdir -p "$target"
+tar xzf "$download" --strip-components=1 -C "$target"
+chmod -R a+rX "$target"
+ln -sf "$target/$bin" "/opt/health-code/bin/$command_name"
+rm -f "$record" "$download"`,
+].join("\n")
 
 /**
  * Checks out the supplied commit or resolves the default branch to a commit.

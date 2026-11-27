@@ -4,15 +4,21 @@ import type {
 	InspectionReport,
 	ModelRequestSandboxInspectionReport,
 	TestFailure,
+	UpgradeMenu,
 	UpgradeReportV2,
 } from "health-code"
-import { testInventorySummarySchema, toInspectionMode } from "health-code"
+import { testInventorySummarySchema, toInspectionMode, toReleaseAgeNotice } from "health-code"
 import { type Citation, type PatchLink, type PublishedReport, toCheckText, type UpgradeCard } from "../report.ts"
 
 // replace repository output in a report without a verified license
 export const withheldReason = "Output withheld because no open source license was verified."
 
-export type InspectionOutput = { report: InspectionReport | ModelRequestSandboxInspectionReport }
+export type InspectionOutput = {
+	report: InspectionReport | ModelRequestSandboxInspectionReport
+	upgradeMenu?: Pick<UpgradeMenu, "unreadable" | "minimumReleaseAge">
+}
+
+// the source report, its public projection and the patch bytes published with it
 export type Publication = {
 	original: InspectionOutput["report"]
 	card: PublishedReport
@@ -185,6 +191,7 @@ export function publishReport(output: InspectionOutput, license: string | null):
 	})
 
 	// retain the source report separately from its public projection
+	const releaseAge = output.upgradeMenu?.minimumReleaseAge
 	return {
 		original: report,
 		blobs,
@@ -199,6 +206,8 @@ export function publishReport(output: InspectionOutput, license: string | null):
 			baselineTestFileErrors: toTestFileErrors(report.baseline.tests, license),
 			registryLookupIssue: report.selection.registryLookupIssue,
 			detection: "reason" in report.packageManager ? report.packageManager.reason : undefined,
+			...(output.upgradeMenu?.unreadable && { unreadable: output.upgradeMenu.unreadable }),
+			...(releaseAge?.isAssumed && { releaseAgeNotice: toReleaseAgeNotice(releaseAge) }),
 			license,
 			upgrades,
 		},

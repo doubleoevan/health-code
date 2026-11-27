@@ -24,9 +24,9 @@ The npm package `health-code` SHALL export its ESM entry and declarations. One o
 - **WHEN** a version 1 caller supplies a dictionary of model strings, a legacy provider and an exhaustive version 1 callback
 - **THEN** the packed library preserves the call's types and runtime behavior, makes no model calls and emits replayable version 1 JSON.
 
-### Requirement: Pin a public repository
+### Requirement: Resolve a public repository to one commit
 
-The library SHALL accept a public GitHub HTTPS repository URL and pin the default branch head to one full commit identifier before executing repository code. All results within the inspection SHALL refer to that commit.
+The library SHALL accept a public GitHub HTTPS repository URL and resolve the default branch head to one full commit identifier before executing repository code. All results within the inspection SHALL refer to that commit.
 
 #### Scenario: A branch moves
 
@@ -55,7 +55,7 @@ Each accepted inspection SHALL emit ordered, JSON-serializable events for inspec
 #### Scenario: Runtime controls are visible
 
 - **WHEN** a sandbox is created, verified credential-free, network-locked, confirmed to have blocked a connection, or deleted
-- **THEN** the corresponding Sandbox Event identifies the action so a consumer can highlight and pin it
+- **THEN** the corresponding Sandbox Event identifies the action so a consumer can highlight it and list it first
 
 ### Requirement: Versioned evidence
 
@@ -87,7 +87,7 @@ The repository SHALL provide `bun run inspect <repo-url> [--fake]` through a dev
 
 ### Requirement: Version 2 events preserve the inspection lifecycle
 
-A configured Inspection SHALL emit typed reading, matching, per-role Agent Attempt and final patch check steps, with ordered starts/finishes, correlated IDs, statuses and durations. The agent startup Sandbox Event SHALL record the verified credential-isolation action and be available for highlighting and pinning in the live log and Inspection Report. Delivery and replay SHALL retain the existing single terminal event and cleanup guarantees.
+A configured Inspection SHALL emit typed reading, matching, per-role Agent Attempt and final patch check steps, with ordered starts/finishes, correlated IDs, statuses and durations. The agent startup Sandbox Event SHALL record the verified credential-isolation action and be available for highlighting and listing first in the live log and Inspection Report. Delivery and replay SHALL retain the existing single terminal event and cleanup guarantees.
 
 #### Scenario: Feature adoption after a repair
 
@@ -120,7 +120,7 @@ Each version 2 upgrade SHALL retain the original Check Results and include the c
 
 ### Requirement: Identify verified Model Request Sandbox startup
 
-An Inspection using a Model Request Sandbox SHALL emit exactly one version 2 Sandbox Event with action `model-request-sandbox-started` after verifying the model request sandbox’s first model-host policy and credential binding. It SHALL identify the Inspection and model request sandbox. Live consumers and the replayed timeline SHALL pin and highlight the event and explain that the model key is supplied remotely.
+An Inspection using a Model Request Sandbox SHALL emit exactly one version 2 Sandbox Event with action `model-request-sandbox-started` after verifying the model request sandbox’s first model-host policy and credential binding. It SHALL identify the Inspection and model request sandbox. Live consumers and the replayed timeline SHALL highlight the event, list it first and explain that the model key is supplied remotely.
 
 #### Scenario: A client follows and replays an Inspection
 
@@ -196,3 +196,22 @@ An Inspection SHALL expose available model and sandbox cost evidence, its curren
 
 - **WHEN** measured sandbox billing is unavailable when the Inspection terminates
 - **THEN** the consumer can distinguish the sandbox estimate or outstanding liability from measured model spend and reconcile it later
+
+### Requirement: Report the package manager version that wrote the lockfile
+
+The Inspection Report SHALL record the package manager version that ran, whether it came from the Repository's declared version or the bundled set, the declared version with the file that declares it and the reason for any fallback. Reports written before this change SHALL stay readable.
+
+#### Scenario: Declared version installed
+
+- **WHEN** the sandbox installed the Repository's declared versionned Bun 1.4.4
+- **THEN** the report records Bun 1.4.4, the source as declared and the file that declares it
+
+#### Scenario: Fallback
+
+- **WHEN** the declared version was not trusted
+- **THEN** the report records the bundled version that ran, the declared version and the reason
+
+#### Scenario: Older report
+
+- **WHEN** a consumer reads a report that has only the package manager's name and version
+- **THEN** it reads without error and shows no source

@@ -3,6 +3,7 @@ import { InspectionError, toRepositoryUrl, type UpgradeFeatures } from "health-c
 import type { SiteEvent } from "../report.ts"
 import type { AdmissionRequest, LaunchService } from "./admitInspections.ts"
 import { ReleaseFeatureCache } from "./cacheReleaseFeatures.ts"
+import { UpgradeMenuBuilds } from "./discoverUpgrades.ts"
 import { type InspectionChoice, type InspectionSource, SiteError } from "./inspectionSource.ts"
 import type { LaunchLimits } from "./launchLimits.ts"
 import { logInspection } from "./logInspection.ts"
@@ -15,6 +16,7 @@ import type { InspectionStore } from "./storeInspections.ts"
 export class Inspections {
 	readonly changes = new EventEmitter()
 	readonly stops: InspectionStops
+	readonly upgradeMenuBuilds: UpgradeMenuBuilds
 	private timers: ReturnType<typeof setInterval>[] = []
 
 	// Share pending release requests for the same package versions.
@@ -39,6 +41,7 @@ export class Inspections {
 			throw new Error("Invalid inspection concurrency")
 		}
 		this.stops = new InspectionStops(store)
+		this.upgradeMenuBuilds = new UpgradeMenuBuilds(store, source, this.changes, launch)
 		this.changes.setMaxListeners(0)
 	}
 
@@ -122,9 +125,12 @@ export class Inspections {
 				if (lifecycle !== this.lifecycle) {
 					return
 				}
+
+				// apply lowered ceilings and drop expired visitor digests
 				try {
 					this.store.admission.tightenQueued(settings.current.maxCostUsd)
 					this.store.admission.prune()
+					this.store.upgradeMenus.prune()
 					this.maintenanceHealthy = true
 				} catch {
 					// Suspend paid work while accounting maintenance cannot reach the store.
@@ -149,6 +155,9 @@ export class Inspections {
 	}
 	private async recoverAtStartup(lifecycle: number, sleep: (milliseconds: number) => Promise<void>): Promise<void> {
 		let delay = 1000
+
+		// fail the builds the previous process left, once, so a retry leaves this process's builds alone
+		this.store.upgradeMenus.interrupt()
 
 		// retry deployment cleanup before accepting queued work
 		for (;;) {

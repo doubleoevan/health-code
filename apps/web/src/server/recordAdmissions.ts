@@ -24,14 +24,50 @@ export function toUtcDay(now = Date.now()): string {
 	return new Date(now).toISOString().slice(0, 10)
 }
 
+/**
+ * Formats a time as its UTC hour and minute.
+ */
+export function toUtcTime(time: number): string {
+	return new Date(time).toISOString().slice(11, 16)
+}
+
+// the daily cap a refusal counts against, and whether the page offers a sandbox listing instead
+type AdmissionErrorOptions = { cap?: "visitorHits" | "budgetHits"; shouldOfferSandboxListing?: boolean }
+
 export class AdmissionError extends Error {
+	readonly cap?: AdmissionErrorOptions["cap"]
+	readonly shouldOfferSandboxListing?: boolean
 	constructor(
 		readonly status: 400 | 403 | 413 | 429 | 503,
 		message: string,
-		readonly cap?: "visitorHits" | "budgetHits",
+		{ cap, shouldOfferSandboxListing }: AdmissionErrorOptions = {},
 	) {
 		super(message)
+		this.cap = cap
+		this.shouldOfferSandboxListing = shouldOfferSandboxListing
 	}
+}
+
+// how long a complete upgrade menu answers later submissions for the same commit
+export const upgradeMenuReuseWindow = "updated >= datetime('now','-1 hour')"
+
+type CountVisitorRowsOptions = {
+	database: Database
+	table: "admissions" | "upgrade_menus"
+	identity: Visitor
+	day: string
+}
+
+/**
+ * Returns the larger of the visitor and network row counts for the day.
+ */
+export function countVisitorRows({ database, table, identity, day }: CountVisitorRowsOptions): number {
+	const counts = database
+		.query<{ v: number; n: number }, [string, string, string]>(
+			`SELECT count(*) FILTER (WHERE visitor=?) v,count(*) FILTER (WHERE network=?) n FROM ${table} WHERE day=?`,
+		)
+		.get(identity.visitor, identity.network, day)
+	return Math.max(counts?.v ?? 0, counts?.n ?? 0)
 }
 export function migrateAdmissions(database: Database): void {
 	// Retain legacy reports without manufacturing cache or billing evidence.
@@ -120,7 +156,7 @@ export class AdmissionLedger {
 			.query<{ id: string }, [string]>(`SELECT id FROM admissions JOIN inspections USING(id)
 			WHERE cacheKey=? AND state IN ('queued','running','complete')
 			AND (state!='complete' OR CASE WHEN json_valid(cacheKey) THEN json_extract(cacheKey,'$[5]') IS NOT 'menu' ELSE 1 END
-			OR updated >= datetime('now','-1 hour')) LIMIT 1`)
+			OR ${upgradeMenuReuseWindow}) LIMIT 1`)
 			.get(key)?.id
 	}
 
@@ -135,19 +171,17 @@ export class AdmissionLedger {
 	}
 
 	// Count the stricter of the browser and network quotas.
-	countRemainingInspections({ visitor, network }: Visitor, limits: LaunchLimits, day: string): number {
-		const counts = this.database
-			.query<{ v: number; n: number }, [string, string, string]>(
-				"SELECT count(*) FILTER (WHERE visitor=?) v,count(*) FILTER (WHERE network=?) n FROM admissions WHERE day=?",
-			)
-			.get(visitor, network, day)
-		return Math.max(0, limits.dailyVisitorInspections - Math.max(counts?.v ?? 0, counts?.n ?? 0))
+	countRemainingInspections(identity: Visitor, limits: LaunchLimits, day: string): number {
+		const admissionCount = countVisitorRows({ database: this.database, table: "admissions", identity, day })
+		return Math.max(0, limits.dailyVisitorInspections - admissionCount)
 	}
 
 	// Enforce the visitor quota and the shared daily budget.
 	checkAllowance(identity: Visitor, limits: LaunchLimits, day: string): void {
 		if (this.countRemainingInspections(identity, limits, day) === 0) {
-			throw new AdmissionError(429, "Your daily inspection allowance is used. It resets at 00:00 UTC.", "visitorHits")
+			throw new AdmissionError(429, "Your daily inspection allowance is used. It resets at 00:00 UTC.", {
+				cap: "visitorHits",
+			})
 		}
 
 		// Preserve prior-day unsettled liabilities across the UTC boundary.
@@ -156,7 +190,7 @@ export class AdmissionLedger {
 			throw new AdmissionError(
 				429,
 				"The daily inspection budget is reserved or used. It resets at 00:00 UTC. Run Health Code in CI with your Runta account.",
-				"budgetHits",
+				{ cap: "budgetHits" },
 			)
 		}
 	}

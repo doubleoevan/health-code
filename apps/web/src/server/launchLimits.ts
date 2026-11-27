@@ -11,7 +11,20 @@ export type LaunchLimits = {
 	maxCostUsd: number
 	repairUsd: number
 	adoptionUsd: number
+
+	// the daily fresh menus per visitor, the builds running at once and the GitHub requests kept for paid inspections
+	dailyVisitorUpgradeMenus: number
+	upgradeMenuConcurrency: number
+	githubQuotaFloor: number
+
+	// the largest registry response an upgrade menu build parses and the memory its process may hold
+	maxUpgradeMenuResponseMiB: number
+	maxUpgradeMenuMemoryMiB: number
 }
+
+// the response and memory limits of an upgrade menu build that fit a 512 MB container
+export const defaultMaxUpgradeMenuResponseMiB = 16
+export const defaultMaxUpgradeMenuMemoryMiB = 320
 
 export function toLaunchLimits(environment: Record<string, string | undefined>): LaunchLimits {
 	function number(name: string, fallback: number, maximum = Number.MAX_SAFE_INTEGER): number {
@@ -34,6 +47,11 @@ export function toLaunchLimits(environment: Record<string, string | undefined>):
 		maxCostUsd: number("MAX_COST_USD", 5, 5),
 		repairUsd: number("REPAIR_COST_USD", 2, 2),
 		adoptionUsd: number("ADOPTION_COST_USD", 1, 1),
+		dailyVisitorUpgradeMenus: number("DAILY_MENU_LIMIT", 30),
+		upgradeMenuConcurrency: number("MENU_CONCURRENCY", 1, 8),
+		githubQuotaFloor: number("GITHUB_QUOTA_FLOOR", 500),
+		maxUpgradeMenuResponseMiB: number("MAX_MENU_RESPONSE_MIB", defaultMaxUpgradeMenuResponseMiB, 48),
+		maxUpgradeMenuMemoryMiB: number("MAX_MENU_MEMORY_MIB", defaultMaxUpgradeMenuMemoryMiB, 4096),
 	}
 	for (const count of [
 		limits.dailyVisitorInspections,
@@ -41,6 +59,9 @@ export function toLaunchLimits(environment: Record<string, string | undefined>):
 		limits.maxSizeKiB,
 		limits.maxUpgrades,
 		limits.dailyMicros,
+		limits.dailyVisitorUpgradeMenus,
+		limits.upgradeMenuConcurrency,
+		limits.githubQuotaFloor,
 	]) {
 		if (!Number.isSafeInteger(count)) {
 			throw new Error("Invalid integral launch limit")

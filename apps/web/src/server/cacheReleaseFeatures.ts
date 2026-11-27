@@ -4,7 +4,18 @@ import { AdmissionError } from "./recordAdmissions.ts"
 export class ReleaseFeatureCache {
 	private readonly active = new Map<string, Promise<UpgradeFeatures>>()
 	private readonly saved = new Map<string, { expires: number; features: UpgradeFeatures }>()
+	private hourStarted = 0
+	private hourlyLoads = 0
 	constructor(private readonly now: () => number = Date.now) {}
+
+	// count one upstream lookup against the current hour, or refuse it
+	private takeHourlyLoad(): boolean {
+		if (this.now() - this.hourStarted >= hourMs) {
+			this.hourStarted = this.now()
+			this.hourlyLoads = 0
+		}
+		return ++this.hourlyLoads <= maxHourlyLoads
+	}
 
 	async read(target: Upgrade, load: (target: Upgrade) => Promise<UpgradeFeatures>): Promise<UpgradeFeatures> {
 		const key = toUpgradeTargetKey(target)
@@ -18,7 +29,7 @@ export class ReleaseFeatureCache {
 		if (active) {
 			return active
 		}
-		if (this.active.size >= 8) {
+		if (this.active.size >= 8 || !this.takeHourlyLoad()) {
 			throw new AdmissionError(503, "Release notes are busy. Try again shortly.")
 		}
 
@@ -48,6 +59,11 @@ export class ReleaseFeatureCache {
 		return request
 	}
 }
+
+// the upstream lookups one hour allows. each reads at most eight release pages, so 500 leave paid inspections
+// at least 1,000 of the token's 5,000 hourly points
+const maxHourlyLoads = 500
+const hourMs = 3600000
 
 function canRetain(preview: UpgradeFeatures, key: string): boolean {
 	// Count shared workspace lists once without materializing a serialized preview.

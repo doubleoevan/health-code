@@ -1,5 +1,5 @@
 name: Set up Bun
-description: Installs the Bun that .bun-version pins, restores Bun's install cache, and installs the locked dependencies
+description: Installs the Bun that .bun-version declares, restores Bun's install cache, and installs the locked dependencies
 
 runs:
   using: composite

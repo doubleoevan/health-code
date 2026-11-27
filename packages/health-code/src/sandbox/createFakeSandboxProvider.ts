@@ -5,6 +5,7 @@ import {
 	type CommandResult,
 	InspectionError,
 	type Observation,
+	type PackageManagerInstall,
 	type Sandbox,
 	type SandboxProvider,
 } from "../contracts.ts"
@@ -18,7 +19,7 @@ export type FixtureCommand = {
 	files?: Observation
 }
 
-// pin replay commands and model replies to a repository revision
+// tie replay commands and model replies to a repository revision
 export type SandboxFixture = {
 	commit: string
 	commands: readonly FixtureCommand[]
@@ -29,9 +30,20 @@ export type SandboxFixture = {
 
 	// seed files readable through the fake provider
 	files?: Readonly<Record<string, string>>
+
+	// the reason a declared package manager version fails to install
+	packageManagerFailure?: string
 }
 
 const empty: Observation = { complete: true, findings: [] }
+const emptyCommandResult: CommandResult = {
+	stdout: "",
+	stderr: "",
+	exitCode: 0,
+	durationMs: 1,
+	stdoutTruncated: false,
+	stderrTruncated: false,
+}
 
 /**
  * Replays each inspection independently, using the caller's fixture records.
@@ -39,8 +51,10 @@ const empty: Observation = { complete: true, findings: [] }
 export function createFakeSandboxProvider(fixture: SandboxFixture): SandboxProvider &
 	ReturnType<typeof createFakeModelRequestSandbox> & {
 		credentialEvents: { sandboxId: string; action: string; host: string }[]
+		packageManagerInstalls: PackageManagerInstall[]
 	} {
 	const credentialEvents: { sandboxId: string; action: string; host: string }[] = []
+	const packageManagerInstalls: PackageManagerInstall[] = []
 	const sessions = new Map<
 		string,
 		{
@@ -65,7 +79,7 @@ export function createFakeSandboxProvider(fixture: SandboxFixture): SandboxProvi
 		return state
 	}
 
-	// resolve installation observations by their capture id
+	// resolve installation observations by their observation id
 	function observed(sandbox: Sandbox, id: string): FixtureCommand {
 		const entry = session(sandbox).observations.get(id)
 		if (!entry) {
@@ -76,6 +90,7 @@ export function createFakeSandboxProvider(fixture: SandboxFixture): SandboxProvi
 	return {
 		...createFakeModelRequestSandbox(fixture.modelRequestSandbox),
 		credentialEvents,
+		packageManagerInstalls,
 
 		// bind a fake credential only during the locked registry phase
 		async openCredentialSession(sandbox, route): Promise<CredentialSession> {
@@ -165,6 +180,13 @@ export function createFakeSandboxProvider(fixture: SandboxFixture): SandboxProvi
 			}
 			session(sandbox).locked = true
 		},
+		async installPackageManager(sandbox, request): Promise<void> {
+			session(sandbox)
+			if (fixture.packageManagerFailure) {
+				throw new InspectionError("package-manager-install", fixture.packageManagerFailure)
+			}
+			packageManagerInstalls.push(request)
+		},
 		async resetProject(sandbox): Promise<void> {
 			const state = session(sandbox)
 			state.files = new Map(Object.entries(fixture.files ?? {}))
@@ -175,20 +197,21 @@ export function createFakeSandboxProvider(fixture: SandboxFixture): SandboxProvi
 				throw new InspectionError("policy", "Registry policy required")
 			}
 
+			// accept a named version and report no declared package manager unless the fixture records an answer
+			const next = fixture.commands[state.index]
+			const action = command.argv[2]
+			if ((action === "target" || action === "declared-package-manager") && next?.argv[2] !== action) {
+				return { ...emptyCommandResult, stdout: action === "declared-package-manager" ? "{}" : '{"status":"eligible"}' }
+			}
+
 			// match the next command against the recorded arguments
 			const entry = fixture.commands[state.index++]
 			if (!entry || JSON.stringify(command.argv) !== JSON.stringify(entry.argv)) {
 				throw new InspectionError("fixture-command", `Unexpected fixture command ${JSON.stringify(command.argv)}`)
 			}
-			const result: CommandResult = {
-				stdout: "",
-				stderr: "",
-				exitCode: 0,
-				durationMs: 1,
-				stdoutTruncated: false,
-				stderrTruncated: false,
-				...entry.result,
-			}
+
+			// keep the observed evidence of an install under its observation id
+			const result: CommandResult = { ...emptyCommandResult, ...entry.result }
 			if (command.observe) {
 				result.observationId = randomUUID()
 				state.observations.set(result.observationId, entry)

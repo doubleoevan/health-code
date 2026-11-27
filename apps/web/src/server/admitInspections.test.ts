@@ -1,9 +1,11 @@
+import { expect } from "bun:test"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { replayRepositoryUrl } from "../report.ts"
 import { LaunchService } from "./admitInspections.ts"
 import { createSite } from "./createSite.tsx"
 import { Inspections } from "./executeInspection.ts"
+import { origin } from "./fixtures/createTestSite.ts"
 import { LaunchSettings, toLaunchLimits } from "./launchLimits.ts"
 import { createReplaySource } from "./replayInspection.ts"
 import { InspectionStore } from "./storeInspections.ts"
@@ -429,4 +431,15 @@ test("queued visitors see their FIFO position after a disconnect and a worker re
 	assert.equal(store.state(second.id), "complete")
 	worker.stop()
 	store.database.close()
+})
+
+test("addresses in one IPv6 /64 count as one network and IPv4 addresses stay apart", () => {
+	// digest the network of an ingress address
+	const network = (address: string): string =>
+		identifyVisitor(new Request(origin, { headers: { "x-envoy-external-address": address } }), "secret", false).identity
+			.network
+	expect(network("2001:db8:1:2:aaaa::1")).toBe(network("2001:db8:1:2::ffff"))
+	expect(network("2001:db8:1:2::1")).not.toBe(network("2001:db8:1:3::1"))
+	expect(network("::1")).toBe(network("::2"))
+	expect(network("203.0.113.7")).not.toBe(network("203.0.113.8"))
 })

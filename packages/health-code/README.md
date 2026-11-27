@@ -35,11 +35,13 @@ This checks one upgrade without a model. [Add models](https://github.com/doubleo
 npm install health-code
 ```
 
-You need [Node.js](https://nodejs.org/) 22.18+ or 24.11+ and a [Runta](https://dashboard.runta.com) account.
+You need [Node.js](https://nodejs.org/) 22.18+ or 24.11+. Listing upgrades needs no account. Testing one needs a [Runta](https://dashboard.runta.com) account.
 
 ## Features
 
+- **Upgrade menu:** lists eligible versions from GitHub and the npm registry in your process, with no sandbox.
 - **Your checks:** runs your install, typecheck and tests before and after each upgrade.
+- **Your package manager:** the sandbox installs the version your repository declares, so the patch's lockfile matches your frozen install.
 - **Repairs:** a coding agent patches confirmed breakage and the health inspector retests the patch in a fresh checkout.
 - **New features:** finds release features that match your code.
 - **Sandbox:** the network is locked and your model key stays outside.
@@ -52,7 +54,9 @@ You need [Node.js](https://nodejs.org/) 22.18+ or 24.11+ and a [Runta](https://d
 import { getUpgrade, listUpgrades } from "health-code"
 
 const repositoryUrl = "https://github.com/ai/nanoid"
-const menu = await listUpgrades({ repositoryUrl })
+
+// list upgrades from GitHub and the npm registry
+const menu = await listUpgrades({ repositoryUrl, githubToken: process.env.GITHUB_TOKEN })
 const upgrade = menu.dependencies[0]?.targets[0]
 if (!upgrade) {
   throw new Error(menu.issue ?? "No upgrades found")
@@ -67,6 +71,10 @@ const report = await getUpgrade({
 })
 console.log(report.upgrades[0].verdict, report.upgrades[0].patches)
 ```
+
+`listUpgrades` offers the newest minor and the newest major version of each direct dependency. To test another version, such as the patch release another tool chose, call `resolveUpgrade({ repositoryUrl, dependency, to })` and pass its `upgrade` to `getUpgrade`.
+
+**Upgrading from 0.2.** `listUpgrades` no longer returns `releaseFeatures` on each target, and it ignores `sandboxProvider`. Read features for the choices you show with `readUpgradeMenuFeatures(menu.dependencies.slice(0, 4), { githubToken })`.
 
 ## Use it in CI
 

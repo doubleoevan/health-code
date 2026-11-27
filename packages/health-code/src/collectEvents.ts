@@ -11,8 +11,26 @@ import {
 import { InspectionPrompts } from "./readPrompt.ts"
 
 export const defaultMaxCostUsd = 0.25
-export const defaultDurationMs = 1800000
-const defaults = { setup: 300000, detect: 60000, registry: 180000, install: 180000, typecheck: 120000, tests: 180000 }
+const defaultDurationMs = 1800000
+
+// the time each stage gets when the caller sets none
+export const defaultStageTimeouts = {
+	setup: 300000,
+	detect: 60000,
+	registry: 180000,
+	install: 180000,
+	typecheck: 120000,
+	tests: 180000,
+}
+export type StepStatus = "passed" | "failed" | "untested"
+
+type TrackStepOptions<T> = {
+	emit: (payload: EventPayload) => Promise<void>
+	stepId: string
+	label: string
+	work: (stepId: string) => Promise<T>
+	toStatus?: (value: T) => StepStatus
+}
 
 /**
  * Redacts credentials before evidence crosses the library boundary.
@@ -91,6 +109,52 @@ export async function bounded<T>(work: (signal: AbortSignal) => Promise<T>, opti
 }
 
 /**
+ * Builds a redacted Inspection Event from a payload and its place in the timeline.
+ */
+export function toInspectionEvent(
+	payload: EventPayload,
+	{ inspectionId, sequence, upgradeId }: { inspectionId: string; sequence: number; upgradeId?: string },
+): InspectionEvent {
+	return redactEvidence<InspectionEvent>({
+		...payload,
+		version: 1,
+		inspectionId,
+		sequence,
+		timestamp: new Date().toISOString(),
+		...(upgradeId ? { upgradeId } : {}),
+	})
+}
+
+/**
+ * Builds the error for an event callback that failed.
+ */
+export function toEventDeliveryError(): InspectionError {
+	return new InspectionError("event-delivery", "Inspection event callback failed")
+}
+
+/**
+ * Emits a step's started event, performs its work and emits the finished event with its status.
+ */
+export async function trackStep<T>({ emit, stepId, label, work, toStatus }: TrackStepOptions<T>): Promise<T> {
+	// bind the completion event to this step's start
+	const start = Date.now()
+	const finish = (status: StepStatus): Promise<void> =>
+		emit({ type: "step.finished", stepId, status, summary: label, durationMs: Date.now() - start })
+	let value: T
+	try {
+		// emit the start before executing the step
+		await emit({ type: "step.started", stepId, label })
+		value = await work(stepId)
+	} catch (error) {
+		// keep the work error when its failure event also cannot be delivered
+		await finish("failed").catch(() => undefined)
+		throw error
+	}
+	await finish(toStatus?.(value) ?? "passed")
+	return value
+}
+
+/**
  * Reserves teardown time for each possibly allocated runtime.
  */
 export function cleanupAllowance(durationMs: number): number {
@@ -128,7 +192,7 @@ export class InspectionContext {
 		const duration = limits.maxDurationMs ?? defaultDurationMs
 		const cost = limits.maxCostUsd ?? defaultMaxCostUsd
 		this.maximum = limits.maxUpgrades ?? 6
-		this.timeouts = { ...defaults, ...limits.timeouts }
+		this.timeouts = { ...defaultStageTimeouts, ...limits.timeouts }
 
 		// validate numeric limits before admitting work
 		if (
@@ -195,13 +259,10 @@ export class InspectionContext {
 		if (previous === "inspection.finished" || previous === "inspection.failed") {
 			return
 		}
-		const event: InspectionEvent = redactEvidence<InspectionEvent>({
-			...payload,
-			version: 1,
+		const event = toInspectionEvent(payload, {
 			inspectionId: this.id,
 			sequence: this.timeline.length + 1,
-			timestamp: new Date().toISOString(),
-			...(this.upgradeId ? { upgradeId: this.upgradeId } : {}),
+			upgradeId: this.upgradeId,
 		})
 		this.timeline.push(event)
 
@@ -211,7 +272,7 @@ export class InspectionContext {
 	}
 	assertActive(): void {
 		if (this.deliveryFailed) {
-			throw new InspectionError("event-delivery", "Inspection event callback failed")
+			throw toEventDeliveryError()
 		}
 
 		// surface caller cancellation before the next operation
@@ -237,7 +298,7 @@ export class InspectionContext {
 				throw error
 			}
 			this.deliveryFailed = true
-			throw new InspectionError("event-delivery", "Inspection event callback failed")
+			throw toEventDeliveryError()
 		}
 	}
 
@@ -270,7 +331,7 @@ export class InspectionContext {
 		stage: Stage,
 		label: string,
 		work: (options: Operation, stepId: string) => Promise<T>,
-		status?: (value: T) => "passed" | "failed" | "untested",
+		status?: (value: T) => StepStatus,
 	): Promise<T> {
 		return this.track(
 			label,
@@ -284,28 +345,14 @@ export class InspectionContext {
 	private async track<T>(
 		label: string,
 		work: (stepId: string) => Promise<T>,
-		status?: (value: T) => "passed" | "failed" | "untested",
+		toStatus?: (value: T) => StepStatus,
 	): Promise<T> {
 		this.assertActive()
-		const start = Date.now()
 		const stepId = String(this.timeline.length + 1)
+		const emit = (payload: EventPayload): Promise<void> => this.emit(payload)
+		const value = await trackStep({ emit, stepId, label, work, toStatus })
 
-		// bind the completion event to this step's start
-		const finish = (result: "passed" | "failed" | "untested"): Promise<void> =>
-			this.emit({ type: "step.finished", stepId, status: result, summary: label, durationMs: Date.now() - start })
-		let value: T
-		try {
-			// emit the start before executing the step
-			await this.emit({ type: "step.started", stepId, label })
-			value = await work(stepId)
-		} catch (error) {
-			// Keep the work error if its failure event also cannot be delivered.
-			await finish("failed").catch(() => undefined)
-			throw error
-		}
-
-		// publish the result before enforcing the outer deadline
-		await finish(status?.(value) ?? "passed")
+		// enforce the outer deadline after the result is published
 		this.assertActive()
 		if (this.groupEnd && Date.now() >= this.groupEnd) {
 			throw new InspectionError("deadline", "Patch verification deadline reached")

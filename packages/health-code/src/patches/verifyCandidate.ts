@@ -6,8 +6,8 @@ import { excludeBaselineFailures } from "../checks/confirmCheck.ts"
 import type { UsageEvidence } from "../checks/readUpgradeEvidence.ts"
 import { bounded, type InspectionContext } from "../collectEvents.ts"
 import { InspectionError, type InspectionReport, type Observation, type Sandbox } from "../contracts.ts"
+import { lockfiles } from "../upgrades/readLockedDependencies.ts"
 import type { ReleaseNote } from "../upgrades/readReleases.ts"
-import { lockfiles } from "./bumpManifest.ts"
 import { caseMatchesTitle } from "./testCaseName.ts"
 
 // Decode the sandbox command's existing wire format at the provider boundary.

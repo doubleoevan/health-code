@@ -3,11 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
-import { fetchRegistryVersions } from "../guest/fetchRegistryVersions.ts"
 import { readReleaseAge } from "../guest/readReleaseAge.ts"
-
 import { type CommandResult, createFakeSandboxProvider, inspectRepository } from "../src/index.ts"
 import { buildTestCommand } from "../src/sandbox/buildTestCommand.ts"
+import { fetchRegistryVersions } from "../src/upgrades/fetchRegistryVersions.ts"
 import { selectUpgrades } from "../src/upgrades/selectUpgrades.ts"
 import { fixtureCommit, fixtureUrl } from "./providerContract.ts"
 
@@ -206,7 +205,7 @@ test("a host deadline returns the partial report and deletes the busy sandbox", 
 			limits: { timeouts: { registry: 25 } },
 		})
 		assert.match(report.selection.registryLookupIssue ?? "", /registry lookup timed out/)
-		assert.deepEqual(actions, ["detect", "registry"])
+		assert.deepEqual(actions, ["declared-package-manager", "detect", "registry"])
 		assert.ok(report.timeline.some((event) => event.type === "sandbox.event" && event.action === "deleted"))
 	} finally {
 		pending.reject(new Error("Released buffered command"))

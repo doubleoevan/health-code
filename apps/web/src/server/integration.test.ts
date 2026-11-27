@@ -9,6 +9,7 @@ import {
 import { replayRepositoryUrl as repositoryUrl } from "../report.ts"
 import { createLiveSource } from "./createLiveSource.ts"
 import { createTestSite, replay } from "./fixtures/createTestSite.ts"
+import { commit } from "./fixtures/createUpgradeMenuHarness.ts"
 import { modelSettings } from "./fixtures/modelSettings.ts"
 import { toLaunchLimits } from "./launchLimits.ts"
 import { publishReport } from "./publishReport.ts"
@@ -367,4 +368,25 @@ test("a hosted retry runs a fresh baseline and only installs outstanding targets
 	expect(report.stoppedReason).toContain("replacement sandbox also became unavailable")
 	expect(report.runtimeUsage?.runtimes.map((runtime) => runtime.deleted)).toEqual([true, true])
 	expect(report.runtimeUsage?.totalUpperBoundUsd).toBeDefined()
+})
+
+test("the production server needs a GitHub token and replay needs no credentials", async () => {
+	const environment = {
+		...modelSettings,
+		RUNTA_TOKEN: "fixture",
+		MODEL_API_KEY: "fixture",
+		HEALTH_CODE_DEPLOYMENT: "test",
+	}
+	expect(() => createLiveSource({ ...environment, NODE_ENV: "production" })).toThrow("Configure GITHUB_TOKEN")
+	expect(() => createLiveSource({ ...environment, NODE_ENV: "production", GITHUB_TOKEN: "fixture" })).not.toThrow()
+	expect(() => createLiveSource(environment)).not.toThrow()
+
+	// check that replay builds its menu from the recording with no request to GitHub
+	const events: string[] = []
+	const upgradeMenu = await replay.upgradeMenu?.("https://github.com/example/project", {
+		onEvent: (event) => void events.push(event.type),
+	})
+	expect(upgradeMenu?.dependencies[0]?.targets[0]).toMatchObject({ dependency: "widget", to: "1.3.0" })
+	expect(upgradeMenu?.repository.commit).toBe(commit)
+	expect(events).not.toContain("sandbox.event")
 })

@@ -26,6 +26,7 @@ export function adminPage(ledger: AdmissionLedger, updated: string | null): stri
 									{[
 										"Day",
 										"Starts",
+										"Fresh / reused upgrade menus",
 										"Cache hits",
 										"Visitor / budget cap hits",
 										"Shared / completed",
@@ -47,6 +48,9 @@ export function adminPage(ledger: AdmissionLedger, updated: string | null): stri
 										<tr key={row.day}>
 											<td>{row.day}</td>
 											<td>{count.starts ?? 0}</td>
+											<td>
+												{count.menus ?? 0} / {count.menuReuses ?? 0}
+											</td>
 											<td>{count.cache ?? 0}</td>
 											<td>
 												{count.visitorHits ?? 0} / {count.budgetHits ?? 0}

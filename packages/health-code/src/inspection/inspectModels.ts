@@ -175,7 +175,7 @@ export class ModelInspection {
 				continue
 			}
 
-			// Verify the workspace pins before attaching a prior verdict.
+			// Verify the workspace versions before attaching a prior verdict.
 			const key = toUpgradeKey(upgrade)
 			if (toUpgradeKey(cached) === key && isDeepStrictEqual(cached.from, upgrade.from)) {
 				this.reused.set(key, { ...cached, reusedFromInspectionId })
@@ -294,7 +294,7 @@ export class ModelInspection {
 			if (summary.sources.length && summary.sources.every((source) => sources.includes(source))) {
 				report.releaseSummary = summary
 			}
-			if (usage.usage.length) {
+			if (usage.usage.length && this.matchLimit > 0) {
 				// request feature matches against observed source usage
 				const matches = matchSchema.parse(
 					await requestHostModel({

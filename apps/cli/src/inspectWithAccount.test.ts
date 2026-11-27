@@ -13,10 +13,10 @@ test("the paid entry point routes each credential and closes the guest binding o
 		GITHUB_TOKEN: "synthetic-github-token",
 	}
 	const repositoryUrl = "https://github.com/example/project"
-	const { provider, phases, mailbox, requested, restore } = await modelRequestSandboxFixture(
-		createFakeSandboxProvider,
-		environment.GITHUB_TOKEN,
-	)
+	const { provider, phases, mailbox, requested, restore } = await modelRequestSandboxFixture({
+		makeProvider: createFakeSandboxProvider,
+		githubToken: environment.GITHUB_TOKEN,
+	})
 
 	try {
 		const options = {
@@ -66,7 +66,7 @@ test("failed inspections delete both runtimes independently and preserve all unr
 		"both deletions",
 		"cancellation",
 	]) {
-		const { provider, restore } = await modelRequestSandboxFixture(createFakeSandboxProvider)
+		const { provider, restore } = await modelRequestSandboxFixture({ makeProvider: createFakeSandboxProvider })
 		const controller = new AbortController()
 		const cleanupAttemptIds: string[] = []
 

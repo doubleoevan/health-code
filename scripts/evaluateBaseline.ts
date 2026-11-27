@@ -34,7 +34,7 @@ export async function openBaseline(
 			const parsed = testInventorySummarySchema.safeParse(report.baseline.tests.inventory)
 			const observed = parsed.data
 
-			// require a complete inspection of the pinned baseline
+			// require a complete inspection of the baseline case
 			if (
 				report.repository.commit !== fixture.commit ||
 				report.upgrades.length ||

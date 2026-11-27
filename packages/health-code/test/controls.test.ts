@@ -82,7 +82,7 @@ test("guest environment contains inert application values and trusted controls",
 	}
 })
 
-test("pins once when a branch moves after acquisition", async () => {
+test("resolves the commit once when a branch moves after acquisition", async () => {
 	const fixture: SandboxFixture = {
 		commit: fixtureCommit,
 		commands: [

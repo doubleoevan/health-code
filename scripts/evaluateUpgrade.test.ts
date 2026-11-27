@@ -78,7 +78,7 @@ test("an upgrade case requires its expected verdict and linked dependencies", ()
 	const changedTestsReport = { ...report, verdict: "Fixed with test changes" } as UpgradeReportV2
 	assert.equal(gradeUpgrade({ ...input, report: changedTestsReport }).budgetAcceptance, false)
 })
-test("every pinned upgrade case matches the case schema", () => {
+test("every upgrade case matches the case schema", () => {
 	// compare each file name with its case ID
 	for (const id of upgradeCaseIds) {
 		const text = readFileSync(new URL(`../evals/${id}.json`, import.meta.url), "utf8")

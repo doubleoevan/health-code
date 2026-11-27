@@ -23,10 +23,10 @@ export function accountToken(environment: NodeJS.ProcessEnv): string {
 }
 
 /**
- * Returns the optional GitHub token without an unresolved reference.
+ * Returns the optional GitHub token, from the variable Actions sets or the one the GitHub CLI reads.
  */
 export function readGithubToken(environment: NodeJS.ProcessEnv): string | undefined {
-	return readSetting(environment, "GITHUB_TOKEN")
+	return readSetting(environment, "GITHUB_TOKEN") ?? readSetting(environment, "GH_TOKEN")
 }
 
 export function setupKey(environment: NodeJS.ProcessEnv): string | undefined {

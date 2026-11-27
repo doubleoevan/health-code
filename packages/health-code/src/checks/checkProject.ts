@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from "node:util"
 import { z } from "zod"
 import { checkOperation, type InspectionContext, redact } from "../collectEvents.ts"
 import type {
@@ -17,17 +16,20 @@ import type {
 	Upgrade,
 	UpgradeReport,
 } from "../contracts.ts"
-import { InspectionError } from "../contracts.ts"
+import { InspectionError, SandboxUnavailableError } from "../contracts.ts"
 import {
 	ProjectEvidenceError,
 	parseRegistryVersions,
 	type RegistryVersions,
+	toPartialLookupIssue,
 	toRegistryLookupIssue,
 } from "../upgrades/parseRegistryVersions.ts"
 import { selectUpgrades } from "../upgrades/selectUpgrades.ts"
 import { toUpgradeInstallTimeout, untested } from "./confirmCheck.ts"
+import { installDeclaredPackageManager, type PackageManagerSource } from "./installDeclaredPackageManager.ts"
 import { mergeTestInventory } from "./mergeTestInventory.ts"
 import { readCheckErrors } from "./readTypeErrors.ts"
+import { selectUpgradeTarget } from "./selectUpgradeTarget.ts"
 
 const projectSchema = z.object({
 	manager: z.enum(["npm", "bun", "pnpm", "yarn"]),
@@ -63,7 +65,10 @@ function toMissingActivity(activity: string, observation: Observation): string |
 }
 
 export class NodeAdapter implements EcosystemAdapter {
+	// the detected project, the source of the package manager that ran and the reason a target is too new
 	project?: Project
+	packageManagerSource: PackageManagerSource = {}
+	tooNewReason?: string
 	lastObservation?: Observation
 	watchChecks = false
 	private skipsInstallScripts = false
@@ -79,7 +84,7 @@ export class NodeAdapter implements EcosystemAdapter {
 	}
 
 	// collect guest metadata within its stage timeout
-	async data(args: string[], stage: "setup" | "detect" = "setup"): Promise<unknown> {
+	async data(args: string[], stage: "setup" | "detect" | "registry" = "setup"): Promise<unknown> {
 		return this.context.step(stage, args[0] ?? "Read project", (options) => this.readMetadata(args, options))
 	}
 
@@ -101,6 +106,16 @@ export class NodeAdapter implements EcosystemAdapter {
 		}
 	}
 
+	// replace the bundled package manager with the version the repository declares
+	async installDeclaredPackageManager(): Promise<void> {
+		this.packageManagerSource = await installDeclaredPackageManager({
+			context: this.context,
+			sandbox: this.sandbox,
+			readDeclaredPackageManager: () =>
+				this.readMetadata(["declared-package-manager"], this.context.operation("setup")),
+		})
+	}
+
 	// validate the detected project against the adapter schema
 	async detectProject(): Promise<Project> {
 		const result = projectSchema.safeParse(await this.data(["detect"], "detect"))
@@ -118,61 +133,43 @@ export class NodeAdapter implements EcosystemAdapter {
 		}
 		const target = this.context.options.upgrade
 		if (target) {
-			// require the inspected source version in every declaring workspace
-			const sources = project.sources[target.dependency] ?? {}
-			const versions = Object.values(sources)
-			const matches =
-				typeof target.from === "string"
-					? versions.every((locked) => locked === target.from)
-					: isDeepStrictEqual({ ...sources }, { ...target.from })
-
-			// Reject a stale workspace pin before scheduling an install.
-			if (!versions.length || !matches) {
-				throw new ProjectEvidenceError("Inspected dependency source version differs")
-			}
-			const selection = selectUpgrades(
-				{ ...project, sources: { [target.dependency]: sources } },
-				{ [target.dependency]: [target.to] },
-				limit,
-			)
-
-			// reject a selected target that fails upgrade selection
-			if (!selection.selected.length) {
-				throw new InspectionError(
-					"invalid-upgrade",
-					"The selected target must be a newer stable minor or major version",
-				)
-			}
+			// ask the guest for the version's status under the package manager's release age
+			const { selection, tooNewReason } = await selectUpgradeTarget({
+				project,
+				target,
+				readTargetCheck: (lockedVersions) =>
+					this.data(["target", target.dependency, target.to, ...lockedVersions], "registry").catch((error: unknown) =>
+						this.toUnavailableTargetCheck(error),
+					),
+			})
+			this.tooNewReason = tooNewReason
 			return selection
 		}
 		return this.lookUpUpgrades(project, limit)
 	}
 
+	// leave the install to decide when the registry check fails, and keep a stop or a lost sandbox as the failure
+	private toUnavailableTargetCheck(error: unknown): undefined {
+		this.context.assertActive()
+		if (error instanceof SandboxUnavailableError) {
+			throw error
+		}
+		return undefined
+	}
+
 	private async lookUpUpgrades(project: Project, limit: number): Promise<InspectionReport["selection"]> {
 		const names = Object.keys(project.sources)
-		const seconds = Math.max(0, Math.ceil(this.context.operation("registry").timeoutMs / 1000))
-		const timeoutReason = `registry lookup timed out after ${seconds}s`
+		const { timeoutMs } = this.context.operation("registry")
 
 		try {
-			const { versions, packageTimeoutCount, hasRegistryDeadlineExpired } = await this.readRegistry("registry", names)
-			const selection = selectUpgrades(project, versions, limit)
-			const missing = names.length - Object.keys(versions).length
-			if (!missing) {
-				return selection
-			}
-
-			// Keep available upgrades when only some package requests failed.
-			const scope = missing === names.length ? "" : ` for ${missing} of ${names.length} dependencies`
-			const reason = hasRegistryDeadlineExpired
-				? timeoutReason
-				: packageTimeoutCount === missing
-					? "registry requests timed out"
-					: "package version information was unavailable"
-			return { ...selection, registryLookupIssue: `Couldn’t list available upgrades${scope}: ${reason}.` }
+			const registryVersions = await this.readRegistry("registry", names)
+			const selection = selectUpgrades(project, registryVersions.versions, limit)
+			const registryLookupIssue = toPartialLookupIssue({ names, registryVersions, timeoutMs })
+			return registryLookupIssue ? { ...selection, registryLookupIssue } : selection
 		} catch (error) {
 			// Preserve external cancellation and event-delivery failures.
 			this.context.assertActive()
-			return { ...selectUpgrades(project, {}, limit), registryLookupIssue: toRegistryLookupIssue(error, timeoutReason) }
+			return { ...selectUpgrades(project, {}, limit), registryLookupIssue: toRegistryLookupIssue(error, timeoutMs) }
 		}
 	}
 

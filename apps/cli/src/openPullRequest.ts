@@ -1,10 +1,11 @@
 import { execFile } from "node:child_process"
 import { join } from "node:path"
 import { promisify } from "node:util"
-import type { ModelRequestSandboxInspectionReport } from "health-code"
+import { isExactVersion, type ModelRequestSandboxInspectionReport, packageManagerDisplayNames } from "health-code"
 import { UserError } from "./userError.ts"
 
 type Upgrade = ModelRequestSandboxInspectionReport["upgrades"][number]
+type PackageManager = ModelRequestSandboxInspectionReport["packageManager"]
 export type RunCommand = (file: string, args: string[]) => Promise<string>
 
 // the committer for patches applied by the command. the checkout's hooks stay off while it holds model-written code
@@ -19,10 +20,12 @@ const gitSettings = [
 export async function openPullRequest({
 	upgrade,
 	output,
+	packageManager,
 	run = runCommand,
 }: {
 	upgrade: Upgrade
 	output: string
+	packageManager?: PackageManager
 	run?: RunCommand
 }): Promise<string> {
 	// apply the upgrade patch before any feature patch built on it
@@ -53,7 +56,7 @@ export async function openPullRequest({
 		await run("git", [...gitSettings, "checkout", "-"])
 	}
 	const pullRequestTitle = `Upgrade ${upgrade.dependency} to ${upgrade.to}`
-	const pullRequestBody = toPullRequestDescription(upgrade)
+	const pullRequestBody = toPullRequestDescription(upgrade, packageManager)
 
 	// find the branch's open pull request. the owner filter leaves out forks with the same branch name
 	const openPullRequestQuery = `repos/{owner}/{repo}/pulls?state=open&head={owner}:${branch}`
@@ -71,7 +74,10 @@ export async function openPullRequest({
 }
 
 // describe the result only with values the library sets
-function toPullRequestDescription({ verdict, install, typecheck, tests }: Upgrade): string {
+function toPullRequestDescription(
+	{ verdict, install, typecheck, tests }: Upgrade,
+	packageManager?: PackageManager,
+): string {
 	return [
 		"[Health Code](https://runhealthcode.dev) tried this upgrade in a [Runta](https://runta.com) sandbox and retested the patch in a fresh checkout.",
 		"",
@@ -79,9 +85,25 @@ function toPullRequestDescription({ verdict, install, typecheck, tests }: Upgrad
 		`- Install: ${install.status}`,
 		`- Typecheck: ${typecheck.status}`,
 		`- Tests: ${tests.status}`,
+		...toLockfileLine(packageManager),
 		"",
 		"[Add it to another repository](https://github.com/doubleoevan/health-code#ci-setup)",
 	].join("\n")
+}
+
+// say which package manager version wrote the lockfile, from a fixed name and a version number
+function toLockfileLine(packageManager?: PackageManager): string[] {
+	if (!packageManager || !("name" in packageManager) || !isExactVersion(packageManager.version)) {
+		return []
+	}
+	const lockfileLine = `- Lockfile written by ${packageManagerDisplayNames[packageManager.name]} ${packageManager.version}`
+	if (packageManager.source === "declared") {
+		return [`${lockfileLine}, the version this repository declares.`]
+	}
+
+	// append the library's fallback reason
+	const reason = packageManager.fallbackReason ? `, because ${packageManager.fallbackReason}` : ""
+	return [`${lockfileLine}, bundled with Health Code${reason}.`]
 }
 
 const execute = promisify(execFile)

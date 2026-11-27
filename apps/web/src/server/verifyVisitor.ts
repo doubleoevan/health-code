@@ -15,10 +15,24 @@ export function identifyVisitor(
 	}
 
 	// Canonicalize the ingress address before deriving its daily quota bucket.
-	const ip = new SocketAddress({ address, family: isIP(address) === 6 ? "ipv6" : "ipv4" }).address
+	const isVersion6 = isIP(address) === 6
+	const canonical = new SocketAddress({ address, family: isVersion6 ? "ipv6" : "ipv4" }).address
+
+	// count one IPv6 subscriber, who holds a whole /64, as one network
+	const ip = isVersion6 ? toNetworkPrefix(canonical) : canonical
 	const digest = (value: string): string => createHmac("sha256", secret).update(value).digest("hex")
 	const day = toUtcDay()
 	return { cookie, identity: { visitor: digest(`visitor:${cookie}`), network: digest(`network:${day}:${ip}`) } }
+}
+
+// keep the first four groups of an IPv6 address, written in full
+function toNetworkPrefix(address: string): string {
+	const [head = "", tail = ""] = address.split("::")
+	const headGroups = head ? head.split(":") : []
+	const tailGroups = tail ? tail.split(":") : []
+	const zeroGroups = Array.from({ length: 8 - headGroups.length - tailGroups.length }, () => "0")
+	const groups = address.includes("::") ? [...headGroups, ...zeroGroups, ...tailGroups] : headGroups
+	return groups.slice(0, 4).join(":")
 }
 
 export async function verifyChallenge(

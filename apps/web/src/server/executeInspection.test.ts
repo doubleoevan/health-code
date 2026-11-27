@@ -31,7 +31,11 @@ test("local live submissions use their own queue even when the hosted allowances
 			const result = await app.request("/api/inspections", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ repositoryUrl: "https://github.com/octocat/hello-world", action: "discover" }),
+				body: JSON.stringify({
+					repositoryUrl: "https://github.com/octocat/hello-world",
+					action: "discover",
+					isSandboxListing: true,
+				}),
 			})
 			assert.equal(result.status, 202)
 		}

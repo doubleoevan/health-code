@@ -99,7 +99,10 @@ flowchart LR
   CI["CI job"] --> Command["health-code check"]
   Web --> Library["health-code"]
   Command --> Library
-  Library --> Runta["Runta sandbox"]
+  Library -- "list upgrades · no account" --> Public["GitHub API · npm registry"]
+  Library -- "test an upgrade · Runta account" --> Runta["Runta sandbox"]
 ```
+
+Listing upgrades reads GitHub and the npm registry in your process and needs no Runta account. Testing an upgrade runs in a Runta sandbox.
 
 [MIT License](LICENSE)

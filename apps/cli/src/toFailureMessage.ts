@@ -1,4 +1,4 @@
-import { InspectionError, SandboxUnavailableError } from "health-code"
+import { explainedErrorCodes, InspectionError, SandboxUnavailableError } from "health-code"
 import { UserError } from "./userError.ts"
 
 const unavailableMessages = {
@@ -24,8 +24,8 @@ const messages = new Map([
 	["model-request-sandbox-startup", `The model request sandbox did not start. ${retry}`],
 	["registry-command-timeout", `The package registry took too long to answer. ${retry}`],
 	[
-		"repository-unavailable",
-		"The sandbox could not clone the repository at that commit. Check that it is public and try again.",
+		"github-token-rejected",
+		"GitHub rejected the token in GITHUB_TOKEN or GH_TOKEN. Check that the token is valid, or unset it to read without a token.",
 	],
 	["sandbox-absent", `The sandbox ended early. ${retry}`],
 	["sandbox-busy", `The sandbox was busy. ${retry}`],
@@ -39,8 +39,9 @@ const inputCodes = new Set([
 	"invalid-model-settings",
 	"invalid-repository",
 	"invalid-revision",
-	"invalid-upgrade",
 ])
+
+const maxListedVersions = 10
 
 /**
  * Describes a failure with its cause and next step.
@@ -60,15 +61,46 @@ export function toFailureMessage(error: unknown): string {
 		return "Health Code hit an unexpected error. Try again."
 	}
 
-	// keep library messages that name input the caller supplied
+	// keep library messages that name input the caller supplied or the next step
 	const message =
 		error instanceof SandboxUnavailableError
 			? unavailableMessages[error.reason]
-			: (messages.get(error.code) ??
-				(inputCodes.has(error.code) ? `${error.message.replace(/\.$/, "")}. Correct it and try again.` : undefined) ??
-				"The inspection failed. Try again. If it repeats, report it at https://github.com/doubleoevan/health-code/issues with the inspection ID.")
+			: (messages.get(error.code) ?? toLibraryMessage(error) ?? fallbackMessage)
 
 	// name any sandbox whose deletion is unconfirmed
 	const cleanup = error.cleanupIds?.length ? ` Sandbox deletion unconfirmed: ${error.cleanupIds.join(", ")}.` : ""
 	return `${message}${cleanup} (${error.code})`
+}
+
+const fallbackMessage =
+	"The inspection failed. Try again. If it repeats, report it at https://github.com/doubleoevan/health-code/issues with the inspection ID."
+
+// reword a library message for someone reading a CI log
+function toLibraryMessage(error: InspectionError): string | undefined {
+	if (error.code === "github-rate-limit") {
+		return error.message.replace("Supply a GitHub token or", "Set GITHUB_TOKEN or GH_TOKEN, or")
+	}
+	if (error.code === "invalid-upgrade") {
+		return `${error.message} ${toEligibleDependencyVersionsSentence(error.eligibleDependencyVersions ?? [])}`
+	}
+
+	// end a message that names caller input with the next step
+	if (inputCodes.has(error.code)) {
+		return `${error.message.replace(/\.$/, "")}. Correct it and try again.`
+	}
+	return explainedErrorCodes.has(error.code) ? error.message : undefined
+}
+
+// name the newest eligible dependency versions and count the rest
+function toEligibleDependencyVersionsSentence(eligibleDependencyVersions: string[]): string {
+	if (!eligibleDependencyVersions.length) {
+		return "No version is eligible at this commit."
+	}
+
+	// keep the newest versions up to the listing limit
+	const listedVersions = eligibleDependencyVersions.slice(0, maxListedVersions)
+	const olderCount = eligibleDependencyVersions.length - listedVersions.length
+	const versionNames = olderCount ? [...listedVersions, `${olderCount} older`] : listedVersions
+	const versionList = new Intl.ListFormat("en-GB").format(versionNames)
+	return `Eligible versions: ${versionList}.`
 }

@@ -75,14 +75,21 @@ export type {
 	Upgrade,
 	UpgradeReport,
 } from "./contracts.ts"
-export { InspectionError, SandboxUnavailableError } from "./contracts.ts"
+export { explainedErrorCodes, InspectionError, SandboxUnavailableError } from "./contracts.ts"
 export { inspectRepository } from "./inspection/inspectRepository.ts"
 export {
 	getUpgrade,
+	type ListUpgradesOptions,
 	listUpgrades,
+	type ResolvedUpgrade,
+	type ResolveUpgradeOptions,
 	readUpgradeMenuFeatures,
 	readUpgradeMenuFeatures as readMenuFeatures,
+	resolveUpgrade,
+	toUpgradeMenuReport,
+	type UpgradeMenu,
 } from "./inspection/listUpgrades.ts"
+export type { UpgradeMenuLimits } from "./inspection/upgradeMenuContext.ts"
 export { buildInvestigationPrompt } from "./models/buildPrompt.ts"
 export type {
 	ModelRequestSandbox,
@@ -111,9 +118,17 @@ export {
 	type SandboxFixture,
 } from "./sandbox/createFakeSandboxProvider.ts"
 export { createSandboxProvider, type ProviderOptions } from "./sandbox/createSandboxProvider.ts"
+export { isExactVersion, packageManagerDisplayNames } from "./sandbox/packageManagerVersions.ts"
 export { reconcileSandboxes } from "./sandbox/reconcileSandboxes.ts"
 export { type InspectionMode, toInspectionMode } from "./toInspectionMode.ts"
 export { toRepositoryUrl } from "./toRepositoryUrl.ts"
+
+// export the fake GitHub, the release age notice and the upgrade menu types
+export { createFakeGithub, type FakeGithub, type FakeRepository } from "./upgrades/createFakeGithub.ts"
+export { type MinimumReleaseAge, toReleaseAgeNotice } from "./upgrades/readCommittedReleaseAge.ts"
+export type { UnreadableRepository } from "./upgrades/readRepositoryFiles.ts"
+
+// export the release feature reader and the upgrade menu grouping
 export {
 	type ReleaseFeaturePage,
 	readUpgradeFeatures,

@@ -21,7 +21,7 @@ const account: Account = {
 		return createSandboxProvider({ token }).checkAvailability()
 	},
 	store({ token, name, key }): Promise<unknown> {
-		// Pin the service that receives both account credentials.
+		// Hard-code the service that receives both account credentials.
 		return new Runta({ token, endpoint: "https://api.runta.com", timeoutMs: 10000 }).secrets.set(name, key)
 	},
 }
